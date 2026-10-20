@@ -8,6 +8,7 @@ import {
   DAY_START_MINUTE,
   MINUTES_PER_DAY,
   type Dossier,
+  type Facing,
   type GameClaim,
   type Inspection,
   type Intervention,
@@ -115,7 +116,7 @@ export function createFakeSimulation(seed = 1): Simulation {
     const pos = randomWalkable();
     return { view: { id: d.id, name: d.name, tier: d.tier, pos: { x: pos.x + 0.5, y: pos.y + 0.5 }, facing: 's', moving: false, activity: 'idle', look: d.look, mood: 0 }, target: randomWalkable(), nextTalk: Math.floor(rng() * 20) };
   });
-  const player = { pos: { x: 20.5, y: 15.5 }, facing: 's' as const, moving: false, target: null as Vec2 | null };
+  const player = { pos: { x: 20.5, y: 15.5 }, facing: 's' as Facing, moving: false, target: null as Vec2 | null };
   const threads: ThreadLink[] = [];
   const events: SimEvent[] = [];
   const interventions: Intervention[] = [];

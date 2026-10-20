@@ -1,0 +1,136 @@
+# RumorTown village build plan
+
+Spec: docs/superpowers/specs/2026-10-21-rumortown-design.md (the binding authority). Contract: apps/rumortown/src/types.ts is at `apps/rumortown/src/sim/types.ts`; a stand-in simulation is at `apps/rumortown/src/sim/fake.ts`.
+
+## Global constraints (bind every task)
+
+- Own only your directory. Never edit `apps/rumortown/src/sim/types.ts`, another task's directory, package.json files, or configs. If the contract blocks you, implement the closest thing inside your directory and say so in your report.
+- No new dependencies. `rumormind` (workspace package, zero deps) and the TypeScript standard library only. Plain TypeScript, no framework.
+- Determinism: inside simulation code never use `Math.random`, `Date`, or iteration over unordered sets that affects results. Use the `rng: () => number` you are given.
+- Strict TypeScript must pass for your files: run `cd apps/rumortown && npx tsc --noEmit 2>&1 | grep '<your dir>'` (other directories may be mid-flight; only your errors count). Library tasks run `npx tsc --noEmit` in `packages/rumormind`.
+- Tests with vitest where the task says so: `npx vitest run <your test files>` from the repo root.
+- Do not commit. Leave your files in the working tree. Do not run `git add`, `git stash`, or anything that touches other directories.
+- Phone first: anything visual must work at 360×640 CSS px and at 1440×900.
+- Copy and names: sentence case, plain words, no ALL-CAPS labels, no middle-dot separators, no arrows in button text.
+- Fixed ids everyone shares:
+  - Place ids: `square`, `well`, `bakery`, `mill`, `inn`, `chapel`, `school`, `shop`, `smithy`, `field-north`, `field-south`, `bridge`, `riverside`, `orchard`, and homes `home-mira`, `home-tom`, `home-ada`, `home-rosa`, `home-jonah`, `home-ben`, `home-elin`, `home-pim`, `home-sol`, `home-ivo`, `home-nell`, `home-otto`.
+  - Villager ids and roles: core `mira` (baker, 44), `tom` (odd-jobs carpenter, 29, Ada's neighbour), `ben` (fisher, 31, Tom's best friend), `ada` (weaver, 67, ill this week), `rosa` (innkeeper, 51, the village hub), `jonah` (miller, 48, Mira's rival); regulars `elin` (teacher, 35), `pim` (shopkeeper, 58), `sol` (farmer, 46), `greta` (farmer, 43, Sol's wife), `ivo` (blacksmith, 39), `nell` (herbalist and midwife, 61), `otto` (chaplain, 55), `wren` (apprentice baker, 19), `hal` (carter, 50), `dag` (bridge keeper, 64); background `una` (laundress, 38), `cass` (beekeeper, 27), `fen` (shepherd, 23), `lio` (fiddler, 33), `mab` (seamstress, 41), `rook` (gravedigger, 59), `tess` (barmaid, 24), `yan` (tinker, 36).
+  - Communities: `market`, `farm`, `inn`, `chapel`.
+  - Pronouns: mira she, tom he, ben he, ada she, rosa she, jonah he, elin she, pim he, sol he, greta she, ivo he, nell she, otto he, wren they, hal he, dag he, una she, cass she, fen he, lio he, mab she, rook he, tess she, yan he.
+- Report: write your full report to the report path given in your dispatch; return only status, a one-line test summary, and concerns.
+
+## Task 1: World — map data, pathfinding, movement
+
+Directory: `apps/rumortown/src/sim/world/` and `apps/rumortown/src/content/map/`.
+
+Deliver:
+1. `content/map/index.ts` exporting `villageMap: VillageMap`, a hand-built 48×32 tile village. Required: a central `square` with the `well` inside it; the river along the east side with one `bridge`; `riverside` path; `field-north` and `field-south`; an `orchard` of tree tiles; buildings for `bakery`, `mill` (by the river), `inn`, `chapel`, `school`, `shop`, `smithy`, and the twelve homes, each a cut-away room (wall ring, floor, one `door` tile) of at least 5×4 tiles, every room reachable from the path network; paths connecting every door. Every place has `door` on a walkable tile adjacent to its door tile and at least three `spots` on walkable floor or ground inside its rect. `satisfies`: bakery, inn, shop → hunger; homes, inn → rest; square, inn, chapel, well → social; workplaces → duty.
+2. `sim/world/index.ts` exporting `createWorld(map: VillageMap): WorldApi` and `createMover(start: Vec2): Mover`.
+   - `findPath`: 4-connected A* with a binary heap; walkable = grass, path, bridge, floor, door, field, well-adjacent (well tile itself is not walkable); deterministic tie-breaking (lower y then lower x). Must find a 60-tile path in under 1 ms on a laptop.
+   - `lineOfSight`: Bresenham over tile centres; blocked by wall and tree.
+   - `Mover.update`: moves toward the next path tile centre at `speed` tiles per game-minute; faces the direction of travel; `others` within 0.6 tiles push the mover sideways by up to 0.15 tiles so villagers do not overlap; `arrived()` true at the final tile; `stop()` clears the path.
+   - `spotFor`: the first spot not within 0.5 tiles of an occupied position, picked with rng among free spots.
+3. Tests in `sim/world/world.test.ts`: every place's door and spots are walkable; every door is reachable from the square; A* returns null across water with no bridge; a mover traverses a 20-tile path and arrives; determinism of findPath.
+
+## Task 2: Library — claims, retelling, mood, side-taking, repair
+
+Directory: `packages/rumormind/src/` (new files only, plus exports added to `index.ts`) and `packages/rumormind/test/`.
+
+Deliver, each zero-dependency and engine-agnostic:
+1. `claims.ts` additions in a new file `registry.ts`: `ClaimRegistry` holding claims by id with `contradictionsOf(id)`, `alternativeOf(id)`, and `validate()` that throws when a contradiction is not mutual.
+2. `retell.ts`: `retell(claim: { details: string[]; qualifiers: string[]; core: string }, rng, tuning)` returning a mutated copy: drops 10–25% of details, 5–15% of qualifiers, invents a detail with 0–5% probability from a provided pool; details tagged `social` or `negative` survive preferentially (half the drop rate). Deterministic given rng.
+3. `mood.ts`: `Mood` with timed named modifiers (`add(label, delta, untilTick)`, `value(tick)` summing live modifiers clamped −1..1, `list(tick)`, `expire(tick)`), plus `appraise({ goalImpact, blame, certainty, control })` returning `{ anger, fear, shame, gratitude }` each 0..1.
+4. `sideTaking.ts`: `sideScore({ loyaltyToAccuser, loyaltyToAccused, perceivedWrongness, expectedReciprocity, conflictCost })` returning a signed score (positive = back the accuser) and `chooseSide(score, threshold = 0.4)` returning `'accuser' | 'accused' | 'neutral'`.
+5. `repair.ts`: `forgivenessScore({ apology, empathy, perceivedIntent, anger, relationshipValue, exploitationRisk })` per the correlates (.42, .51, −.49, −.41; relationship value and low risk raise it) returning 0..1, and `trustRepair({ kind: 'integrity' | 'competence', response: 'apology' | 'denial' | 'denial-with-evidence' })` returning a multiplier where denial-with-evidence beats apology for integrity.
+6. Tests for each in `test/*.test.ts`, including determinism of `retell` and that `Mood.value` never leaves −1..1.
+7. Update `README.md` with the new API and the evidence table (one line per rule: rule, default, measured or tuned, source).
+
+## Task 3: Cast content — dossiers, secrets, claims
+
+Directory: `apps/rumortown/src/content/cast/`.
+
+Deliver:
+1. `index.ts` exporting `cast: Dossier[]` (all 24 villagers from the fixed id list, with the fixed roles, ages and pronouns), `claims: GameClaim[]`, and `castVersion = 'v1'`.
+2. Each dossier: `communities` two of the four; `home` and `workplace` from the fixed place ids (couples share a home: sol and greta in `home-sol`; wren lodges at the inn; tess, lio, rook, yan lodge at the inn; una, cass, fen, mab, hal, dag get the remaining homes as lodgers where needed: hal in `home-pim`, dag in `home-otto`, una in `home-nell`, cass in `home-elin`, fen in `home-sol`, mab in `home-ivo`); HEXACO-lite traits that match the role and voice; `closeTo` two or three ids forming Dunbar-shaped clusters (Tom–Ben close; Mira–Wren; Rosa knows everyone; Jonah–Hal; Sol–Greta–Fen; Otto–Nell–Ada; Elin–Cass; Ivo–Dag; Pim–Mab); `rival` for at least eight villagers (jonah↔mira, pim↔rosa, ivo↔hal, una↔mab, …); a `schedule` of 6–9 entries over the 900-minute day with waking at home (start 0), work, a midday meal (bakery, inn or home), an errand or visit, an evening at the inn, square or chapel for sociable villagers, home by 840; `look` composed so that no two villagers share the same (body, hat, hair style, top colour) combination; `voice` one or two sentences; `catchphrase` for core and regular villagers.
+3. Secrets: every villager has one or two witnessable private acts with a window inside their schedule and a plausible place, each with `confirms` and `contradicts` kinds. Required: tom `delivery` of bread to `home-ada` at minutes 80–100 (confirms kindness, contradicts theft); mira `debt` (she quietly pays Pim what she owes) ; jonah `meeting` with Rosa by the bridge (romance-shaped but innocent: planning the fair); ben `borrow` Ivo's tools without asking (confirms theft-shaped suspicion, contradicts nothing); rosa `nursing` Ada in the afternoon; wren `practice` singing in the chapel.
+4. Claims: at least 18 ready-made claims across the taxonomy, each about a core or regular villager, with `contradicts` wired both ways where an innocent alternative exists (for example `tom-stole-bread` ↔ `tom-brought-bread-to-ada`; `jonah-affair-rosa` ↔ `jonah-rosa-planning-fair`; `ben-stole-tools` ↔ `ben-borrowed-tools`). Severity 1–3; `text` a plain sentence; `alternativeOf` set on the innocent claim.
+5. `knows`: innocent truths known by the people who would know them (Ben knows Tom's delivery only if the witness scenario makes him see it, so leave that out; Ada knows Tom brought bread, confidence 0.95; Rosa knows the fair plan).
+6. A test `cast.test.ts`: 24 dossiers, unique ids and looks, all place ids valid against the fixed list, schedules sorted and starting at 0, every secret window inside a schedule entry at the same place, every contradiction mutual.
+
+## Task 4: Talk — line selection and line banks
+
+Directory: `apps/rumortown/src/sim/talk/` and `apps/rumortown/src/content/lines/`.
+
+Deliver:
+1. `sim/talk/index.ts` exporting `createTalk(cast: Dossier[]): TalkApi`.
+   - Line bank format in `content/lines/`: `type LineSet = { act: SpeechAct; speaker?: VillagerId; voice?: VoiceArchetype; valence?: -1 | 0 | 1; hedged?: boolean; listenerRelation?: 'close' | 'rival' | 'any'; lines: string[] }`. Voice archetypes: `blunt`, `gentle`, `sharp`, `dreamy`, `pious`, `jolly`, `weary`; a map from villager id to archetype lives in `content/lines/voices.ts`.
+   - Selection: filter sets by act, then prefer in order speaker match > voice match > valence match > hedged match > listenerRelation match (most specific wins); within the chosen set pick with rng among lines not used by this speaker in the last 900 ticks (fall back to any if all used).
+   - Placeholders: `{subject}`, `{subjectObj}`, `{subjectPoss}`, `{listener}`, `{source}`, `{claim}` (the claim text with the subject's name replaced by a pronoun when it would repeat), `{object}`, `{place}`, `{topic}`. Names capitalised. When the listener is the subject, lines must address them as "you" (use the act's `valence` plus a `toSubject` flag on the LineKey derived from `listener.id === subject.id`; add that derivation inside `say`).
+   - Hedging: when `confidence` is below 0.6, prefer `hedged: true` sets ("I heard, maybe, that…").
+   - `pickTopic`: morning topics (bread, weather, chores), midday (the fair, prices, the river), evening (music, tiredness, tomorrow), with rng.
+2. Line banks: for each core villager and each act in gossip, warn, confide, accuse, deny, explain, defend, doubt, agree, apologize, forgive, refuse, reactToWhisper: at least 6 lines for harmful claims and 4 for favourable ones, plus hedged variants for gossip, warn, doubt; for greet, smalltalk (per topic), news, farewell: at least 8 lines each. For each voice archetype: at least 4 lines per act and valence, so regulars and background villagers sound right. Every line under 140 characters, in character per the dossier's `voice`, varied in rhythm, no exclamation-mark spam, no modern slang. Lines must never have a villager refer to themselves in the third person.
+3. Tests in `sim/talk/talk.test.ts`: specificity order; "you" addressing; capitalisation; cooldown avoids repeats; hedged selection below 0.6; every placeholder in every line resolves for a sample key; no line exceeds 140 characters.
+
+## Task 5: Agents and engine
+
+Directory: `apps/rumortown/src/sim/agents/` and the single file `apps/rumortown/src/sim/engine.ts`.
+
+Deliver `createSimulation(opts: SimulationOptions): Simulation` and everything it needs under `sim/agents/`. Use `rumormind` for beliefs (`BeliefLedger`), relationships (`Relationships`), telling (`tell`, `tellScore`, `tellThreshold`) and `createRng`. Implement mood, side-taking and repair inside `sim/agents/` for now (the library versions arrive separately); keep them in their own files so they can be swapped.
+
+Behaviour:
+1. **Time.** `step()` advances one game-minute. Villagers decide every 5 ticks, staggered by index. Days are `MINUTES_PER_DAY` long; at day end emit `day-end` with an `Ending` and a one-sentence summary; then reset needs, run a dusk reflection (the day's most important events become one opinion line per villager, stored for `inspect`), apply forgetting (`BeliefLedger.forget`).
+2. **Movement.** Each villager has a `Mover` from `opts.world`. Following the dossier schedule: at each entry's start, path to `world.spotFor(place)`. Speed 1.0 tiles per game-minute; player 1.4. Conversations happen when villagers are within 1.5 tiles and both are not `sleep`.
+3. **Needs.** hunger, rest, social, duty in 0..1, decaying per tick; places satisfy them while present. Needs feed utility only mildly; the schedule leads.
+4. **Action selection** by utility each decision: continue schedule; satisfy a need at the nearest satisfying place; approach a villager to talk (extraversion raises); gossip or warn (use `tellScore` with closeness from `Relationships.closeness` and `tellThreshold`); confront (go to the subject and `accuse`) when belief in a harmful claim about them is above 0.75 and either the villager is the victim or has two independent sources, or is close to the victim; avoid (walk away) when accused in public and agreeableness is high; apologize when a belief that led to an accusation has fallen below 0.45; reconcile when a mood modifier "falsely accused" has expired and affinity is above 0. Record `why` as the top two scoring terms in plain words ("72% sure Tom stole the bread; Ben is close and would want to know").
+5. **Conversations.** A conversation is up to four villagers within 1.5 tiles; it runs 3–8 lines, one per tick, starting with `greet` and ending with `farewell`. Each line is chosen by the speaker's utility among acts that make sense: smalltalk (topic from `talk.pickTopic`), news (a neutral claim or an event), gossip, warn, confide, accuse, deny, explain, defend, doubt, agree, apologize, forgive, refuse. When a claim is spoken, listeners `hear` it through `rumormind.tell` with the speaker's remembered origin passed at `attributionPassRate`; emit `belief` events. The accused answers: if honesty is high and the conversation is private (no third villager within 3 tiles) → `explain` with the alternative claim if they know one; if public and agreeableness is low → `deny`; if agreeableness is high → `refuse` and leave. Bystanders within 3 tiles who hear an accusation run side-taking: back the accuser (`agree`), back the accused (`defend`), or stay out (`doubt`); backing is public and shifts others' beliefs through `tell`.
+6. **Witnessing.** While a secret act is in its window and the villager is at its place, every other villager within 4 tiles with line of sight perceives it: `see` the confirmed claims and, through contradictions, correct the harmful ones; emit `witness`. A whisper is witnessed by villagers within 4 tiles with line of sight to the listener; witnesses later attach the origin "stranger" when they hear the claim.
+7. **The stranger.** `whisper` requires the player within 2 tiles; the listener hears the claim with `source: 'player'` at their `trustInStranger` (start: core 0.5, others 0.4, Ben 0.2, Rosa 0.7), replies with `reactToWhisper`. Exposure: when a claim whose remembered origin is the stranger is contradicted by a first-hand witness or a public `explain` with evidence, every villager who remembers that origin lowers trust in the stranger with `adjustTrust(-0.15)`; emit `relationship` events.
+8. **Relationships and mood.** Being accused: accuser's affinity from the accused −0.3; mood "accused in public" −0.3 for 300 ticks; being defended: +0.15 affinity to the defender, mood +0.1 for 200 ticks; apology received: +0.2 affinity, mood +0.15; exposed accuser: others' trust in them −0.1. Moods decay by expiry; `mood` on the view is the clamped sum.
+9. **Endings** at day end, for the set of claims the stranger introduced: `died` if fewer than two villagers ever heard; `exposed` if a contradiction from first-hand evidence reached the main believer and the stranger lost trust; `reconciled` if an accusation happened and an apology followed; `split` if at least three villagers publicly backed each side; `grudge` if the main believer still believes above 0.6 with no apology; otherwise `quiet`. Summary: one sentence naming people.
+10. **Inspection.** Beliefs as `BeliefView` with a chain built from provenance ("The stranger told Mira at 09:12"; "Mira told Ben at 10:30"; "Ben saw it at 08:48"), `independentSources` from distinct remembered origins; relations with trust, affinity and the latest `why`; moods; the last five decisions.
+11. **Snapshot** with interpolation-ready positions, bubbles lasting 6 ticks, threads for every claim transmission (last 60).
+12. Determinism: one rng from `opts.seed`; iterate villagers in cast order; no Map iteration that depends on insertion from unordered sources.
+
+Tests in `sim/agents/engine.test.ts` using `createFakeMap()` and `createFakeCast()` from `../fake.js` with a stub `TalkApi` (returns the act name) and `createWorld` if present, else a minimal in-file world stub: determinism (two runs, same seed → deep-equal events); a whisper within range returns true and out of range false; a harmful whisper to a close friend of the subject leads to a confrontation within 300 ticks; a witness contradiction lowers the main believer's belief and the stranger's trust; 900 ticks with 24 villagers run in under 1.5 s.
+
+## Task 6: Renderer — the felt diorama
+
+Directory: `apps/rumortown/src/render/`.
+
+Load the `frontend-design:frontend-design` skill first, then read sections 11 and 18 of the spec. Deliver `createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Renderer` in `render/index.ts`.
+
+1. **Tiles** pre-rendered once per zoom level to an offscreen canvas: felt grass with a faint fibre noise, oat paths with stitched edges, denim water with short stitched wave marks, fields in rows, trees as layered round felt blobs with a dashed stitch outline, the well as a stone ring. Buildings as cut-away paper rooms: walls as thick paper strips with a visible cut edge, floors as pale felt, doors as a darker strip; a paper roof shape drawn above each room's top wall so the house reads as a house from the outside while the floor stays visible.
+2. **Villagers** composed from `Look`: body silhouette by `body`, skin, hair style, hat, top, bottom, optional apron, prop in hand; four facings; a two-frame walk bob; mood tints the mouth line (a short stitched curve). Each composed sprite cached per (villager look, facing, frame) on an offscreen canvas. Core villagers get a slightly larger size (1.1×). The stranger: a hooded figure in ink with no face, same size.
+3. **Threads**: for `snapshot.threads`, a red embroidery thread from `from` to `to` with slight sag, pin heads at both ends, newest threads opaque and older ones fading; when `reducedMotion` is false the newest thread draws itself over 400 ms.
+4. **Selection**: a paper ring under the selected villager.
+5. **Camera**: `project` and `unproject` honour `zoom` (close 32 px per tile, far = fit the whole map to the viewport) and `center`; `render` clamps the centre so the map edge never shows at the close zoom; DPR-correct; a paper-grain overlay at 6% opacity over everything.
+6. **Interpolation**: `alpha` blends positions between `previous` and `current`.
+7. **Performance**: full frame with 24 villagers under 4 ms on a laptop; no per-frame allocation of large arrays; `villagerAt` hit-tests sprites nearest-first.
+8. A visual test page `render/dev.html` (not part of the app) that mounts the renderer on `createFakeSimulation()` and animates it, so you can screenshot your work with the Playwright tools and iterate; include a screenshot in your report.
+
+## Task 7: UI shell and game loop
+
+Directory: `apps/rumortown/src/ui/`, `apps/rumortown/src/main.ts`, `apps/rumortown/src/styles/`, `apps/rumortown/public/`.
+
+Load the `frontend-design:frontend-design` skill first, then read sections 4, 11, 12 and 18 of the spec. Build against `createFakeSimulation` and a placeholder renderer interface (if `render/index.ts` is not present yet, write a tiny stub in `ui/stub-renderer.ts` that draws circles, and import the real one behind a dynamic import with a fallback).
+
+1. `main.ts`: mounts the app; game loop with a fixed-step simulation at 2.5 ticks per second at 1×, 5 at 2×, 20 at 8×, and 0 when paused; renders every animation frame with interpolation alpha; keeps the previous and current snapshots.
+2. Shell per spec §11: full-bleed canvas; a slim top strip with a small paper sun-dial clock showing the time and "Day 1"; bottom-left a postbox button "Whisper"; top-right board pins "Who told whom", "Story so far", "Pin to the board" (share); speed control (pause, 1×, 2×, 8×) and a timeline scrubber along the bottom edge on desktop and in a drawer on phones.
+3. **Whisper sheet**: lists villagers within two tiles of the player (from the snapshot); a menu of ready-made claims from `sim.claims` grouped by who they are about; a disabled text field labelled "Type your own (coming later)"; "Whisper" calls `sim.whisper` and shows the reaction bubble; when nobody is in range it says "Walk closer to someone first."
+4. **Tags**: tapping a villager (via `renderer.villagerAt`) opens their tag pinned beside them on desktop and as a bottom sheet on phones, rendering `Inspection`: beliefs as rows with the claim sentence, a confidence figure, and the chain as a row of small named faces with "told" arrows; relations as two short bars with the latest reason; moods as a list with their causes; "Why I did that" as the last decisions. Tag text under 70 characters per line.
+5. **Bubbles**: DOM speech bubbles positioned each frame from `renderer.project`, paper-tag styled, with a tiny stitched tail; never more than six on screen (prioritise near the player and core villagers).
+6. **Walking**: tap or click on the canvas → `renderer.unproject` → `sim.movePlayer`; WASD and arrow keys move one tile at a time; the camera follows the player at the close zoom; the "Who told whom" toggle switches to the far zoom and shows threads.
+7. **Timeline**: scrubbing re-creates the simulation from the same seed and interventions (`deps.createSim(seed, interventions)`) and steps to the target tick, showing a short paper "rewinding" note while it works.
+8. **Share**: `ShareState` encoded in the URL hash (JSON then base64url, with `v`, `seed`, `cast`, `interventions`), read on load; "Pin to the board" copies the link and renders a share card on a 1200×630 canvas: the village silhouette, the claim kind glyph, a mini-map of threads, three faces with verdicts, and the stranger's trust; downloadable as PNG. No typed text ever appears on it.
+9. **Story so far**: a drawer listing `sim.events` lines and witness events as a readable log; the day-end summary as a paper card over the village with "Keep going".
+10. **Styles** in `styles/app.css`: the tokens from spec §11 (moss, oat, berry, denim, mustard, ink, paper); self-hosted variable Bricolage Grotesque in `public/fonts/` (download the OFL file from the Google Fonts GitHub repository; if download fails, fall back to the system UI font and say so); sentence case; visible focus rings; `prefers-reduced-motion` respected; no horizontal scroll at 360 px; the sheet and drawers reachable by keyboard.
+11. Verify with the Playwright tools at 360×640 and 1440×900 and include screenshots in your report.
+
+## Task 8: Integration (after Tasks 1–7)
+
+Directory: `apps/rumortown/src/main.ts` plus minimal fixes anywhere in `apps/rumortown/src` needed to make the modules agree.
+
+1. Wire the real modules: `villageMap`, `createWorld`, `cast`, `claims`, `createTalk`, `createSimulation`, `createRenderer`, and the UI. The fake remains available behind `?fake=1`.
+2. Resolve contract mismatches with the smallest change; record each in the report.
+3. Add `apps/rumortown/src/replay.test.ts`: a fixed seed with one whisper at tick 60 run for 900 ticks produces a stable event-log hash; print the hash so it can be pinned.
+4. Play-test with Playwright: load, walk to Mira, whisper "Tom stole bread", run a day at 8×, open tags, toggle threads, scrub, copy a link, reload it. Report what a stranger would see in the first ten seconds and the first minute, with screenshots.
