@@ -1,13 +1,12 @@
 {
-  "name": "rumortown",
+  "name": "rumortown-monorepo",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "dev": "npm run dev -w apps/rumortown",
+    "build": "npm run build -w apps/rumortown",
+    "typecheck": "npm run typecheck --workspaces",
     "test": "vitest run"
   },
   "devDependencies": {
