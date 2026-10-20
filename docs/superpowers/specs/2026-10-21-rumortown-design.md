@@ -144,7 +144,7 @@ Every villager is one object with these parts. The sim is pure TypeScript with n
 
 One purpose: turn a typed lie into a structured claim. The simulation decides everything else, so a cleverly worded lie cannot rig the outcome.
 
-- **Endpoint.** `POST https://api.<domain>/interpret` with `{ text (≤140 chars), turnstileToken, castVersion }`. Response: `{ claim: { kind, about, target?, object?, severity 1–3, valence }, confidence, unsupported?: reason, sig }`, signed with Ed25519 by the Worker; the browser verifies with the public key before applying it.
+- **Endpoint.** `POST https://api.<domain>/interpret` with `{ text (≤140 chars), turnstileToken, castVersion }`. Response: `{ claim: { kind, about, target?, object?, severity 1–3, valence }, confidence, unsupported?: reason, sig }`, signed with ECDSA P-256 by the Worker (WebCrypto, supported in every browser including in-app ones); the browser verifies with the public key before applying it.
 - **Claim taxonomy** (fixed, about fictional villagers only): theft, cheating, secret romance, lying, broken promise, insult behind the back, hoarding, shirking, boasting, and three favourable kinds: secret kindness, paid a debt, nursed someone. Each kind has severity, valence, authored line sets, and the innocent alternatives the world can produce as truth.
 - **Model.** OpenRouter, free models first with `require_parameters` and JSON-schema strict output, then `google/gemini-2.5-flash-lite` (about $0.001 per call). Temperature 0, max 200 output tokens, 6-second timeout, no retries.
 - **Budget ledger** in a SQLite Durable Object: reserve the worst-case cost before the call, settle after; daily allowance $0.10 (about 70 days of $7); global 20 calls/min; per-visitor 5/hour (hashed IP and UA bucket, no cookies); cache by normalised text so the same lie never pays twice. Fail closed if the ledger is unreachable.
@@ -208,3 +208,23 @@ Exact map layout and tile art; sprite composition rules; the schedule templates;
 ## 17. Open questions for the owner
 
 Listed in the message that accompanies this document.
+
+## 18. Builder-check decisions (my calls)
+
+Questions a builder raised on reading this document, settled here so the document stands alone. The owner can overrule any of them.
+
+- **Camera and tiles.** Tiles are 32 CSS px. The play camera follows the stranger and shows roughly 11×7 tiles on a phone; a second camera level shows the whole village (used by "Who told whom" and the timeline). No pinch-zoom; a single toggle switches levels.
+- **Indoors.** Rooms are cut-away areas on the same grid; no scene switching.
+- **Days.** Ticks continue across days (day 2 begins at tick 900). The night skip is one transition: needs restore, the dusk reflection runs, rumor forgetting applies.
+- **Objective.** v1 is a sandbox with the end-of-day summary, plus one optional dare per run shown at the start ("Turn the village on Jonah without anyone blaming you"). The dare gives the share card a comparable outcome (done / caught / gave up, and on which day).
+- **Whispering about the listener.** A lie about the person you are whispering to returns `unsupported`; the villager answers with an authored line ("Say that to my face?").
+- **Witnesses of a whisper** are computed from the listener's tile at that tick, so share links need only (tick, listener, claim) and stay deterministic without storing the player's path.
+- **Signing** uses ECDSA P-256 rather than Ed25519, for universal WebCrypto support.
+- **Per-visitor limit** is a hashed IP-and-user-agent bucket. Shared networks may hit it; the ready-made menu is always available, so nothing breaks.
+- **Content pipeline.** Line banks are generated in batches from a per-villager style sheet, reviewed by sampling, and linted: placeholders resolve, length ≤ 140 characters, no banned words, no duplicates, pronouns from the dossier.
+- **Age.** "13+" is stated on the about panel and in the debrief; no gate screen, which would kill the first ten seconds.
+- **Talking to the stranger.** Villagers do not converse with the player in v1; the player whispers, listens and reads tags.
+- **Accessibility.** Tags and bubbles are DOM. Bubbles are mirrored to a throttled polite live region; the story log is the full transcript.
+- **Fonts** are self-hosted (variable Bricolage Grotesque, about 100 KB), so the page makes no third-party request.
+- **Repository merge** uses `git subtree add` so the library keeps its history.
+- **Seeds** come from `crypto.getRandomValues` on first load, outside the simulation, then live in the URL.
