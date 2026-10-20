@@ -46,7 +46,10 @@ export type PlaceKind =
   | 'field'
   | 'well'
   | 'bridge'
-  | 'shop';
+  | 'shop'
+  | 'smithy'
+  | 'orchard'
+  | 'riverside';
 
 export type Need = 'hunger' | 'rest' | 'social' | 'duty';
 
