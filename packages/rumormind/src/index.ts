@@ -4,3 +4,8 @@ export { type Claim, type ClaimId, type CharacterId, logit, sigmoid, clamp } fro
 export { BeliefLedger, type Belief, type Provenance, type HearOptions, type HearResult, type EvidenceKind } from './belief.js';
 export { Relationships } from './relationships.js';
 export { tell, tellScore, tellThreshold, type TellScoreInput } from './transmission.js';
+export { ClaimRegistry, type RegisteredClaim } from './registry.js';
+export { retell, DEFAULT_RETELL_TUNING, type Retelling, type RetellTuning, type DetailTag } from './retell.js';
+export { Mood, appraise, type MoodModifier, type AppraisalInput, type Appraisal } from './mood.js';
+export { sideScore, chooseSide, type SideScoreInput, type Side } from './sideTaking.js';
+export { forgivenessScore, trustRepair, type ForgivenessInput, type TrustRepairInput } from './repair.js';
