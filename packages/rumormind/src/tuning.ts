@@ -10,10 +10,10 @@ export interface Tuning {
   firsthandWeight: number;
   /** tuned: evidence credit when the listener remembers that a new teller got it from an origin they already heard. */
   nonIndependentFactor: number;
-  /** measured: illusory truth effect g≈.37 (Ye et al. 2026 meta-analysis), roughly logarithmic, flattens near 9 exposures. */
+  /** measured: illusory truth effect g≈.37 (Ye et al. 2026 meta-analysis). Bonus = scale·(exposures−1)^0.25 in log-odds, capped; nothing on the first hearing. */
   familiarityCap: number;
   familiarityScale: number;
-  /** tuned: ±30% for claims about people the listener likes/dislikes (bias on acceptance, not on judgement). */
+  /** tuned: additive prior offset in log-odds per unit of affinity for the person the claim is about (bias on acceptance, not on judgement). */
   motivatedBias: number;
   /** tuned: fraction of positive log-odds a fully credible correction removes when it offers an alternative explanation. */
   correctionRemoval: number;
@@ -27,22 +27,25 @@ export interface Tuning {
   sourceMemoryHalfLifeTicks: number;
   /** measured direction: trust lost through integrity failures weighs 2-3x trust gained. */
   trustLossMultiplier: number;
-  /** measured: negative content is shared at ~1.8-1.9x the odds of neutral content (Acerbi 2022, preregistered). */
+  /** measured: negative content is shared at ~1.2-1.9x the odds of neutral content (Acerbi 2022, preregistered); central 1.5. */
   negativitySharingOdds: number;
+  /** measured direction: an exposed liar never regains full trust; a permanent ceiling as a fraction of 1. */
+  exposedLiarTrustCeiling: number;
 }
 
 export const DEFAULT_TUNING: Tuning = {
   hearsayWeight: 1.0,
   firsthandWeight: 2.5,
-  nonIndependentFactor: 0.25,
-  familiarityCap: 0.4,
-  familiarityScale: 0.15,
-  motivatedBias: 0.3,
-  correctionRemoval: 0.4,
-  correctionRemovalBare: 0.25,
+  nonIndependentFactor: 0.5,
+  familiarityCap: 1.0,
+  familiarityScale: 0.45,
+  motivatedBias: 0.6,
+  correctionRemoval: 0.6,
+  correctionRemovalBare: 0.4,
   residualFraction: 0.2,
   attributionPassRate: 0.5,
   sourceMemoryHalfLifeTicks: 240,
-  trustLossMultiplier: 2.5,
-  negativitySharingOdds: 1.85,
+  trustLossMultiplier: 2.0,
+  negativitySharingOdds: 1.5,
+  exposedLiarTrustCeiling: 0.75,
 };
