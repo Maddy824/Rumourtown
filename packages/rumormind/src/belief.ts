@@ -74,7 +74,7 @@ export class BeliefLedger {
 
   hear(claim: Claim, claims: ReadonlyMap<ClaimId, Claim>, opts: HearOptions): HearResult {
     const t = this.tuning;
-    const b = this.getOrCreate(claim);
+    const b = this.getOrCreate(claim, opts.affinityToTarget ?? 0);
     const before = sigmoid(b.logOdds);
     const originKey = opts.attributedOrigin ?? opts.source;
 
@@ -84,8 +84,7 @@ export class BeliefLedger {
     const independence = independent ? 1 : t.nonIndependentFactor;
 
     const evidence =
-      t.hearsayWeight * clamp(opts.trust, 0, 1) * clamp(opts.strength, 0, 1) * independence *
-      this.motivatedMultiplier(claim, opts.affinityToTarget ?? 0);
+      t.hearsayWeight * clamp(opts.trust, 0, 1) * clamp(opts.strength, 0, 1) * independence;
 
     const familiarityBefore = this.familiarity(b.exposures);
     b.exposures += 1;
@@ -108,7 +107,7 @@ export class BeliefLedger {
 
   /** Seeing it yourself. `clarity` 0..1 covers distance, darkness and ambiguity. */
   see(claim: Claim, claims: ReadonlyMap<ClaimId, Claim>, tick: number, clarity = 1): HearResult {
-    const b = this.getOrCreate(claim);
+    const b = this.getOrCreate(claim, 0);
     const before = sigmoid(b.logOdds);
     const delta = this.tuning.firsthandWeight * clamp(clarity, 0, 1);
     b.logOdds += delta;
@@ -138,26 +137,26 @@ export class BeliefLedger {
     return { owner: this.owner, beliefs: [...this.beliefs.values()] };
   }
 
-  private getOrCreate(claim: Claim): Belief {
+  /**
+   * First contact with a claim sets its prior. Liking the person it is about shifts a harmful claim's
+   * prior down and a favourable one up: motivated reasoning as a prior offset, never a flipped sign.
+   */
+  private getOrCreate(claim: Claim, affinityToTarget: number): Belief {
     let b = this.beliefs.get(claim.id);
     if (!b) {
       const prior = clamp(claim.basePrior ?? 0.5, 0.01, 0.99);
-      b = { claimId: claim.id, logOdds: logit(prior), peakLogOdds: logit(prior), exposures: 0, provenance: [] };
+      const offset = claim.valence * this.tuning.motivatedBias * clamp(affinityToTarget, -1, 1);
+      const logOdds = logit(prior) + offset;
+      b = { claimId: claim.id, logOdds, peakLogOdds: logOdds, exposures: 0, provenance: [] };
       this.beliefs.set(claim.id, b);
     }
     return b;
   }
 
+  /** Illusory-truth bonus: nothing on the first hearing, then a slow power-law climb to the cap. */
   private familiarity(exposures: number): number {
-    return Math.min(this.tuning.familiarityCap, this.tuning.familiarityScale * Math.log(1 + exposures));
-  }
-
-  /** Liking the accused dampens harmful claims; disliking them amplifies. Never flips the sign. */
-  private motivatedMultiplier(claim: Claim, affinity: number): number {
-    const a = clamp(affinity, -1, 1);
-    if (claim.valence === 0) return 1;
-    const m = claim.valence < 0 ? 1 - this.tuning.motivatedBias * a : 1 + this.tuning.motivatedBias * a;
-    return clamp(m, 1 - this.tuning.motivatedBias, 1 + this.tuning.motivatedBias);
+    if (exposures <= 1) return 0;
+    return Math.min(this.tuning.familiarityCap, this.tuning.familiarityScale * Math.pow(exposures - 1, 0.25));
   }
 
   /**

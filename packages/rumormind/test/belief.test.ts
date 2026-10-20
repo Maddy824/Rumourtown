@@ -16,13 +16,13 @@ describe('BeliefLedger', () => {
     expect(r.after).toBeLessThan(0.72);
   });
 
-  it('three independent tellings reach roughly 0.85', () => {
+  it('three independent tellings reach roughly 0.9', () => {
     const mira = fresh();
     mira.hear(stole, claims, { source: 'a', strength: 1, trust: 0.6, tick: 1 });
     mira.hear(stole, claims, { source: 'b', strength: 1, trust: 0.6, tick: 2 });
     const r = mira.hear(stole, claims, { source: 'c', strength: 1, trust: 0.6, tick: 3 });
-    expect(r.after).toBeGreaterThan(0.8);
-    expect(r.after).toBeLessThan(0.92);
+    expect(r.after).toBeGreaterThan(0.85);
+    expect(r.after).toBeLessThan(0.95);
   });
 
   it('remembered shared origin discounts corroboration; forgotten origin creates false independence', () => {
@@ -68,7 +68,8 @@ describe('BeliefLedger', () => {
     const likes = fresh().hear(stole, claims, { source: 'a', strength: 1, trust: 0.6, tick: 1, affinityToTarget: 1 });
     const dislikes = fresh().hear(stole, claims, { source: 'a', strength: 1, trust: 0.6, tick: 1, affinityToTarget: -1 });
     expect(likes.after).toBeLessThan(dislikes.after);
-    expect(likes.after).toBeGreaterThan(0.5);
+    expect(likes.after).toBeGreaterThanOrEqual(0.5);
+    expect(dislikes.after).toBeGreaterThan(0.7);
   });
 
   it('is deterministic for the same seed and operations', () => {
@@ -94,6 +95,15 @@ describe('Relationships', () => {
     rel.adjustTrust('mira', 'tom', -0.1);
     rel.adjustTrust('mira', 'tom', 0.1);
     expect(rel.trust('mira', 'tom')).toBeLessThan(0.5);
+  });
+
+  it('a trust ceiling holds permanently', () => {
+    const rel = new Relationships();
+    rel.setTrustCeiling('mira', 'stranger', 0.75);
+    rel.setTrust('mira', 'stranger', 1);
+    expect(rel.trust('mira', 'stranger')).toBe(0.75);
+    rel.adjustTrust('mira', 'stranger', 0.5);
+    expect(rel.trust('mira', 'stranger')).toBe(0.75);
   });
 });
 
