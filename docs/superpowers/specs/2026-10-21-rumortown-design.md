@@ -67,7 +67,7 @@ The spike resolved its conflict in six game-minutes. The real build enforces thr
 - **It died**: nobody passed it on (about one in five rumors never travel).
 
 ### The player's credibility
-Each villager tracks trust in the stranger. Provenance makes exposure possible: when a claim that traces to the stranger is contradicted by first-hand evidence, every villager who remembers that chain lowers their trust in the stranger 2.5× faster than trust ever rises. By day three a careless player finds that nobody listens any more. This is the game's moral weight and its educational beat.
+Each villager tracks trust in the stranger. Provenance makes exposure possible: when a claim that traces to the stranger is contradicted by first-hand evidence, every villager who remembers that chain lowers their trust in the stranger twice as fast as trust ever rises, and caps it for good. By day three a careless player finds that nobody listens any more. This is the game's moral weight and its educational beat.
 
 ## 5. The world
 
@@ -93,7 +93,7 @@ Every villager is one object with these parts. The sim is pure TypeScript with n
 1. **Needs and schedule.** Hunger, rest, sociability, duty. A schedule is generated at dawn from the role template (open the bakery, deliver, lunch at the inn, errands, home). Places advertise what needs they satisfy (Sims pattern).
 2. **Action selection.** Utility scoring over candidate actions (continue routine, satisfy need, approach someone, gossip, confront, defend, explain, avoid, reconcile, go home) with response curves. Interrupts for obvious events (someone shouted at you; you saw a theft). The winning score's top terms are stored as a plain-English `why`.
 3. **Beliefs with provenance** via `rumormind.BeliefLedger`: log-odds belief per claim, with a remembered trail of who told me and where they said they got it. Source memory fades (half-life about two game days); content fades slower.
-4. **Relationships** via `rumormind.Relationships`: trust (0–1) and affinity (−1–1), directed. Trust loses 2.5× faster than it gains. Integrity and competence trust kept separate for the accused.
+4. **Relationships** via `rumormind.Relationships`: trust (0–1) and affinity (−1–1), directed. Trust loses 2× faster than it gains; an exposed liar gets a permanent ceiling. Integrity and competence trust kept separate for the accused.
 5. **Mood with causes.** RimWorld pattern: mood is the sum of named, timed modifiers ("accused in public, −20, 1 day", "defended by Ben, +8, 6 hours"). Emotions (anger, fear, shame, gratitude) come from a small appraisal: goal impact, blame, certainty, control. Dialogue can always say why.
 6. **Memory.** Episodic events with importance (1–10) and recency decay (0.995 per game-hour, from Generative Agents). Retrieval = recency + importance + relevance. A daily "reflection" at dusk turns the day's events into one or two standing opinions ("Mira judges too fast").
 7. **Personality.** HEXACO-lite modifiers of at most ±20% on tendencies: honesty lowers lying and gossip; extraversion raises gossip and approaching; agreeableness raises forgiveness and conflict avoidance; emotionality raises anxiety-driven sharing. Situations dominate; traits bias.
@@ -106,16 +106,16 @@ Every villager is one object with these parts. The sim is pure TypeScript with n
 | Rule | Default | Status | Source |
 |---|---|---|---|
 | One telling from a trusted source moves belief 0.5 → ~0.65 | hearsayWeight 1.0 × trust | measured (advice-taking shift 0.39; 0.48 trusted, 0.32 untrusted; 0.55 when uncertain) | Bailey et al. 2023, 346 effects |
-| Repetition raises belief, capped | min(0.4, 0.15·ln(1+exposures)) | measured (illusory truth g≈.37; flattens ≈9 exposures) | Ye et al. 2026; Hassan & Barber 2021 |
-| A second teller counts only if the listener does not remember the same origin | nonIndependentFactor 0.25 | measured direction (people barely discount repeated-origin sources) | Weaver 2007; Yousif 2019 |
+| Repetition raises belief, capped | 0.45·(n−1)^0.25 log-odds, capped at 1.0; nothing on the first hearing | measured (illusory truth g≈.37; power-law dose–response) | Ye et al. 2026; Hassan & Barber 2021 |
+| A second teller counts only if the listener does not remember the same origin | nonIndependentFactor 0.5 | measured direction (people barely discount repeated-origin sources) | Weaver 2007; Yousif 2019 |
 | Tellers pass on "where I heard it" | attributionPassRate 0.5 | tuned (chains shorten in retelling) | transmission-chain work |
 | Source memory fades | half-life 2 game days; content 10 days | tuned (source fades faster than content) | source-monitoring literature |
 | First-hand beats hearsay | firsthandWeight 2.5 (2–4×) | measured direction | Weizsäcker 2010 |
-| Liking the accused dampens harmful claims | ±30% | tuned, extrapolated | Pfänder & Altay 2025 (d=.78, political) |
-| A correction with an alternative explanation | removes 40% of positive log-odds; bare denial 25%; floor 20% of peak; never raises | measured direction (continued influence; alternatives r=.25 vs .14) | Walter & Murphy 2018; Ecker 2022 |
+| Liking the accused dampens harmful claims | prior offset of ±0.6 log-odds per unit of affinity, set on first hearing | tuned, extrapolated | Pfänder & Altay 2025 (d=.78, political) |
+| A correction with an alternative explanation | removes 60% of positive log-odds; bare denial 40%; floor 20% of peak; never raises | measured direction (continued influence; alternatives r=.25 vs .14) | Walter & Murphy 2018; Ecker 2022 |
 | Corrections work best from the original source and early | ×1.5 if from origin; ×0.7 if the rumor was repeated ≥3× first | measured direction | Walter & Tukachinsky 2020 |
 | Belief drives telling | tellScore: confidence + negativity + closeness terms − stifling | measured (belief strongest driver; anxiety amplifies) | DiFonzo & Bordia; Pezzo & Beckstead 2006 |
-| Negative content spreads more | odds ×1.85 | measured (preregistered) | Acerbi 2022 |
+| Negative content spreads more | odds ×1.5 (range 1.2–1.9) | measured (preregistered) | Acerbi 2022 |
 | Tell allies about distant targets | +0.3·closeness(listener) − 0.3·closeness(listener,target) | measured pattern (closeness 71 vs 47 /100) | Dores Cruz et al. 2021 |
 | Stop when the listener knows | −0.6 | model (Maki–Thompson stifling; ~20% never hear) | rumor models |
 | Interesting-if-true | +0.2 | measured direction | Altay et al. 2021 |
@@ -124,7 +124,7 @@ Every villager is one object with these parts. The sim is pure TypeScript with n
 | Side-taking | score = loyalty difference + perceived wrongness + expected reciprocity − conflict cost; neutral below 0.4 | theory + experiments | DeScioli & Kurzban |
 | Forgiveness | driven by apology (+), empathy (+), perceived intent (−), anger (−); high relationship value and low exploitation risk | measured correlates (.42, .51, −.49, −.41) | Fehr et al. 2010 meta-analysis |
 | Repairing an integrity accusation | denial + exonerating evidence beats apology | measured | Kim et al. 2004 |
-| Trust asymmetry | losses ×2.5 gains; deception damage never fully recovers | measured direction | Schweitzer 2006 |
+| Trust asymmetry | losses ×2 gains; an exposed liar's trust is capped at 0.75 of full, permanently | measured direction | Schweitzer 2006 |
 | Gossipers lose standing | habitual negative gossipers: −trust from listeners over time | measured | Farley 2011; 2024 field work |
 | Gossip share of talk | 14% of lines; 75% neutral; negative 2× positive | measured | Robbins & Karan 2020 |
 | Personality modifiers | ≤ ±20% | measured (trait–behaviour r ≤ .26) | HEXACO meta-analyses |
