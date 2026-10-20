@@ -43,7 +43,13 @@ A small village, one day from 08:00 to 20:00, 120 ticks (one tick = 6 minutes).
 - **Claim:** structured data, for example `{ id, kind: 'stole' | 'gaveTo', about: 'tom', object: 'bread', target?: 'ada' }`.
 - **Belief:** one per character per claim. It holds a confidence from 0 to 1 and a provenance list: `{ source: CharacterId | 'stranger' | 'saw' | 'noticed', tick, delta }`.
 - **Relationships:** `trust[a][b]` from 0 to 1, and `affinity[a][b]` from -1 to 1. Each character also has a trust value for the stranger (Mira 0.6, Tom 0.4, Ben 0.2).
-- **Belief update:** use one small, documented rule. A suggested starting point: `new = prior + (1 - prior) * trust * claimConfidence * (1 - resistance)`. Resistance rises with the listener's affinity for the accused and with their confidence in a contradicting claim. Seeing an event first-hand gives about 0.95. Put every constant in `src/sim/tuning.ts`.
+- **Belief update (research-backed):** keep beliefs as log-odds and add evidence to them. Every constant goes in `src/sim/tuning.ts`.
+  - **Hearsay:** `L += w_source * strength`. `w_source` comes from the listener's trust in the speaker. Tune it so that one telling from a neutral, trusted source moves belief from 0.5 to about 0.65 (people move roughly 39% of the way toward advice they receive).
+  - **Repetition:** hearing the same claim again adds a capped familiarity bonus, `min(0.4, 0.15 * ln(1 + exposures))`. This is separate from corroboration.
+  - **False independence:** a second source counts as independent corroboration only if, in the listener's remembered provenance, it did not trace back to the same origin. Use what the character remembers, never the engine's omniscient record.
+  - **First-hand evidence:** seeing an event yourself weighs 2 to 4 times as much as hearsay.
+  - **Motivated reasoning:** multiply evidence against someone you like by 0.7 to 1.0, and congenial evidence by 1.0 to 1.3.
+  - **Corrections:** a credible correction with an alternative explanation ("he took it to Ada") removes 50 to 90% of the unsupported contribution, and leaves some residual. A correction can never raise belief in the original claim.
 - **Actions:** each tick, each character picks an action by utility scoring. Record the winning terms as a plain-English `why`.
   - `routine`: follow your schedule.
   - `gossip`: tell a co-located character a claim you believe above 0.5.
