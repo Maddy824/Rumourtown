@@ -1,2 +1,5 @@
+import { mount } from './ui/app';
+import './ui/styles.css';
+
 const app = document.querySelector<HTMLDivElement>('#app');
-if (app) app.textContent = 'RumorTown';
+if (app) mount(app);
