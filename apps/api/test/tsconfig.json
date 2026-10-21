@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"],
+    "composite": false
+  },
+  "include": [
+    "../src", "./helpers.ts", "./node-sqlite.d.ts", "./ledger.test.ts",
+    "./sign.test.ts", "./validate.test.ts", "./worker.test.ts"
+  ]
+}
