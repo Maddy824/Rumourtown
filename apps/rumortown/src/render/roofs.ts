@@ -7,7 +7,6 @@ import { BERRY, DENIM, INK, MUSTARD, PAPER, darken, lighten, mix, rgba } from '.
 import { hash, makeCanvas } from './grain.js';
 import type { Standing } from './felt.js';
 import type { Building } from './buildings.js';
-import { buildingIcons } from '../content/map/wayfinding.js';
 import { BODY } from './sprites.js';
 import { awning, chimney, doorway, dormer, gableSteps, shinglesSteps, sign, tower, wheel, type RoofStyle } from './ornaments.js';
 
@@ -139,16 +138,6 @@ function* paintFacadeSteps(ctx: CanvasRenderingContext2D, b: Building, z: number
   if (b.kind === 'shop') {
     ctx.fillStyle = mix(MUSTARD, INK, .25); ctx.fillRect(w - .9 * z, -.12 * z, .45 * z, .35 * z);
     ctx.strokeStyle = INK; ctx.strokeRect(w - .9 * z, -.12 * z, .45 * z, .35 * z);
-  }
-  const home = b.kind === 'home';
-  const label = home ? (b.name ?? b.id.replace('home-', '')).replace(' home', '') : b.name ?? b.kind;
-  const text = home ? '' : z >= 24 ? label : buildingIcons[b.kind] ?? '▤';
-  if (text) {
-    ctx.save(); ctx.font = `650 ${z >= 24 ? (home ? 11 : 13) : 10}px 'Bricolage Grotesque', sans-serif`;
-    const tw = ctx.measureText(text).width + 12, tx = home ? w / 2 + .6 * z : w / 2, ty = home ? .03 * z : -.09 * z;
-    ctx.strokeStyle = INK; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(tx - tw / 3, ty - 8); ctx.lineTo(tx - tw / 3, ty + 3); ctx.moveTo(tx + tw / 3, ty - 8); ctx.lineTo(tx + tw / 3, ty + 3); ctx.stroke();
-    ctx.fillStyle = PAPER; ctx.fillRect(tx - tw / 2, ty, tw, 19); ctx.setLineDash([2, 2]); ctx.strokeRect(tx - tw / 2 + 2, ty + 2, tw - 4, 15);
-    ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText(text, tx, ty + 13); ctx.restore();
   }
   for (const dx of b.topDoors) doorway(ctx, (dx - b.x + 0.5) * z, z);
 }

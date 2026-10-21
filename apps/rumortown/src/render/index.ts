@@ -3,7 +3,7 @@
  * offscreen layer; trees, roof façades and villagers are depth-sorted standing pieces; threads
  * and a paper-grain overlay go on top. A frame is a handful of blits and a few strokes.
  */
-import { TILE, type Camera, type Renderer, type RenderOptions, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
+import { TILE, type Camera, type Renderer, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
 import { computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
 import { findBuildings } from './buildings.js';
 import { roofOverlaps } from './roofs.js';
@@ -13,10 +13,12 @@ import type { Standing } from './felt.js';
 import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
 import { hashString, makeCork, makeGrain } from './grain.js';
-import { INK, MUSTARD, PAPER, mix, rgba } from './palette.js';
+import { BERRY, DENIM, INK, MOSS, MUSTARD, OAT, PAPER, mix, rgba } from './palette.js';
 import { conversationGroups } from './conversations.js';
 import { drawCurrent } from './water.js';
 import { IdleQueue } from './idle.js';
+import { signVisible, type PresentationOptions } from './presentation.js';
+import { buildingIcons, signposts } from '../content/map/wayfinding.js';
 
 export { fitZoom } from './camera.js';
 /** The close camera: CSS pixels per tile. */
@@ -39,6 +41,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   const buildings = findBuildings(map);
   const layers: Layer[] = [];
   const idle = new IdleQueue();
+  const bootstrapZooms = new Set<number>();
   let preparingSprites = false;
   let preparingZoom = false;
   let requestedZoom = CLOSE_ZOOM;
@@ -95,37 +98,32 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       if (z !== CLOSE_ZOOM && z !== far) layers.splice(i, 1);
     }
     idle.clear();
+    bootstrapZooms.clear();
     preparingSprites = false;
     preparingZoom = false;
     requestedZoom = CLOSE_ZOOM;
     sprites.retain([CLOSE_ZOOM, far], dpr);
     for (const zoom of far === CLOSE_ZOOM ? [CLOSE_ZOOM] : [CLOSE_ZOOM, far]) {
-      if (!layers.some((l) => l.zoom === zoom)) buildLayer(zoom);
-      for (const facing of ['s', 'n', 'e', 'w'] as const) {
-        for (const frame of [0, 1] as const) sprites.stranger(facing, frame, zoom, dpr);
+      if (!layers.some(l => l.zoom === zoom)) {
+        bootstrapZooms.add(zoom);
+        idle.add((function* () {
+          const layer = yield* prepareLayer(map, buildings, zoom, dpr);
+          if (current) for (const v of current.villagers) yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
+          if (layer && !layers.some(l => l.zoom === zoom)) layers.push(layer);
+          bootstrapZooms.delete(zoom);
+        })());
       }
+      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1] as const) sprites.stranger(facing, frame, zoom, dpr);
     }
     cork = ctx.createPattern(makeCork(Math.round(256 * dpr)), 'repeat');
     corkDpr = dpr;
     if (current) requestSprites(current);
   }
 
-  /** Initial creation/explicit resize can prepare the bootstrap layers before animation starts. */
-  function buildLayer(zoom: number): void {
-    const work = prepareLayer(map, buildings, zoom, dpr);
-    for (;;) {
-      const step = work.next();
-      if (step.done) {
-        if (step.value) layers.push(step.value);
-        return;
-      }
-    }
-  }
-
   /** Keep drawing the nearest complete layer while the exact requested zoom is prepared. */
   function requestLayer(zoom: number): void {
     requestedZoom = zoom;
-    if (preparingZoom || layers.some((l) => l.zoom === zoom)) return;
+    if (preparingZoom || bootstrapZooms.has(zoom) || layers.some((l) => l.zoom === zoom)) return;
     preparingZoom = true;
     idle.add(prepareRequestedLayer());
   }
@@ -447,7 +445,31 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     ctx.restore();
   }
 
-  function render(previous: WorldSnapshot | null, cur: WorldSnapshot, camera: Camera, options: RenderOptions): void {
+  function drawSigns(camera: Camera, phone: boolean): void {
+    const zoom = view.zoom;
+    ctx.save();
+    ctx.font = `650 ${zoom >= 24 ? 12 : 10}px 'Bricolage Grotesque', sans-serif`;
+    ctx.textAlign = 'center';
+    for (const place of map.places) {
+      if (!['home', 'bakery', 'inn', 'smithy', 'shop', 'chapel', 'school', 'mill'].includes(place.kind)) continue;
+      if (!signVisible(place.kind, Math.hypot(place.door.x - playerX, place.door.y - playerY), phone)) continue;
+      if (place.kind === 'home' && zoom < 24) continue;
+      const text = zoom < 24 ? buildingIcons[place.kind] ?? '▤' : place.name.replace(' home', '');
+      const x = view.ox + (place.door.x + .5) * zoom, y = view.oy + (place.door.y - .5) * zoom;
+      if (x < -80 || x > camera.width + 80 || y < 0 || y > camera.height) continue;
+      const w = ctx.measureText(text).width + 12;
+      ctx.fillStyle = PAPER; ctx.fillRect(x - w / 2, y, w, 19);
+      ctx.strokeStyle = rgba(INK, .5); ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(x - w / 2 + 2, y + 2, w - 4, 15);
+      ctx.fillStyle = INK; ctx.fillText(text, x, y + 13);
+    }
+    if (!phone && zoom >= 24) for (const post of signposts) {
+      const x = view.ox + post.x * zoom, y = view.oy + (post.y - 1.5) * zoom;
+      post.arms.forEach((name, i) => { ctx.fillStyle = PAPER; ctx.fillRect(x - 40, y + i * 18, 80, 17); ctx.fillStyle = INK; ctx.fillText(name, x, y + i * 18 + 12); });
+    }
+    ctx.restore();
+  }
+
+  function render(previous: WorldSnapshot | null, cur: WorldSnapshot, camera: Camera, options: PresentationOptions): void {
     current = cur;
     const now = performance.now();
     for (const v of cur.villagers) {
@@ -475,6 +497,19 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     // Keep the last complete frame while a newly introduced Look is prepared in idle time.
     const ready = requestSprites(cur);
     requestLayer(zoom);
+    if (!layers.length) {
+      interpolate(previous, cur, options.alpha);
+      // Paint actual map tiles while felt textures are stitched in idle slices.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = PAPER; ctx.fillRect(0, 0, camera.width, camera.height);
+      const colors: Record<string, string> = { water: DENIM, path: OAT, floor: OAT, wall: BERRY, bridge: MUSTARD, field: MUSTARD };
+      for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) {
+        ctx.fillStyle = colors[map.tiles[y * map.width + x]!] ?? MOSS;
+        ctx.fillRect(view.ox + x * zoom, view.oy + y * zoom, zoom + .2, zoom + .2);
+      }
+      if (!options.arriving) drawPlayer(cur, CLOSE_ZOOM, zoom / CLOSE_ZOOM, now, true);
+      return;
+    }
     if (!ready) return;
     const layer = layerFor(zoom);
     interpolate(previous, cur, options.alpha);
@@ -512,11 +547,28 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera, cur, options.selected, layer.zoom);
       else if (vY <= pY) drawVillager(cur, order[vi++] as number, layer.zoom, stretch, now, camera);
       else {
-        drawPlayer(cur, layer.zoom, stretch, now, options.reducedMotion);
+        if (!options.arriving) drawPlayer(cur, layer.zoom, stretch, now, options.reducedMotion);
         playerDone = true;
       }
     }
 
+    drawSigns(camera, !!options.phone);
+    if (options.spotlight?.length) {
+      // Leave the whole scene at 40%, then redraw the people and their paper rings.
+      ctx.save(); ctx.globalAlpha = .6; ctx.fillStyle = INK;
+      ctx.fillRect(0, 0, camera.width, camera.height); ctx.restore();
+      for (const id of options.spotlight) {
+        if (id === 'stranger') {
+          drawPlayer(cur, layer.zoom, stretch, now, true);
+          const x = view.ox + playerX * zoom, y = view.oy + playerY * zoom;
+          ctx.strokeStyle = PAPER; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, zoom * .6, zoom * .28, 0, 0, Math.PI * 2); ctx.stroke();
+        } else {
+          drawSelection(cur, id);
+          const i = curIndex.get(id); if (i !== undefined) drawVillager(cur, i, layer.zoom, stretch, now, camera);
+        }
+      }
+    }
+    if (ready) options.onReady?.();
     threads.track(cur.threads, now);
     if (options.threads && cur.threads.length) threads.draw(ctx, cur.threads, resolveEnd, zoom, options.reducedMotion, now);
     drawGrain(camera);
@@ -564,7 +616,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     return best ?? near;
   }
 
-  // Paint both supported ground layers and the stranger before the first frame.
+  // Queue map layers between frames; only the small stranger wardrobe is prepared immediately.
   setSize(canvas.clientWidth || canvas.width / dpr, canvas.clientHeight || canvas.height / dpr, dpr);
 
   return {

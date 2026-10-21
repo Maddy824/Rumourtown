@@ -10,6 +10,7 @@ import { TILE, type Camera, type Vec2, type VillageMap } from '../sim/types.js';
 
 export interface Insets {
   left?: number;
+  right?: number;
   top: number;
   bottom: number;
   /** Extra cover from the bottom, such as an open sheet on a phone. */
@@ -19,6 +20,7 @@ export interface Insets {
 export interface CameraRig {
   readonly camera: Camera;
   far: boolean;
+  focusZoom?: number;
   resize(width: number, height: number): void;
   setInsets(insets: Insets): void;
   /** Move toward the focus point; `snap` jumps straight there. */
@@ -65,11 +67,11 @@ export function createCameraRig(map: VillageMap): CameraRig {
         return;
       }
       camera.offset = { x: 0, y: 0 };
-      camera.zoom = TILE;
+      camera.zoom = rig.focusZoom ?? TILE;
       // Put the stranger in the middle of the band that the strip and any sheet leave uncovered.
-      const bandTop = Math.min(insets.top, 72);
+      const bandTop = insets.top;
       const targetY = (bandTop + (camera.height - sheetOffset)) / 2;
-      const want = { x: focus.x, y: focus.y - (targetY - camera.height / 2) / camera.zoom };
+      const want = { x: focus.x + ((insets.right ?? 0) - (insets.left ?? 0)) / 2 / camera.zoom, y: focus.y - (targetY - camera.height / 2) / camera.zoom };
       const next = {
         x: camera.center.x + (want.x - camera.center.x) * k,
         y: camera.center.y + (want.y - camera.center.y) * k,
@@ -78,6 +80,11 @@ export function createCameraRig(map: VillageMap): CameraRig {
         x: clampAxis(next.x, map.width, camera.width, camera.zoom),
         y: clampAxis(next.y, map.height, camera.height, camera.zoom),
       };
+      if (rig.focusZoom !== undefined) {
+        // When a wide pair fits the map inside the viewport, keep it in the uncovered band.
+        if (map.width * camera.zoom <= camera.width) camera.offset.x = ((insets.left ?? 0) - (insets.right ?? 0)) / 2;
+        if (map.height * camera.zoom <= camera.height) camera.offset.y = (bandTop - Math.max(sheetOffset, insets.bottom)) / 2;
+      }
     },
   };
   return rig;

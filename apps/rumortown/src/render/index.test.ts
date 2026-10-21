@@ -397,3 +397,27 @@ describe('prepared zoom and sprite caches', () => {
     expect(canvases).toHaveLength(next);
   });
 });
+
+it('prepares the map in idle slices and signals readiness only after it can draw the felt village', () => {
+  const paint = vi.spyOn(tiles, 'paintGroundSteps');
+  const ready = vi.fn();
+  const renderer = createRenderer(canvasStub(), village());
+  renderer.resize(360, 640, 1);
+  expect(paint).not.toHaveBeenCalled();
+  const opts = { ...options, onReady: ready };
+  renderer.render(null, snapshot([villager('mira')]), camera(), opts);
+  expect(paint).not.toHaveBeenCalled();
+  expect(ready).not.toHaveBeenCalled();
+  drainIdle();
+  expect(paint).toHaveBeenCalled();
+  renderer.render(null, snapshot([villager('mira')]), camera(), opts);
+  expect(ready).toHaveBeenCalledOnce();
+});
+it('redraws both Show me participants over the dimmed village', () => {
+  const cur = snapshot([villager('mira'), villager('ben')]);
+  const { renderer } = setup(cur);
+  const cached = vi.spyOn(SpriteCache.prototype, 'cachedVillager');
+  const opts = { ...options, spotlight: ['mira', 'ben'] };
+  renderer.render(null, cur, camera(), opts);
+  expect(cached).toHaveBeenCalledTimes(4);
+});

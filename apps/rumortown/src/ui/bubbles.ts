@@ -15,6 +15,8 @@ export interface BubbleFrame {
   far: boolean;
   compact: boolean;
   muted?: boolean;
+  rumorSpeech?: ReadonlyMap<string, string>;
+  spotlight?: readonly string[];
   /** Bubbles may not rise above this line (the top strip) or sit below this one (the bottom controls). */
   topLimit: number;
   bottomLimit: number;
@@ -139,6 +141,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
       const candidates: { id: VillagerId; name: string; text: string; x: number; y: number; foot: number; score: number }[] = [];
       for (const v of f.cur.villagers) {
         const existing = shown.get(v.id);
+        if (f.rumorSpeech && (!v.bubble || f.rumorSpeech.get(v.id) !== v.bubble.text)) continue;
         const text = existing && f.now - existing.shownAt < MIN_SHOW_MS ? existing.current : v.bubble?.text ?? null;
         if (!text) continue;
         const pos = f.positions.get(v.id) ?? v.pos;
@@ -193,6 +196,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         }
         const { x: left, y: top, flip } = placement;
         b.el.style.visibility = '';
+        b.el.style.opacity = f.spotlight?.length && !f.spotlight.includes(c.id) ? '.4' : '1';
         b.el.dataset.flip = flip ? 'true' : 'false';
         const tx = clamp(c.x - left, 4, w - 4), edge = flip ? 0 : hgt;
         b.tail.setAttribute('d', `M${tx - 4} ${edge} L${c.x - left} ${c.y - top} L${tx + 4} ${edge}Z`);

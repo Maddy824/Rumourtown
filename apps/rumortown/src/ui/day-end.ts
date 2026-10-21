@@ -36,7 +36,7 @@ export function createDayEnd(ctx: DayEndContext): DayEndCard {
   const keepGoing = h('button', { class: 'button button-primary', type: 'button', onclick: () => api.hide() }, 'Keep going');
   const share = h('button', { class: 'button button-quiet', type: 'button', onclick: () => ctx.onShare(share) }, 'Pin to the board');
   const newVillage = h('button', { class: 'button button-primary', type: 'button', hidden: true, onclick: () => ctx.onNewVillage() }, 'New village');
-  const el = h('section', { class: 'card dayend', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-dayend-title', hidden: true },
+  const el = h('section', { class: 'card dayend', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'rt-dayend-title', hidden: true },
     h('div', { class: 'card-paper card-index' }, title, ending, summary, trust, reflection, h('div', { class: 'card-actions' }, keepGoing, share, newVillage)));
 
   let open = false;
@@ -83,7 +83,7 @@ export function createDayEnd(ctx: DayEndContext): DayEndCard {
       if (!open) {
         open = true;
         reveal(el);
-        ctx.layers.open({ id: 'dayend', el, modal: true, close: () => api.hide() });
+        ctx.layers.open({ id: 'dayend', el, modal: false, close: () => api.hide() });
       }
       (finished ? newVillage : keepGoing).focus({ preventScroll: true });
     },

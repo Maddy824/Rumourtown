@@ -7,6 +7,7 @@ import { createTalk } from './sim/talk/index.js';
 import { createMover, createWorld } from './sim/world/index.js';
 import type { Renderer, VillageMap } from './sim/types.js';
 import { mountApp, type AppDeps } from './ui/app.js';
+import { createArrival } from './ui/arrival.js';
 import { createStubRenderer } from './ui/stub-renderer.js';
 
 type CreateRenderer = (canvas: HTMLCanvasElement, map: VillageMap) => Renderer;
@@ -35,11 +36,16 @@ export async function loadRenderer(): Promise<CreateRenderer> {
   if (new URLSearchParams(window.location.search).get('renderer') === 'stub') return createStubRenderer;
   const load = rendererModules['./render/index.ts'];
   if (!load) return createStubRenderer;
+  let deadline = 0;
   try {
-    const mod = await load();
+    const mod = await Promise.race([load(), new Promise<never>((_, reject) => {
+      deadline = window.setTimeout(() => reject(new Error('Renderer loading took too long')), 1500);
+    })]);
     if (typeof mod.createRenderer === 'function') return mod.createRenderer;
   } catch (err) {
     console.warn('The felt renderer did not load; using the plain one.', err);
+  } finally {
+    window.clearTimeout(deadline);
   }
   return createStubRenderer;
 }
@@ -47,6 +53,9 @@ export async function loadRenderer(): Promise<CreateRenderer> {
 async function start(): Promise<void> {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) return;
+  const arrival = createArrival(root);
+  deps.arrival = arrival;
+  deps.arrivalDone = arrival.start();
   deps.createRenderer = await loadRenderer();
   if (import.meta.env.DEV) {
     // Development only: ?t=880 opens the run at that tick, to reach the evening card quickly.

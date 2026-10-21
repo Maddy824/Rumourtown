@@ -49,6 +49,7 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 12 | Easier controls, local agents and credit controls | done; developer tools, $0 local planner, bounded replay API and yearly pacing verified; owner deferred phone activation |
 | 13 | Prepare delivery and optional API for larger audiences | done; CDN cache policy, independent deployment, early admission, bounded inputs, edge cache and retention verified locally; production capacity remains unmeasured |
 | 14 | A town you can read: legibility, wayfinding and flow | implemented A–E; local checks pass; directory commits blocked by read-only `.git`; browser review pending, see report |
+| 15 | AI whispers inside the website | implemented A–E; 609 tests, typecheck, build, bundle and setup rehearsal pass; commits blocked by read-only `.git`, live browser/local Worker checks pending, see report |
+| 16 | See what’s happening: story rail, focus, phone layout and arrival | implemented A–F; root typecheck, 636 tests and build pass; 592,783-byte bundle, browser verification and read-only `.git` block completion, see report |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.
-| 15 | AI whispers inside the website | implemented A–E; 609 tests, typecheck, build, bundle and setup rehearsal pass; commits blocked by read-only `.git`, live browser/local Worker checks pending, see report |

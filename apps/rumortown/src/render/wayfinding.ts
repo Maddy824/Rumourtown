@@ -1,6 +1,6 @@
 /** Quiet sewn district details, painted once into each zoom's ground cache. */
 import type { VillageMap } from '../sim/types.js';
-import { districtAt, districtTiles, districtViews, signposts } from '../content/map/wayfinding.js';
+import { districtAt, districtTiles, districtViews } from '../content/map/wayfinding.js';
 import { INK, MOSS, OAT, PAPER, darken, mix } from './palette.js';
 
 export function* paintDistricts(ctx: CanvasRenderingContext2D, map: VillageMap, z: number): Generator<void> {
@@ -50,28 +50,6 @@ export function* paintWayfinding(ctx: CanvasRenderingContext2D, map: VillageMap,
       ctx.setLineDash([z * .12, z * .06]);
       ctx.strokeRect(x * z, (p.rect.y + .15) * z, z, z * .22);
     }
-    yield;
-  }
-  if (z >= 24) for (const post of signposts) {
-    ctx.setLineDash([]); ctx.fillStyle = INK;
-    ctx.fillRect((post.x + .8) * z, (post.y - 1.9) * z, z * .07, z * 2.1);
-    post.arms.forEach((name, i) => {
-      const x = (post.x + (i % 2 ? -.9 : .8)) * z, y = (post.y - 1.9 + i * .48) * z;
-      ctx.fillStyle = PAPER; ctx.fillRect(x, y, z * 2.5, z * .43);
-      ctx.strokeStyle = mix(INK, PAPER, .5); ctx.setLineDash([2, 2]); ctx.strokeRect(x + 2, y + 2, z * 2.5 - 4, z * .43 - 4);
-      ctx.fillStyle = INK; ctx.font = `600 ${z * .27}px 'Bricolage Grotesque', sans-serif`; ctx.textAlign = 'center';
-      ctx.fillText(name, x + z * 1.25, y + z * .3);
-    });
-    yield;
-  }
-  if (z >= 24) for (const home of map.places.filter(p => p.kind === 'home')) {
-    const text = home.name.replace(' home', '');
-    ctx.font = "600 11px 'Bricolage Grotesque', sans-serif";
-    const w = ctx.measureText(text).width + 10;
-    const x = (home.door.x + 1.2) * z, y = (home.door.y - .9) * z;
-    ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, 16);
-    ctx.strokeStyle = mix(INK, PAPER, .4); ctx.setLineDash([2, 2]); ctx.strokeRect(x + 1, y + 1, w - 2, 14);
-    ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText(text, x + 5, y + 12);
     yield;
   }
   // Two folded paper boats beside the eastern jetties.

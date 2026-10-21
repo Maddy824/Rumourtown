@@ -3,7 +3,9 @@
  * It implements the same Renderer contract so the UI can be built and tested without the real one,
  * and the app falls back to it if the real renderer fails to load or throws.
  */
-import type { Camera, Renderer, RenderOptions, TileKind, Vec2, VillageMap, VillagerView, WorldSnapshot } from '../sim/types.js';
+import type { Camera, Renderer, TileKind, Vec2, VillageMap, VillagerView, WorldSnapshot } from '../sim/types.js';
+
+import type { PresentationOptions } from '../render/presentation.js';
 
 const TABLE = '#4F6637';
 const TILE_COLOR: Record<TileKind, string> = {
@@ -170,7 +172,7 @@ export function createStubRenderer(canvas: HTMLCanvasElement, map: VillageMap): 
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
     },
-    render(previous, current, camera, options: RenderOptions) {
+    render(previous, current, camera, options: PresentationOptions) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = TABLE;
       ctx.fillRect(0, 0, width, height);
@@ -184,9 +186,17 @@ export function createStubRenderer(canvas: HTMLCanvasElement, map: VillageMap): 
       order.sort((a, b) => a.pos.y - b.pos.y);
       for (const item of order) {
         if (item.v) drawVillager(item.pos, item.v, camera, item.v.id === options.selected);
-        else drawPlayer(item.pos, camera);
+        else if (!options.arriving) drawPlayer(item.pos, camera);
       }
       if (options.threads) drawThreads(current, positions, playerPos, camera);
+      if (options.spotlight?.length) {
+        ctx.fillStyle = '#2E2A22'; ctx.globalAlpha = .6; ctx.fillRect(0, 0, width, height); ctx.globalAlpha = 1;
+        for (const id of options.spotlight) {
+          if (id === 'stranger') drawPlayer(playerPos, camera);
+          else { const v = current.villagers.find(v => v.id === id); if (v) drawVillager(positions.get(id) ?? v.pos, v, camera, true); }
+        }
+      }
+      options.onReady?.();
     },
     project,
     unproject,

@@ -4,6 +4,8 @@ Rumourtown is a browser game about a village of 36 fictional adults, where a whi
 
 Whisper to Mira that Tom stole bread, open “Follow a rumor”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Open “Explore” to travel through four neighbourhoods, cross the river at either bridge and watch conversations around the village. Eastbank brings pottery, boat repairs and a market; the south commons adds a reading room, posthouse, teahouse and community gardens. Woodland paths connect quiet clearings beyond the orchard. Hold WASD or an arrow key to walk. Each villager has a private worry, an ambition and social motives. Rewind the timeline or share the run with a link.
 
+Read [How it works](docs/how-it-works.md) for walking, whispers, the thread, sharing and the AI budget.
+
 Under “More”, the “Notebook” exports synthetic observations as JSON/CSV and compares three-day runs across one or five seeds with an assumption removed. See the [research model, evidence and limitations](docs/research-model.md).
 
 Built by [Madhav Sunil](https://github.com/Maddy824).

@@ -19,8 +19,11 @@ import {
   type VillagerId,
   type WorldSnapshot,
 } from '../sim/types.js';
-import { createRumorTrail, createTrailHistory } from './rumor-trail.js';
-import { createOpening } from './opening.js';
+import { createTrailHistory } from './rumor-trail.js';
+import type { Arrival } from './arrival.js';
+import type { PresentationOptions } from '../render/presentation.js';
+import { createHint, createRumorFocus } from './focus.js';
+import { createOpening, finishOpeningDay } from './opening.js';
 import { createNameLabels } from './name-labels.js';
 import { createDistrictTrigger } from './district-banner.js';
 import { createBubbles } from './bubbles.js';
@@ -31,7 +34,7 @@ import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js'
 import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
 import { faceImg } from './faces.js';
-import { createBeatTicker, storyBeat, type StoryBeat } from './story-beats.js';
+import { nowSentence, storyBeat, storyTarget, storyZoom, type StoryBeat } from './story-beats.js';
 import { dialArt, postboxArt } from './icons.js';
 import { createLayers } from './layers.js';
 import { advanceTicks } from './loop.js';
@@ -46,6 +49,8 @@ import { createTimeControls, type Speed } from './timebar.js';
 import { createWhisperSheet, inReach } from './whisper.js';
 
 export interface AppDeps {
+  arrival?: Arrival;
+  arrivalDone?: Promise<void>;
   /** Builds a fresh run. The timeline calls this again with the same seed and whispers to rewind. */
   createSim: (seed: number, interventions: Intervention[], tuning?: Partial<Tuning>) => Simulation;
   createRenderer: (canvas: HTMLCanvasElement, map: VillageMap) => Renderer;
@@ -182,10 +187,29 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const moreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'More');
   const pins = h('nav', { class: 'pins', 'aria-label': 'Village tools' }, exploreBtn, storyBtn, moreBtn, threadsBtn);
   const top = h('header', { class: 'rt-top' }, clock, pins);
-  const runningStory = h('button', { class: 'running-story', type: 'button', hidden: true });
+  const nowFaces = h('span', { class: 'now-faces', 'aria-hidden': 'true' });
+  const nowText = h('span', { class: 'now-sentence' }, 'Whisper something and watch the agents react.');
+  const runningStory = h('button', { class: 'now-open', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, h('span', { class: 'sr-only' }, 'Now: '), nowFaces, nowText, h('span', { class: 'now-chevron', 'aria-hidden': 'true' }, '⌃'));
+  const resumeFollow = h('button', { class: 'following-paused', type: 'button', hidden: true }, 'Following paused. Tap to resume.');
+  threadsBtn.className = 'follow-toggle';
+  nowFaces.append(faceImg('stranger', 'stranger', 22), faceImg('mira', sim.cast.get('mira')?.look ?? 'stranger', 22));
+  const nowBar = h('div', { class: 'now-bar' }, runningStory, threadsBtn, resumeFollow);
   let runningBeat: StoryBeat | null = null;
-  let storyFade: Animation | null = null;
-  runningStory.addEventListener('click', () => { if (runningBeat) { closeSheetsForPhone('story'); story.openAt(runningBeat.event, runningStory); } });
+  let dragged = false;
+  runningStory.addEventListener('click', () => {
+    if (dragged) { dragged = false; return; }
+    if (story.isOpen()) story.close();
+    else { closeSheetsForPhone('story'); story.open(runningStory); }
+  });
+  let dragStart = 0;
+  runningStory.addEventListener('pointerdown', e => { dragStart = e.clientY; dragged = false; runningStory.setPointerCapture(e.pointerId); });
+  runningStory.addEventListener('pointermove', e => {
+    if (!runningStory.hasPointerCapture(e.pointerId) || !phone || Math.abs(e.clientY - dragStart) < 24) return;
+    dragged = true;
+    if (!story.isOpen()) { closeSheetsForPhone('story'); story.open(runningStory); }
+    story.setFull(e.clientY < dragStart);
+  });
+  runningStory.addEventListener('pointerup', () => measureInsets());
 
   const nearbyNote = h('small', { class: 'nearby-note', 'aria-hidden': 'true' }, 'Meet someone');
   const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Whisper', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper', nearbyNote));
@@ -221,7 +245,18 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let lastMinute = -1;
   let lastTimeKey = '';
   let beats: StoryBeat[] = [];
-  const beatTicker = createBeatTicker();
+  const focus = createRumorFocus();
+  const hint = createHint(performance.now());
+  const dismissHint = (): void => hint.dismiss();
+  root.addEventListener('pointerdown', dismissHint, { once: true });
+  const rumorSpeech = new Map<string, { text: string; claimId?: string }>();
+  let spotlight: { ids: readonly string[]; until: number } | null = null;
+  let followedClaim = '';
+  let followedCount = 0;
+  let destroyed = false;
+  let awaitingArrival = !!deps.arrivalDone;
+  const stitching = h('p', { class: 'stitching', role: 'status' }, 'Stitching the village…');
+  if (awaitingArrival) holds.add('arrival');
   const positions = new Map<VillagerId, Vec2>();
 
   const effectiveRate = (): number => (holds.size > 0 || rewinding ? 0 : RATE[speed]);
@@ -313,10 +348,19 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     layers,
     reducedMotion,
     isPhone,
-    onSelect: (id) => openTag(id, true),
+    history: () => trailHistory.links,
+    onShow: ids => {
+      spotlight = { ids, until: performance.now() + 4000 };
+      tag.close();
+      story.setFull(false);
+    },
     onOpenChange: (open) => {
+      runningStory.setAttribute('aria-expanded', String(open));
+      root.dataset.rail = String(open);
+      if (!open && dayEnd.isOpen()) dayEnd.hide();
       storyBtn.setAttribute('aria-expanded', String(open));
       if (open) hideToast();
+      measureInsets();
     },
   });
   story.el.id = 'rt-story';
@@ -385,12 +429,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       syncScrim();
     },
   });
-  const trail = createRumorTrail({ sim: () => sim, history: () => trailHistory.links,
-    pause: () => setSpeed(0), play: () => setSpeed(1), close: () => { showTrail(false); threadsBtn.focus(); } });
-  const trailFrom = h('span', { class: 'trail-map-name' });
-  const trailTo = h('span', { class: 'trail-map-name' });
-  const trailMarkers = h('div', { class: 'trail-markers', 'aria-hidden': 'true', hidden: true }, trailFrom, trailTo);
-  const tools = createTools({ layers, actions: [researchBtn, shareBtn], onAgent: startAgent, onOpenChange: open => {
+  const tools = createTools({ layers, actions: [researchBtn, shareBtn], onAgent: startAgent,
+    onReplayArrival: () => { void replayArrival(); }, onOpenChange: open => {
     heldKeys.clear();
     if (open) { hold('tools'); hideToast(); } else release('tools');
     syncScrim();
@@ -401,18 +441,25 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const agentNotice = h('div', { class: 'agent-notice', hidden: true },
     h('span', { role: 'status', 'aria-live': 'polite' }, agentText),
     h('button', { type: 'button', class: 'button button-quiet', onclick: () => stopAgent() }, 'Take over'));
-  let guidedArrival = false;
-  const opening = createOpening(layers, reflection.dare.text, () => {
-    const bakery = map.places.find(p => p.id === 'bakery');
-    if (bakery) { walkTo(bakery.door); guidedArrival = true; }
-    else walkToVillager('mira');
+  const opening = createOpening(layers, () => walkToVillager('mira'), () => tools.showHelp(moreBtn), open => {
+    if (open) hold('opening'); else release('opening');
   });
+  async function replayArrival(): Promise<void> {
+    if (!deps.arrival) { opening.show(true); return; }
+    opening.close(); story.close(); whisper.close(); tag.close(); time.closeDrawer();
+    hold('arrival'); awaitingArrival = true;
+    await deps.arrival.start();
+    if (destroyed) return;
+    awaitingArrival = false; release('arrival'); opening.show(true);
+  }
   const bottom = h('div', { class: 'rt-bottom' }, postbox, time.bar, time.tab);
-  root.append(canvas, opening.el, labelLayer, runningStory, districtBanner, focusFrame, strings, bubbleLayer, marker, top, trail.el, trailMarkers, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, live, actionLive);
+  root.append(canvas, opening.el, labelLayer, nowBar, districtBanner, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, stitching, live, actionLive);
+  story.endingSlot.append(dayEnd.el);
+  story.setHandle(nowBar, root);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
-    scrim.hidden = !(whisper.isOpen() || share.isOpen() || dayEnd.isOpen() || guide.isOpen() || tools.isOpen());
+    scrim.hidden = !(whisper.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen());
     scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
   }
   scrim.addEventListener('click', () => {
@@ -498,7 +545,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function walkTo(point: Vec2, automated = false): void {
     if (rewinding) return;
-    if (!automated) { stopAgent(); guidedArrival = false; }
+    if (!automated) { stopAgent(); focus.move(); spotlight = null; hint.dismiss(); }
     const requested = tileOf(point);
     const kind = map.tiles[requested.y * map.width + requested.x];
     if (kind === 'water') { say('The river is deep. Cross at the bridge.'); return; }
@@ -517,8 +564,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   }
 
   function walkToVillager(id: VillagerId): void {
+    focus.move(); spotlight = null; hint.dismiss();
     stopAgent();
-    guidedArrival = false;
+
     const v = cur.villagers.find((x) => x.id === id);
     if (!v || rewinding) return;
     heldKeys.clear();
@@ -553,6 +601,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function stepKey(dir: Vec2): void {
     if (rewinding) return;
+    focus.move(); spotlight = null; hint.dismiss();
     stopAgent();
     const p = cur.player.pos;
     const now = performance.now();
@@ -566,7 +615,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const next = { x: base.x + dir.x, y: base.y + dir.y };
     if (!walkable(next)) return;
     destination = null;
-    guidedArrival = false;
+
     keyTarget = { tile: next, at: now };
     follow = null;
     sim.movePlayer(next);
@@ -598,7 +647,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     cur = sim.snapshot();
     const fresh = consumeEvents();
     if (fresh.length) story.push(fresh);
-    trail.focus(claimId);
+    story.focus(claimId); showTrail(true);
     bubbles.boost(listener, 5000);
     tag.refresh(true);
     return true;
@@ -607,14 +656,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   /* ---------------- Events ---------------- */
 
   function showTrail(open: boolean): void {
-    threadsOn = open;
+    threadsOn = open; focus.toggle(open);
     root.dataset.tracing = String(open);
     threadsBtn.setAttribute('aria-pressed', String(open));
-    trail.el.hidden = !open;
-    trailMarkers.hidden = !open;
-    if (open) { hideToast(); trail.update(); }
+    followedClaim = ''; followedCount = 0;
+    if (open) { hideToast(); story.updateChain(); }
     measureInsets();
   }
+  resumeFollow.addEventListener('click', () => { focus.resume(); followedClaim = ''; followedCount = 0; });
 
   function consumeEvents(): SimEvent[] {
     trailHistory.record(cur.threads);
@@ -640,7 +689,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function recordBeats(events: readonly SimEvent[]): void {
     const fresh = events.map(e => storyBeat(e, sim)).filter((b): b is StoryBeat => b !== null);
-    beats.push(...fresh); beatTicker.push(fresh);
+    beats.push(...fresh);
+    for (const e of events) if (e.kind === 'line') {
+      if (e.claimId || ['accuse', 'defend', 'apologize', 'deny', 'explain', 'doubt'].includes(e.act)) rumorSpeech.set(e.speaker, { text: e.text, claimId: e.claimId });
+      else rumorSpeech.delete(e.speaker);
+    }
   }
 
   function resyncEvents(): SimEvent[] {
@@ -653,7 +706,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     } else {
       cursor = { tick: 0, seen: 0 };
     }
-    beats = []; beatTicker.reset(); recordBeats(all);
+    beats = []; rumorSpeech.clear(); followedClaim = ''; followedCount = 0; recordBeats(all);
     return all;
   }
 
@@ -674,18 +727,22 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function showDayEnd(ev: DayEndEvent): void {
     actionLive.textContent = `End of day ${ev.dayIndex + 1}. ${ev.summary}`;
     guide.close();
+    finishOpeningDay(() => window.localStorage);
+    opening.close();
     hold('dayend');
     hideToast();
     closeSheetsForPhone('');
     whisper.close();
     const whispered = interventions.some((i) => i.tick <= sim.tick);
     const dareResult = `${reflection.dare.text} ${evaluateDare(sim, reflection.dare, ev)}`;
+    story.open();
     dayEnd.show(ev, whispered ? averageTrust() : null, {
       finished: sim.tick >= runTicks,
       dare: dareResult,
       paragraphs: ev.dayIndex === 2 ? reflectionParagraphs(sim, ev) : [],
       checks: reflection.checks,
     });
+    story.showEnding();
     syncScrim();
   }
 
@@ -793,6 +850,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     return { x: ev.clientX - r.left, y: ev.clientY - r.top };
   };
   canvas.addEventListener('pointerdown', (ev) => {
+    if (awaitingArrival || layers.anyModal()) return;
+    hint.dismiss();
     down = { ...canvasPoint(ev), id: ev.pointerId };
   });
   canvas.addEventListener('pointerup', (ev) => {
@@ -850,7 +909,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function measureInsets(): void {
     const height = root.clientHeight || window.innerHeight;
-    const topBottom = Math.max(clock.getBoundingClientRect().bottom, pins.getBoundingClientRect().bottom);
+    const topBottom = Math.max(clock.getBoundingClientRect().bottom, pins.getBoundingClientRect().bottom, story.isOpen() && phone ? 0 : nowBar.getBoundingClientRect().bottom);
     const bottomTop = Math.min(postbox.getBoundingClientRect().top, phone ? time.tab.getBoundingClientRect().top : time.bar.getBoundingClientRect().top);
     insets = { top: Math.round(topBottom + 6), bottom: Math.round(Math.max(0, height - bottomTop + 6)) };
   }
@@ -873,12 +932,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       time.closeDrawer();
       bottom.insertBefore(time.bar, time.tab);
     }
+    story.layout();
     resize();
   }
   phoneQuery.addEventListener('change', applyLayout);
   const onResize = (): void => resize();
   window.addEventListener('resize', onResize);
   applyLayout();
+  const geometryObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(measureInsets) : null;
+  for (const element of [nowBar, clock, pins, bottom]) geometryObserver?.observe(element);
 
   /* ---------------- Frame ---------------- */
 
@@ -891,13 +953,22 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function sheetCover(): number {
     if (!phone) return 0;
-    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [story.el, story.isOpen()], [time.drawer, time.isDrawerOpen()]] as const;
+    const sideRail = window.matchMedia('(orientation: landscape)').matches;
+    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [story.el, story.isOpen() && !sideRail], [time.drawer, time.isDrawerOpen()]] as const;
     return Math.max(0, ...panels.filter(([, open]) => open).map(([el]) => rig.camera.height - el.getBoundingClientRect().top));
   }
 
   function renderWorld(alpha: number): void {
     try {
-      renderer.render(prev, threadsOn ? { ...cur, threads: trail.link() ? [trail.link()!] : [] } : cur, rig.camera, { threads: threadsOn, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion() });
+      const options: PresentationOptions = {
+        threads: threadsOn, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion(), phone,
+        spotlight: spotlight && performance.now() < spotlight.until ? spotlight.ids : undefined,
+        arriving: awaitingArrival && !reducedMotion(),
+        onReady: () => { stitching.hidden = true; },
+      };
+      const links = threadsOn ? trailHistory.links.filter(t => t.claimId === story.selectedClaim()) : cur.threads;
+      renderer.render(prev, threadsOn ? { ...cur, threads: links } : cur, rig.camera, options);
+      if (usingStub) stitching.hidden = true;
       renderFailures = 0;
     } catch (err) {
       renderFailures += 1;
@@ -943,12 +1014,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       const arrived = Math.hypot(cur.player.pos.x - destination.pos.x, cur.player.pos.y - destination.pos.y) < .7;
       movementHint.textContent = arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.';
       destination = null;
-      if (guidedArrival) {
-        guidedArrival = false;
-        const mira = cur.villagers.find(v => v.id === 'mira');
-        if (arrived && mira && Math.hypot(mira.pos.x - cur.player.pos.x, mira.pos.y - cur.player.pos.y) <= 2) whisper.open({ listener: 'mira', opener: postbox });
-        else if (arrived) walkToVillager('mira');
-      }
+
     }
     if (agentTour && effectiveRate() > 0 && !layers.anyModal()) {
       if (sim.tick >= agentTour.untilTick) stopAgent();
@@ -967,24 +1033,38 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const entered = districtEntry(player, now);
     if (entered) { districtBanner.textContent = entered; bannerUntil = now + 2500; districtBanner.hidden = false; }
     if (now >= bannerUntil) districtBanner.hidden = true;
-    trail.update();
+    story.updateChain();
     const cover = sheetCover();
-    rig.far = threadsOn || scrubFar;
-    rig.setInsets({
-      top: insets.top,
-      bottom: threadsOn && phone ? rig.camera.height - trail.el.getBoundingClientRect().top + 10 : insets.bottom,
-      left: threadsOn && !phone ? trail.el.getBoundingClientRect().right + 12 : 0,
-      sheet: cover,
-    });
-    rig.update(player, dt, firstFrame || reducedMotion());
+    const links = trailHistory.links.filter(t => t.claimId === story.selectedClaim());
+    if (threadsOn && !focus.paused) {
+      if (followedClaim !== story.selectedClaim()) {
+        followedClaim = story.selectedClaim(); followedCount = Math.max(0, links.length - 1);
+        focus.toggle(true);
+      }
+      for (const link of links.slice(followedCount)) focus.transmission([link.from, link.to], now);
+      followedCount = links.length;
+    }
+    resumeFollow.hidden = !focus.paused || !threadsOn;
+    movementHint.hidden = !hint.visible(now);
+    rig.far = scrubFar;
+    const sideRail = story.isOpen() && (!phone || window.matchMedia('(orientation: landscape)').matches);
+    rig.setInsets({ top: insets.top, bottom: insets.bottom, left: 0, right: sideRail ? 332 : 0, sheet: sideRail ? 0 : cover });
+    const highlight = spotlight && now < spotlight.until ? storyTarget(spotlight.ids, cur) : null;
+    const focusPeople = focus.target(now);
+    const focusPoint = storyTarget(focusPeople, cur);
+    rig.focusZoom = storyZoom(highlight && spotlight ? spotlight.ids : focusPeople, cur, rig.camera.width - (sideRail ? 332 : 0), rig.camera.height - insets.top - Math.max(cover, insets.bottom));
+    rig.update(highlight ?? focusPoint ?? player, dt, firstFrame || reducedMotion());
     firstFrame = false;
     renderWorld(alpha);
 
     const cam = rig.camera;
+    const chainPeople = story.chainPeople();
     const project = (p: Vec2): { x: number; y: number } => renderer.project(p, cam);
     bubbles.update({
       cur,
-      muted: threadsOn || layers.anyModal(),
+      muted: layers.anyModal(),
+      rumorSpeech: threadsOn ? new Map([...rumorSpeech].filter(([id, speech]) => speech.claimId === story.selectedClaim() || (!speech.claimId && chainPeople.has(id))).map(([id, speech]) => [id, speech.text])) : undefined,
+      spotlight: spotlight && now < spotlight.until ? spotlight.ids : undefined,
       positions,
       player,
       camera: cam,
@@ -996,7 +1076,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       // Projected positions are canvas-relative; DOM rectangles use viewport coordinates.
       exclusions: (() => {
         const origin = canvas.getBoundingClientRect();
-        return [clock, pins, districtBanner, runningStory].filter(control => !control.hidden).map((control) => {
+        return [clock, pins, districtBanner, nowBar, ...(story.isOpen() ? [story.el] : [])].filter(control => !control.hidden).map((control) => {
           const r = control.getBoundingClientRect();
           return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
         });
@@ -1005,18 +1085,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       now,
     });
 
-    updateLabels(interpolatedSnapshot(), player, project, cam.width, insets.top, cam.height - Math.max(cover, insets.bottom), bubbles.visible(), threadsOn || layers.anyModal());
-
-    const currentLink = threadsOn ? trail.link() : undefined;
-    trailMarkers.hidden = !currentLink;
-    if (currentLink) {
-      for (const [id, label] of [[currentLink.from, trailFrom], [currentLink.to, trailTo]] as const) {
-        const p = project(id === 'stranger' ? player : positions.get(id) ?? player);
-        label.textContent = id === 'stranger' ? 'You' : sim.cast.get(id)?.name ?? id;
-        label.style.left = `${clamp(p.x, 34, cam.width - 34)}px`;
-        label.style.top = `${p.y + (label === trailFrom ? -24 : 14)}px`;
-      }
-    }
+    updateLabels(interpolatedSnapshot(), player, project, cam.width - (sideRail ? 332 : 0), insets.top, cam.height - Math.max(cover, insets.bottom), bubbles.visible(), layers.anyModal(), { phone, focus: threadsOn, chain: chainPeople, spotlight: spotlight && now < spotlight.until ? spotlight.ids : undefined });
 
     // The tag hangs beside its villager, tied on with a string.
     const sel = tag.selected();
@@ -1046,19 +1115,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       markerAt = null;
     }
 
-    const nextBeat = beatTicker.update(now);
+    const nextBeat = beats.at(-1) ?? null;
     if (nextBeat !== runningBeat) {
       runningBeat = nextBeat;
-      storyFade?.cancel();
-      if (nextBeat && !reducedMotion()) storyFade = runningStory.animate([{ opacity: 0 }, { opacity: 1, offset: .04 }, { opacity: 1, offset: .9 }, { opacity: 0 }], { duration: 8000 });
-      runningStory.hidden = !nextBeat;
-      if (nextBeat) runningStory.replaceChildren(...nextBeat.faces.map(id => {
-        const look = id === 'stranger' ? 'stranger' as const : sim.cast.get(id)?.look ?? 'stranger' as const;
-        return faceImg(id, look, 22);
-      }), h('span', null, nextBeat.text));
+      nowFaces.replaceChildren(...(nextBeat?.faces ?? ['stranger', 'mira']).map(id => faceImg(id, sim.cast.get(id)?.look ?? 'stranger', 22)));
+      nowText.textContent = nextBeat ? nowSentence(nextBeat, sim) : 'Whisper something and watch the agents react.';
+      measureInsets();
     }
-    const hideThreads = !beats.some(b => b.event.kind === 'whisper');
-    if (threadsBtn.hidden !== hideThreads) { threadsBtn.hidden = hideThreads; measureInsets(); }
+    const noWhisper = !beats.some(b => b.event.kind === 'whisper');
+    if (threadsBtn.hidden !== noWhisper) { threadsBtn.hidden = noWhisper; measureInsets(); }
     updateClock();
     const nearby = inReach(cur).length;
     nearbyNote.textContent = nearby ? `${nearby} nearby` : 'Find someone';
@@ -1073,8 +1138,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   story.reset(resyncEvents());
   updateClock();
-  if (arrivalNote) window.setTimeout(() => say(arrivalNote ?? '', 6500), 400);
-  opening.show();
+  deps.arrival?.connect(() => renderer.project(cur.player.pos, rig.camera), layers);
+  void (deps.arrivalDone ?? Promise.resolve()).then(() => {
+    if (destroyed) return;
+    awaitingArrival = false; release('arrival'); opening.show();
+    if (arrivalNote) say(arrivalNote, 6500);
+  });
   rafId = window.requestAnimationFrame(frame);
 
   return {
@@ -1086,12 +1155,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       return p ? renderer.project(p, rig.camera) : null;
     },
     destroy() {
-      storyFade?.cancel();
+      destroyed = true;
+      deps.arrival?.destroy();
+      geometryObserver?.disconnect();
       opening.close();
       tools.close();
       guide.destroy();
       whisper.destroy();
       window.cancelAnimationFrame(rafId);
+      root.removeEventListener('pointerdown', dismissHint);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', clearKeys);

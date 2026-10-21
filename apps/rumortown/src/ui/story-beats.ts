@@ -16,7 +16,7 @@ export function storyBeat(e: SimEvent, sim: Pick<Simulation, 'cast' | 'claims'>)
     : e.act === 'defend' ? `${name(e.speaker)} defended ${name(subject)}`
     : e.act === 'apologize' ? `${name(e.speaker)} apologised to ${name(listener)}`
     : e.act === 'deny' ? `${name(e.speaker)} denied that ${claim?.text ?? e.text}`
-    : e.act === 'explain' ? `${name(e.speaker)} explained: ${e.text}`
+    : e.act === 'explain' ? `${name(e.speaker)} offered another explanation for the story about ${name(subject)}`
     : e.act === 'doubt' ? `${name(e.speaker)} doubted that ${claim?.text ?? e.text}`
     : `${name(e.speaker)} told ${name(listener)} that ${claim?.text ?? e.text}`;
   return { tick: e.tick, kind, text, faces: [e.speaker, kind === 'defence' ? subject : listener], event: e };
@@ -48,4 +48,38 @@ export function createBeatTicker() {
       return now - shownAt < 8000 ? shown : null;
     },
   };
+}
+
+/** Stable newest-first ordering, including evening cards; small talk never enters the rail. */
+export function newestStoryEntries(events: readonly SimEvent[], sim: Pick<Simulation, 'cast' | 'claims'>): SimEvent[] {
+  return events.filter(e => e.kind === 'day-end' || storyBeat(e, sim) !== null).reverse().sort((a, b) => b.tick - a.tick);
+}
+/** Shared targeting for cards, chain faces and camera following. */
+export function storyTarget(ids: readonly string[], snapshot: import('../sim/types.js').WorldSnapshot) {
+  const points = ids.map(id => id === 'stranger' ? snapshot.player.pos : snapshot.villagers.find(v => v.id === id)?.pos).filter(p => p !== undefined);
+  if (!points.length) return null;
+  return { x: points.reduce((n, p) => n + p.x, 0) / points.length, y: points.reduce((n, p) => n + p.y, 0) / points.length };
+}
+
+/** Keep the phone's Now sentence short without clipping the full beat in the rail. */
+export function nowSentence(beat: StoryBeat, sim: Pick<Simulation, 'cast' | 'claims'>): string {
+  if (beat.text.length <= 58) return beat.text.replace(/[.!?]?$/, '.');
+  const name = (id: string): string => id === 'stranger' ? 'You' : (sim.cast.get(id)?.name ?? id).split(' ')[0]!;
+  const [from, to] = beat.faces;
+  if (beat.kind === 'exposure') return 'The stranger’s word is worth less now.';
+  if (beat.kind === 'apology') return `${name(from)} apologised to ${name(to)}.`;
+  if (beat.kind === 'defence') return `${name(from)} defended ${name(to)}.`;
+  if (beat.kind === 'confrontation') return `${name(from)} confronted ${name(to)}.`;
+  return `${name(from)} told ${name(to)} a village rumor.`;
+}
+
+/** Frame both people even when an old telling's participants have since walked apart. */
+export function storyZoom(ids: readonly string[], snapshot: import('../sim/types.js').WorldSnapshot, width: number, height: number): number | undefined {
+  if (!ids.length) return undefined;
+  const points = ids.map(id => id === 'stranger' ? snapshot.player.pos : snapshot.villagers.find(v => v.id === id)?.pos).filter(p => p !== undefined);
+  if (!points.length) return undefined;
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const spanX = Math.max(...xs) - Math.min(...xs) + 4;
+  const spanY = Math.max(...ys) - Math.min(...ys) + 4;
+  return Math.max(2, Math.floor(Math.min(32, Math.max(64, width) / spanX, Math.max(64, height) / spanY) * 4) / 4);
 }
