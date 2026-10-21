@@ -166,6 +166,7 @@ a successful custom claim. Unsupported input returns an unsigned refusal with
 ```text
 +----------------------------------+
 | Origin and route checks          |
+| Enabled check, edge rate limits  |
 | Body, length and blocked text    |
 +----------------+-----------------+
                  |
@@ -177,14 +178,13 @@ a successful custom claim. Unsupported input returns an unsigned refusal with
                  |
                  v
 +----------------------------------+
-| Ledger cacheGet                  |
+| Edge cache, then ledger cacheGet |
 | Hit: validate, verify signature, |
 | re-sign for new cast if needed   |
 +----------------+-----------------+
                  | cache miss
                  v
 +----------------------------------+
-| Require AI_ENABLED=true         |
 | Price allowlisted models         |
 | Hash visitor bucket              |
 | Ledger reserve worst-case cost   |
@@ -212,6 +212,8 @@ the hold and increments counts. Defaults are 5 requests per visitor per hour,
 20 globally per minute, $0.019 per day and $7 lifetime. A provider settlement above the reserved bound freezes further calls. Cache hits precede reservation and do
 not consume those model-call counts. The cache stores a hash and signed structured
 payload; the ledger does not store the typed words.
+
+Traffic admission, byte/time bounds, an authenticated edge cache and transient-record retention protect this deliberately small coordinator. Static delivery is independent of the API. See [capacity assumptions, limits and load checks](scale.md).
 
 Before dispatch, the Worker requires a phone-notification receipt; failed or missing alert configuration releases the unused reservation. The phone may still be offline, so receipt is service acceptance rather than confirmed device delivery. See [credit controls and notification setup](credit-controls.md).
 

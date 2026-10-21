@@ -6,3 +6,4 @@ dist
 .env.*
 .superpowers
 .agent-runs
+.wrangler/

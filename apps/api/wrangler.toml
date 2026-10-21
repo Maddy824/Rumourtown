@@ -10,6 +10,17 @@ class_name = "BudgetLedger"
 tag = "v1"
 new_sqlite_classes = ["BudgetLedger"]
 
+# Approximate limits per Cloudflare location. The ledger is the exact global cap.
+[[ratelimits]]
+name = "EDGE_VISITOR_LIMIT"
+namespace_id = "82401"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "EDGE_TOTAL_LIMIT"
+namespace_id = "82402"
+simple = { limit = 60, period = 60 }
+
 [vars]
 ALLOWED_ORIGIN = "https://rumortown.example"
 MODELS = "meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.5-flash-lite"

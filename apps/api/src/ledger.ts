@@ -19,6 +19,7 @@ function text(value: unknown): string {
 
 export class BudgetLedger {
   private readonly sql: SqlStorage;
+  private prunedHour = -1;
   constructor(private readonly ctx: DurableObjectState, private readonly env: Env) {
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS days (day TEXT PRIMARY KEY, reserved INTEGER NOT NULL, spent INTEGER NOT NULL)`);
@@ -27,6 +28,23 @@ export class BudgetLedger {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, amount INTEGER NOT NULL, status TEXT NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS cache (hash TEXT PRIMARY KEY, payload TEXT NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS billing_faults (reason TEXT PRIMARY KEY)`);
+    this.sql.exec('CREATE INDEX IF NOT EXISTS visitors_hour ON visitors(hour)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS completed_reservations_day ON reservations(day) WHERE status != \'reserved\'');
+  }
+
+  private prune(now: number): void {
+    const hour = Math.floor(now / 3_600_000);
+    if (hour <= this.prunedHour) return;
+    const cutoff = new Date(now - 30 * 86_400_000).toISOString().slice(0, 10);
+    this.ctx.storage.transactionSync(() => {
+      // Keep the preceding buckets for in-flight requests across a boundary.
+      this.sql.exec('DELETE FROM visitors WHERE hour < ?', hour - 1);
+      this.sql.exec('DELETE FROM minutes WHERE minute < ?', Math.floor(now / 60_000) - 1);
+      this.sql.exec("DELETE FROM reservations WHERE day < ? AND status != 'reserved'", cutoff);
+    });
+    this.prunedHour = hour;
+    // Never prune days, unresolved holds or billing faults: they enforce the
+    // lifetime cap. Expired settlement IDs fail closed instead of refunding.
   }
 
   private reserve(body: Record<string, unknown>): unknown {
@@ -43,6 +61,7 @@ export class BudgetLedger {
     const allowance = units(this.env.DAILY_ALLOWANCE_USD === undefined ? 0.019 : Number(this.env.DAILY_ALLOWANCE_USD));
     const lifetime = units(this.env.LIFETIME_ALLOWANCE_USD === undefined ? 7 : Number(this.env.LIFETIME_ALLOWANCE_USD));
     if (lifetime > units(7)) throw new Error('config');
+    this.prune(body.now);
     return this.ctx.storage.transactionSync(() => {
       if (this.sql.exec('SELECT reason FROM billing_faults LIMIT 1').toArray().length) return { ok: false, reason: 'budget' };
       const visits = this.sql.exec<{ count: number }>('SELECT count FROM visitors WHERE visitor = ? AND hour = ?', visitor, hour).toArray()[0]?.count ?? 0;
@@ -104,7 +123,12 @@ export class BudgetLedger {
         case '/cachePut': {
           const hash = text(body.hash);
           if (!/^[a-f0-9]{64}$/u.test(hash) || !record(body.payload)) throw new Error('cache');
-          this.sql.exec('INSERT INTO cache (hash, payload) VALUES (?, ?) ON CONFLICT(hash) DO UPDATE SET payload = excluded.payload', hash, JSON.stringify(body.payload));
+          this.ctx.storage.transactionSync(() => {
+            this.sql.exec('INSERT INTO cache (hash, payload) VALUES (?, ?) ON CONFLICT(hash) DO UPDATE SET payload = excluded.payload', hash, JSON.stringify(body.payload));
+            // Bounded FIFO cache; eviction can cause another budgeted model call,
+            // so this data never participates in spending correctness.
+            this.sql.exec('DELETE FROM cache WHERE rowid <= (SELECT rowid FROM cache ORDER BY rowid DESC LIMIT 1 OFFSET 2048)');
+          });
           result = { ok: true };
           break;
         }

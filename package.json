@@ -19,7 +19,8 @@
     "agent:demo": "node examples/agent.mjs demo",
     "agent:serve": "node examples/agent.mjs serve",
     "agent:replay": "node examples/agent.mjs replay",
-    "alerts:setup": "node scripts/setup-alerts.mjs"
+    "alerts:setup": "node scripts/setup-alerts.mjs",
+    "load:check": "node scripts/load-check.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261021.1",

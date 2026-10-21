@@ -57,11 +57,12 @@ export async function keys() {
 }
 export function makeEnv(namespace: DurableObjectNamespace, secret: string, config: Partial<Env> = {}): Env {
   return { LEDGER: namespace, ALLOWED_ORIGIN: origin, SIGNING_KEY_JWK: secret,
+    EDGE_VISITOR_LIMIT: { limit: async () => ({ success: true }) }, EDGE_TOTAL_LIMIT: { limit: async () => ({ success: true }) },
     AI_ENABLED: 'true', USAGE_ALERT_URL: 'https://ntfy.sh/rumortown-test-topic-not-real-123456789', TURNSTILE_SECRET: 'test-turnstile', OPENROUTER_API_KEY: 'test-openrouter', ...config };
 }
 export function interpretRequest(text = 'Mira stole bread from Tom.', overrides: Record<string, unknown> = {}, headers: Record<string, string> = {}): Request {
   return new Request('https://api.test/interpret', {
-    method: 'POST', headers: { Origin: origin, 'CF-Connecting-IP': '192.0.2.1', 'User-Agent': 'test', ...headers },
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1', 'User-Agent': 'test', ...headers },
     body: JSON.stringify({ text, turnstileToken: 'test-token', castVersion: 'v1', ...overrides }),
   });
 }

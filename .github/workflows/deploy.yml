@@ -37,5 +37,6 @@ jobs:
         working-directory: apps/rumortown
         run: npx --no-install wrangler deploy
       - name: Deploy the API Worker
+        if: vars.DEPLOY_OPTIONAL_API == 'true'
         working-directory: apps/api
         run: npx --no-install wrangler deploy

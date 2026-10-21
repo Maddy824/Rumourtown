@@ -47,5 +47,6 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 10 | Readable conversations, typed stories and focused rumor trails | done; local writing, exact replay, step controls and phone layout verified |
 | 11 | Expand the world and cast | done; 36 residents, 42 places, four districts, two bridges and new replay verified |
 | 12 | Easier controls, local agents and credit controls | done; developer tools, $0 local planner, bounded replay API and yearly pacing verified; owner deferred phone activation |
+| 13 | Prepare delivery and optional API for larger audiences | done; CDN cache policy, independent deployment, early admission, bounded inputs, edge cache and retention verified locally; production capacity remains unmeasured |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.

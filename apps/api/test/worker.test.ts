@@ -84,7 +84,7 @@ describe('Worker routes', () => {
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
     const missing = await worker.fetch(new Request('https://api.test/missing', { headers: { Origin: origin } }), env);
-    expect(missing.status).toBe(503);
+    expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ reason: 'invalid' });
     expect(mock.calls).toHaveLength(0);
   });
@@ -213,7 +213,7 @@ describe('fail-closed execution and billing', () => {
   ] as const)('returns %s without model dispatch', async (reason, config) => {
     const { worker, env, mock } = setup(config);
     const response = await worker.fetch(interpretRequest(), env);
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(reason === 'budget' ? 503 : 429);
     expect(await response.json()).toEqual({ reason });
     expect(mock.calls).toHaveLength(1);
   });

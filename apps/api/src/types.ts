@@ -13,6 +13,8 @@ export interface Env {
   LIFETIME_ALLOWANCE_USD?: string;
   PER_VISITOR_PER_HOUR?: string;
   GLOBAL_PER_MINUTE?: string;
+  EDGE_VISITOR_LIMIT?: RateLimit;
+  EDGE_TOTAL_LIMIT?: RateLimit;
   LEDGER: DurableObjectNamespace;
 }
 export interface Payload {

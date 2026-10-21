@@ -42,6 +42,8 @@ Optional AI interpretation is disabled by default. A $0.019 daily allowance pace
 
 See [the architecture](docs/architecture.md) for module boundaries, replay and the request path.
 
+The game runs each village in the browser and deploys as CDN-served static assets. The optional AI service has separate traffic admission and spending limits. See [capacity assumptions and load checks](docs/scale.md); million-user capacity still needs production validation.
+
 ## How the villagers think
 
 These eight rules describe the main belief and gossip mechanisms. “Measured direction” means the research supports the pattern; the numerical translation remains a modelling choice. This is not a validated psychological predictor. Defaults come from [the library tuning](packages/rumormind/src/tuning.ts); the evidence tags follow [the design's evidence table](docs/superpowers/specs/2026-10-21-rumortown-design.md#8-simulation-rules-and-defaults).

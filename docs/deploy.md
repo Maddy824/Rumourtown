@@ -1,8 +1,8 @@
 # Deploy RumorTown
 
-The current browser game supports local typed stories without an API, Turnstile or OpenRouter. The interpretation service recipe below is optional infrastructure; it is not connected to the current writing form. The existing combined deployment workflow still provisions both apps.
+The current browser game supports local typed stories without an API, Turnstile or OpenRouter. The interpretation service below is optional infrastructure; it is not connected to the current writing form. The deployment workflow publishes only the static game unless repository variable `DEPLOY_OPTIONAL_API` is `true`. See [traffic and capacity](scale.md) before a large launch.
 
-Run commands from the repository root with Node 22, npm, Wrangler (installed by `npm ci`), and the GitHub CLI available. Replace example hostnames with yours.
+Run commands from the repository root with Node 22, npm, Wrangler (installed by `npm ci`), and the GitHub CLI available. Replace example hostnames with yours. To launch the local game, complete account steps 1–2, then run the checks/build and deploy **only** `apps/rumortown/wrangler.toml`. Steps 3–6 configure the optional interpretation service; they are unnecessary for playing or hosting the game.
 
 1. Create a Cloudflare account, add your domain if using custom hostnames, and note the account ID. Create an API token scoped to that account with Workers Scripts edit permission (and Workers Routes edit for custom routes).
 
@@ -57,9 +57,9 @@ Run commands from the repository root with Node 22, npm, Wrangler (installed by 
    rm /tmp/rumortown-signing.json
    ```
 
-   The Task 10 brief asks for four API secrets, but the Task 9 contract and Worker define only these three: `OPENROUTER_API_KEY`, `TURNSTILE_SECRET`, `SIGNING_KEY_JWK`. A fourth name is unspecified. `ALLOWED_ORIGIN` is a nonsecret `[vars]` setting; do not create an unused fourth secret or duplicate that variable as a secret.
+   The API now requires four secrets when enabled: `OPENROUTER_API_KEY`, `TURNSTILE_SECRET`, `SIGNING_KEY_JWK` and `USAGE_ALERT_URL`. `ALLOWED_ORIGIN` is a nonsecret `[vars]` setting.
 
-6. Set `ALLOWED_ORIGIN` in the API's `[vars]` to the exact game origin, including `https://` and no trailing slash. Build and deploy; later pushes to `main` run the same checks and deploy the game first, then the API. Attach the root domain to `rumortown` and `api.<domain>` to `rumortown-api` in Cloudflare's Workers domain settings if desired. The game is assets-only; its config has no Worker script or `run_worker_first`.
+6. For an optional API deployment, set `ALLOWED_ORIGIN` to the exact game origin, including `https://` and no trailing slash. Keep both rate-limit bindings in `apps/api/wrangler.toml`; missing bindings fail closed. Their numeric namespace IDs must be unique within your account unless sharing counters is intentional. Pushes to `main` check and deploy the game; set `gh variable set DEPLOY_OPTIONAL_API --body true` only when that workflow should also deploy the API. Attach custom domains in Cloudflare if desired. The game is assets-only; its config has no Worker script or `run_worker_first`.
 
    ```sh
    open -e apps/api/wrangler.toml

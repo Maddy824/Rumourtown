@@ -1,16 +1,15 @@
 import { blockedReason, hash, normalise } from './moderation';
 import { actualCost, estimatePromptTokens, MAX_TOKENS, modelList, providerPriceCap, reservationCost } from './prices';
 import { notifyUsage } from './alerts';
+import { admit, Failure, readInput } from './admission';
+import { claimCache, type EdgeCache } from './edge-cache';
 import { systemPrompt } from './prompt';
 import { publicKey, sign, verify } from './sign';
 import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
 import { schema, validate } from './validate';
 export { BudgetLedger } from './ledger';
 
-class Failure extends Error {
-  constructor(readonly reason: FailureReason) { super(reason); }
-}
-interface Dependencies { fetch?: Fetcher; now?: () => number }
+interface Dependencies { fetch?: Fetcher; now?: () => number; cache?: EdgeCache }
 
 // Single stable object for the whole deployment, never a per-visitor object.
 async function ledger(env: Env, method: string, body: unknown): Promise<Record<string, unknown>> {
@@ -44,9 +43,9 @@ async function turnstile(request: Request, token: string, env: Env, fetcher: Fet
   finally { clearTimeout(timer); }
 }
 
-async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number): Promise<SignedPayload | Refusal> {
-  let input: unknown;
-  try { input = await request.json(); } catch { throw new Failure('invalid'); }
+async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number, cache?: EdgeCache): Promise<SignedPayload | Refusal> {
+  await admit(request, env);
+  const input = await readInput(request);
   if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken', 'castVersion'].includes(key)) ||
       typeof input.text !== 'string' || typeof input.turnstileToken !== 'string' || !input.turnstileToken.trim() || input.turnstileToken.length > 2048 ||
       typeof input.castVersion !== 'string' || input.castVersion.trim().length === 0 || input.castVersion.length > 128) throw new Failure('invalid');
@@ -58,7 +57,9 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   if (unsupported) return { unsupported, castVersion: input.castVersion, issuedAt: now() };
   await turnstile(request, input.turnstileToken, env, fetcher);
   const key = await hash(normalised);
-  const cached = await ledger(env, 'cacheGet', { hash: key });
+  const edge = claimCache(cache, request, await hash(JSON.stringify([key, input.castVersion, publicKey(env.SIGNING_KEY_JWK)])));
+  const edgePayload = await edge.get();
+  const cached = edgePayload === null ? await ledger(env, 'cacheGet', { hash: key }) : { payload: edgePayload };
   if (!Object.hasOwn(cached, 'payload')) throw new Failure('ledger');
   if (cached.payload !== null) {
     const p = cached.payload;
@@ -68,15 +69,19 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     const claim = validate(p.claim);
     if (!claim || 'unsupported' in claim) throw new Failure('ledger');
     const payload = { claim, castVersion: p.castVersion, issuedAt: p.issuedAt };
-    if (p.castVersion === input.castVersion) return { ...payload, sig: p.sig };
+    if (p.castVersion === input.castVersion) {
+      const signed = { ...payload, sig: p.sig };
+      if (edgePayload === null) await edge.put(signed);
+      return signed;
+    }
     // Hash cache is independent of caller castVersion; re-sign without another model call.
     const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
     await finish(env, 'cachePut', { hash: key, payload: signed });
+    await edge.put(signed);
     return signed;
   }
 
   let models: string[];
-  if (env.AI_ENABLED !== 'true') throw new Failure('model');
   try { models = modelList(env.MODELS); } catch { throw new Failure('model'); }
   const body = {
     models, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify({ whisper: text }) }],
@@ -86,7 +91,10 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   const worstCaseUsd = reservationCost(models, estimatePromptTokens(body));
   const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', request.headers.get('User-Agent') ?? '']));
   const reserved = await ledger(env, 'reserve', { visitorKey, worstCaseUsd, now: now() });
-  if (reserved.ok === false && ['limit-visitor', 'limit-global', 'budget'].includes(reserved.reason as string)) throw new Failure(reserved.reason as FailureReason);
+  if (reserved.ok === false && ['limit-visitor', 'limit-global', 'budget'].includes(reserved.reason as string)) {
+    const reason = reserved.reason as FailureReason;
+    throw new Failure(reason, reason === 'budget' ? 503 : 429, reason === 'limit-visitor' ? 3600 : 60);
+  }
   if (reserved.ok !== true || typeof reserved.reservationId !== 'string') throw new Failure('ledger');
   const reservationId = reserved.reservationId;
 
@@ -120,6 +128,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
     const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
     await finish(env, 'cachePut', { hash: key, payload: signed });
+    await edge.put(signed);
     return signed;
   } catch (error) {
     if (!settled) {
@@ -142,7 +151,8 @@ export function createWorker(deps: Dependencies = {}) {
       const headers = {
         'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type', Vary: 'Origin', 'Cache-Control': 'no-store',
+        'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400',
+        'Access-Control-Expose-Headers': 'Retry-After', Vary: 'Origin', 'Cache-Control': 'no-store',
       };
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
       try {
@@ -150,9 +160,16 @@ export function createWorker(deps: Dependencies = {}) {
         if (request.method === 'OPTIONS' && ['/interpret', '/pubkey', '/health'].includes(path)) return new Response(null, { status: 204, headers });
         if (request.method === 'GET' && path === '/health') return json({ ok: true });
         if (request.method === 'GET' && path === '/pubkey') return json(publicKey(env.SIGNING_KEY_JWK));
-        if (request.method === 'POST' && path === '/interpret') return json(await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now));
-        return json({ reason: 'invalid' }, 503);
-      } catch (error) { return json({ reason: error instanceof Failure ? error.reason : 'invalid' }, 503); }
+        if (request.method === 'POST' && path === '/interpret') {
+          const cache = deps.cache ?? (typeof caches === 'undefined' ? undefined : caches.default);
+          return json(await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, cache));
+        }
+        return json({ reason: 'invalid' }, 404);
+      } catch (error) {
+        const response = json({ reason: error instanceof Failure ? error.reason : 'invalid' }, error instanceof Failure ? error.status : 503);
+        if (error instanceof Failure && error.retryAfter) response.headers.set('Retry-After', String(error.retryAfter));
+        return response;
+      }
     },
   };
 }
