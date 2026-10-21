@@ -35,6 +35,8 @@ interface Layer {
 const MAX_LAYER_PIXELS = 12e6;
 const GRAIN_ALPHA = 0.06;
 const WALK_FRAME_MS = 170;
+const RECENT_SPEECH_MS = 2000;
+const MAX_LAYERS = 3;
 /** Positions further apart than this between snapshots are a jump, not a walk. */
 const TELEPORT = 3;
 
@@ -49,6 +51,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   const layers: Layer[] = [];
   const idle = new IdleQueue();
   let preparingSprites = false;
+  let preparingZoom = false;
+  let requestedZoom = CLOSE_ZOOM;
   let resizePending = false;
   const sprites = new SpriteCache();
   const threads = new ThreadPainter();
@@ -74,6 +78,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   let prevRef: WorldSnapshot | null = null;
   let curRef: WorldSnapshot | null = null;
   const phases = new Map<VillagerId, number>();
+  const recentlySpoke = new Map<VillagerId, number>();
   const ringDash = [0, 0];
 
   function ensureCapacity(n: number): void {
@@ -102,6 +107,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     }
     idle.clear();
     preparingSprites = false;
+    preparingZoom = false;
+    requestedZoom = CLOSE_ZOOM;
     sprites.retain([CLOSE_ZOOM, far], dpr);
     for (const zoom of far === CLOSE_ZOOM ? [CLOSE_ZOOM] : [CLOSE_ZOOM, far]) {
       if (!layers.some((l) => l.zoom === zoom)) buildLayer(zoom);
@@ -114,7 +121,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (current) requestSprites(current);
   }
 
-  function buildLayer(zoom: number): Layer {
+  function buildLayer(zoom: number, publish = true): Layer {
     const cssW = (map.width + LAYER_MARGIN * 2) * zoom;
     const cssH = (map.height + LAYER_MARGIN * 2) * zoom;
     let scale = dpr;
@@ -126,21 +133,58 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const standing = buildTrees(map, zoom, dpr).concat(buildRoofs(buildings, zoom, dpr));
     standing.sort((a, b) => a.sortY - b.sortY);
     const layer: Layer = { zoom, dpr, scale, canvas: lc, standing };
-    layers.push(layer);
+    if (publish) layers.push(layer);
     return layer;
+  }
+
+  /** Keep drawing the nearest complete layer while the exact requested zoom is prepared. */
+  function requestLayer(zoom: number): void {
+    requestedZoom = zoom;
+    if (preparingZoom || layers.some((l) => l.zoom === zoom)) return;
+    preparingZoom = true;
+    idle.add(prepareRequestedLayer());
+  }
+
+  function* prepareRequestedLayer(): Generator<void> {
+    while (!layers.some((l) => l.zoom === requestedZoom)) {
+      const zoom = requestedZoom;
+      // The iterator runs only from IdleQueue, never synchronously from render().
+      // Keep the layer private until its complete sprite wardrobe is ready too.
+      const layer = buildLayer(zoom, false);
+      yield;
+      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1] as const) {
+        if (zoom !== requestedZoom) break;
+        sprites.stranger(facing, frame, zoom, dpr);
+        yield;
+      }
+      while (zoom === requestedZoom && current && !spritesReadyAt(current, zoom)) {
+        const snapshot = current;
+        for (const v of snapshot.villagers) {
+          if (zoom !== requestedZoom) break;
+          yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
+        }
+      }
+      if (zoom === requestedZoom) {
+        layers.push(layer);
+        // Retain close plus the two most recently prepared overview/intermediate zooms.
+        if (layers.length > MAX_LAYERS) layers.splice(layers.findIndex((l) => l.zoom !== CLOSE_ZOOM), 1);
+      }
+      sprites.retain(layers.map((l) => l.zoom), dpr);
+    }
+    preparingZoom = false;
   }
 
   /** How much the chosen layer is stretched this frame: 1 unless the zoom is still moving. */
   let stretch = 1;
 
-  /** Read-only cache lookup. Intermediate zooms stretch the nearest supported layer. */
+  /** Read-only cache lookup. A missing zoom stretches the nearest prepared layer. */
   function layerFor(zoom: number): Layer {
     let nearest = layers[0] as Layer;
     let nearestGap = Infinity;
     stretch = 1;
     for (const l of layers) {
       if (l.dpr !== dpr) continue;
-      if (Math.abs(l.zoom - zoom) < 1e-3) return l;
+      if (l.zoom === zoom) return l;
       const gap = Math.abs(Math.log(l.zoom / zoom));
       if (gap < nearestGap) {
         nearestGap = gap;
@@ -151,16 +195,20 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     return nearest;
   }
 
-  function spritesReady(cur: WorldSnapshot): boolean {
-    for (const layer of layers) for (const v of cur.villagers) {
-      if (!sprites.ready(v.look, v.tier === 'core', layer.zoom, dpr)) return false;
+  function spritesReadyAt(cur: WorldSnapshot, zoom: number): boolean {
+    for (const v of cur.villagers) {
+      if (!sprites.ready(v.look, v.tier === 'core', zoom, dpr)) return false;
     }
     return true;
   }
 
+  function spritesReady(cur: WorldSnapshot): boolean {
+    return layers.every((layer) => spritesReadyAt(cur, layer.zoom));
+  }
+
   function* prepareSprites(): Generator<void> {
     // The contract supplies Looks only with the first snapshot. Defer their composition,
-    // then retain the complete wardrobe at both zooms for every subsequent frame.
+    // then retain the complete wardrobe at each published zoom for subsequent frames.
     while (current && !spritesReady(current)) {
       const snapshot = current;
       for (const layer of layers) for (const v of snapshot.villagers) {
@@ -322,7 +370,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (roofOverlaps(s, playerX, playerY, zoom)) return 0.35;
     for (let i = 0; i < count; i++) {
       const v = cur.villagers[i] as WorldSnapshot['villagers'][number];
-      if (v.id !== selected && !(v.bubble?.text && v.bubble.untilTick > cur.tick)) continue;
+      if (v.id !== selected && !recentlySpoke.has(v.id)) continue;
       if (roofOverlaps(s, fx[i] as number, fy[i] as number, zoom, v.tier === 'core' ? CORE_SCALE : 1)) return 0.35;
     }
     return 1;
@@ -393,6 +441,13 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
 
   function render(previous: WorldSnapshot | null, cur: WorldSnapshot, camera: Camera, options: RenderOptions): void {
     current = cur;
+    const now = performance.now();
+    for (const v of cur.villagers) {
+      if (v.bubble?.text && v.bubble.untilTick > cur.tick) recentlySpoke.set(v.id, now);
+    }
+    // DOM bubbles can outlive snapshot speech. Remember the last sighting by id,
+    // even while cache preparation delays drawing, and expire using wall time.
+    for (const [id, lastSeen] of recentlySpoke) if (now - lastSeen >= RECENT_SPEECH_MS) recentlySpoke.delete(id);
     if (!sized) {
       // Preserve the no-explicit-resize fallback without preparing layers inside render().
       if (!resizePending) {
@@ -407,11 +462,12 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       }
       return;
     }
-    // Keep the last complete frame while a newly introduced Look is prepared in idle time.
-    if (!requestSprites(cur)) return;
-    const now = performance.now();
     computeView(map, camera, view);
     const zoom = view.zoom;
+    // Keep the last complete frame while a newly introduced Look is prepared in idle time.
+    const ready = requestSprites(cur);
+    requestLayer(zoom);
+    if (!ready) return;
     const layer = layerFor(zoom);
     interpolate(previous, cur, options.alpha);
     lastCurrent = cur;

@@ -3,6 +3,7 @@ import type { Camera, Look, RenderOptions, VillageMap, VillagerView, WorldSnapsh
 import { CLOSE_ZOOM, createRenderer, fitZoom } from './index.js';
 import * as roofPainter from './roofs.js';
 import { SpriteCache } from './sprites.js';
+import * as tiles from './tiles.js';
 
 interface Blit { image: unknown; alpha: number; args: number[] }
 
@@ -119,6 +120,53 @@ describe('villager hit testing', () => {
 });
 
 describe('local roof transparency', () => {
+  it('keeps a vanished snapshot speaker faded for two seconds after its last sighting', () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(100);
+    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
+    const speaking = snapshot([{ ...villager('mira'), bubble: { text: 'Hello', untilTick: 11 } }]);
+    const { renderer, canvas } = setup(speaking);
+    const roof = roofs.mock.results[0]?.value[0];
+    expect(roof).toBeDefined();
+    const quiet = snapshot([villager('mira')]);
+    const opacityAt = (now: number, cur: WorldSnapshot) => {
+      clock.mockReturnValue(now);
+      canvas.blits.length = 0;
+      renderer.render(null, cur, camera(), options);
+      return canvas.blits.find((b) => b.image === roof?.img)?.alpha;
+    };
+    // Refresh the last sighting even if the simulation has not emitted a new snapshot.
+    expect(opacityAt(500, speaking)).toBe(0.35);
+    expect(opacityAt(501, quiet)).toBe(0.35);
+    expect(opacityAt(2100, quiet)).toBe(0.35); // UI's 1.6 second tail.
+    expect(opacityAt(2499, quiet)).toBe(0.35);
+    expect(opacityAt(2500, quiet)).toBe(1);
+  });
+
+  it('tracks recent speakers by id across reordering and refreshes their grace period', () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
+    const speaking = snapshot([{ ...villager('mira', 25, 20), bubble: { text: 'Hello', untilTick: 11 } }, villager('tom', 25, 20)]);
+    const { renderer, canvas } = setup(speaking);
+    const roof = roofs.mock.results[0]?.value[0];
+    const quiet = snapshot([villager('tom', 25, 20), villager('mira')]);
+    clock.mockReturnValue(1600);
+    canvas.blits.length = 0;
+    renderer.render(null, quiet, camera(), options);
+    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(0.35);
+    quiet.villagers[1]!.bubble = { text: 'Again', untilTick: 11 };
+    clock.mockReturnValue(1700);
+    renderer.render(null, quiet, camera(), options);
+    delete quiet.villagers[1]!.bubble;
+    clock.mockReturnValue(3600);
+    canvas.blits.length = 0;
+    renderer.render(null, quiet, camera(), options);
+    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(0.35);
+    clock.mockReturnValue(3700);
+    canvas.blits.length = 0;
+    renderer.render(null, quiet, camera(), options);
+    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(1);
+  });
+
   it.each(['stranger', 'selected', 'speaking'] as const)('fades a roof overlapping the %s and restores opacity for later drawing', (kind) => {
     const roofs = vi.spyOn(roofPainter, 'buildRoofs');
     const v = villager('mira');
@@ -201,8 +249,98 @@ describe('prepared zoom and sprite caches', () => {
     expect(cached.mock.results.every((r) => r.value !== undefined)).toBe(true);
     expect(cachedStranger).toHaveBeenCalledTimes(144);
     expect(cachedStranger.mock.results.every((r) => r.value !== undefined)).toBe(true);
+    // The unprepared intermediate zoom queued work, superseded by the final close frame.
+    expect(callbacks).toHaveLength(1);
+    drainIdle();
     expect(callbacks).toHaveLength(0);
     expect(canvas.blits.length).toBeGreaterThan(0);
+  });
+
+  it('renders an unprepared inset far zoom within 4 ms, then switches to its exact layer and sprites', () => {
+    const cur = snapshot(Array.from({ length: 24 }, (_, i) => villager(`villager-${i}`, 13 + i % 6, 11 + Math.floor(i / 6))));
+    const { renderer, canvas, map } = setup(cur);
+    const paint = vi.spyOn(tiles, 'paintGround');
+    const cached = vi.spyOn(SpriteCache.prototype, 'cachedVillager');
+    const stranger = vi.spyOn(SpriteCache.prototype, 'cachedStranger');
+    // The UI derives its far zoom from space left over after its controls.
+    const zoom = fitZoom(map, 360 - 32, 640 - 144);
+    const cam = camera(zoom);
+    const prepared = canvases.length;
+    canvas.blits.length = 0;
+    const start = performance.now();
+    renderer.render(null, cur, cam, options);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(4);
+    expect(canvases).toHaveLength(prepared);
+    expect(paint).not.toHaveBeenCalled();
+    const fallback = canvas.blits[0]?.image;
+    expect(fallback).toBeDefined();
+    expect(callbacks).toHaveLength(1);
+    renderer.render(null, cur, cam, options);
+    expect(callbacks).toHaveLength(1); // Same zoom does not enqueue duplicate work.
+    callbacks.shift()?.({ didTimeout: true, timeRemaining: () => 0 });
+    canvas.blits.length = 0;
+    renderer.render(null, cur, cam, options);
+    expect(canvas.blits[0]?.image).toBe(fallback); // Private layer is not published without sprites.
+    drainIdle();
+    expect(paint).toHaveBeenCalledTimes(1);
+    expect(paint.mock.calls[0]?.[2]).toBe(zoom);
+    const complete = canvases.length;
+    canvas.blits.length = 0;
+    cached.mockClear();
+    stranger.mockClear();
+    renderer.render(null, cur, cam, options);
+    expect(canvases).toHaveLength(complete);
+    const exact = canvas.blits[0]?.image as HTMLCanvasElement;
+    expect(exact).not.toBe(fallback);
+    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * zoom));
+    expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
+    expect(cached).toHaveBeenCalledTimes(24);
+    expect(cached.mock.calls.every((args) => args[5] === zoom)).toBe(true);
+    expect(cached.mock.results.every((r) => r.value !== undefined)).toBe(true);
+    expect(stranger.mock.calls[0]?.[2]).toBe(zoom);
+    expect(stranger.mock.results[0]?.value).toBeDefined();
+    expect(callbacks).toHaveLength(0);
+  });
+
+  it('abandons a superseded zoom and discards pending preparation on resize', () => {
+    const cur = snapshot([villager('mira')]);
+    const { renderer, canvas, map } = setup(cur);
+    const paint = vi.spyOn(tiles, 'paintGround');
+    renderer.render(null, cur, camera(6.1), options);
+    renderer.render(null, cur, camera(6.2), options);
+    drainIdle();
+    expect(paint.mock.calls.map((args) => args[2])).toEqual([6.2]);
+    renderer.render(null, cur, camera(6.3), options);
+    // Begin the private ground layer, leaving its sprite preparation pending.
+    callbacks.shift()?.({ didTimeout: true, timeRemaining: () => 0 });
+    renderer.resize(360, 640, 2);
+    drainIdle();
+    const zoom = fitZoom(map, 328, 496);
+    renderer.render(null, cur, camera(zoom), options);
+    drainIdle();
+    canvas.blits.length = 0;
+    renderer.render(null, cur, camera(zoom), options);
+    const exact = canvas.blits[0]?.image as HTMLCanvasElement;
+    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * zoom * 2));
+    expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
+  });
+
+  it('bounds the cache while retaining close and the two most recent exact zooms', () => {
+    const cur = snapshot();
+    const { renderer } = setup(cur);
+    const paint = vi.spyOn(tiles, 'paintGround');
+    for (const zoom of [6.1, 6.2, 6.3, 6.4]) {
+      renderer.render(null, cur, camera(zoom), options);
+      drainIdle();
+    }
+    expect(paint).toHaveBeenCalledTimes(4);
+    for (const zoom of [CLOSE_ZOOM, 6.3, 6.4]) renderer.render(null, cur, camera(zoom), options);
+    expect(callbacks).toHaveLength(0);
+    renderer.render(null, cur, camera(6.1), options);
+    expect(callbacks).toHaveLength(1);
+    drainIdle();
+    expect(paint).toHaveBeenCalledTimes(5);
   });
 
   it('rebuilds both caches outside rendering after viewport and DPR changes, including interrupted preparation', () => {

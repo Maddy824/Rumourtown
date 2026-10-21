@@ -340,14 +340,14 @@ function lookKey(look: Look): string {
   return `${look.body}|${look.skin}|${look.hair.style}|${look.hair.color}|${look.hat}|${look.top}|${look.bottom}|${look.apron ?? ''}|${look.prop}`;
 }
 
-/** Sprites for the two supported zooms. Composition is confined to preparation jobs. */
+/** Sprites for prepared zooms. Composition is confined to preparation jobs. */
 export class SpriteCache {
   private buckets = new Map<string, Map<string, SpriteImage>>();
   private keys = new WeakMap<Look, string>();
   private prepared = new Set<string>();
 
   private bucketId(zoom: number, dpr: number): string {
-    return `${zoom.toFixed(3)}@${dpr}`;
+    return `${zoom}@${dpr}`;
   }
 
   private appearance(look: Look, core: boolean): string {
@@ -363,7 +363,7 @@ export class SpriteCache {
     return `${this.appearance(look, core)}|${facing}|${frame}|${facing === 'n' ? 0 : moodBucket(mood)}`;
   }
 
-  /** A resize keeps only the two zoom/DPR buckets which can still be used. */
+  /** Discard zoom/DPR buckets which can no longer be used. */
   retain(zooms: readonly number[], dpr: number): void {
     const ids = zooms.map((zoom) => this.bucketId(zoom, dpr));
     for (const id of this.buckets.keys()) if (!ids.includes(id)) this.buckets.delete(id);
