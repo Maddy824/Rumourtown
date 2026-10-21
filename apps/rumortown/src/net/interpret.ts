@@ -11,7 +11,7 @@ export interface InterpretOptions {
 }
 const workerReasons = ['alerts', 'turnstile', 'limit-visitor', 'limit-global', 'budget', 'model', 'invalid', 'ledger'] as const;
 
-/** The deadline covers the response body and public-key verification as well as POST. */
+/** Only the POST and response parsing use the interpretation deadline. */
 export async function interpretWhisper(text: string, opts: InterpretOptions): Promise<InterpretResult> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -29,45 +29,46 @@ export async function interpretWhisper(text: string, opts: InterpretOptions): Pr
         controller.abort();
       }, opts.timeoutMs ?? 6_000);
     });
-    const request = async (): Promise<InterpretResult> => {
-      let response: Response;
+    const request = async (): Promise<{ response: Response; body: unknown } | InterpretResult> => {
       try {
-        response = await fetcher(`${apiBase(opts.baseUrl)}/interpret`, {
+        const response = await fetcher(`${apiBase(opts.baseUrl)}/interpret`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
           body: JSON.stringify({ text: trimmed, turnstileToken: opts.turnstileToken, castVersion: opts.castVersion }),
         });
+        try { return { response, body: await response.json() }; }
+        catch { return { ok: false, reason: controller.signal.aborted ? 'timeout' : 'invalid' }; }
       } catch { return { ok: false, reason: controller.signal.aborted ? 'timeout' : 'offline' }; }
-      let body: unknown;
-      try { body = await response.json(); }
-      catch { return { ok: false, reason: 'invalid' }; }
-      if (!response.ok) {
-        const reason = record(body) ? body.reason : undefined;
-        return { ok: false, reason: typeof reason === 'string' && (workerReasons as readonly string[]).includes(reason)
-          ? reason as typeof workerReasons[number] : 'unknown' };
-      }
-      if (!record(body)) return { ok: false, reason: 'invalid' };
-      if (Object.hasOwn(body, 'unsupported')) {
-        if (fields(body, ['unsupported', 'castVersion', 'issuedAt'], ['unsupported', 'castVersion', 'issuedAt']) &&
-            isMetadata(body) && body.castVersion === opts.castVersion && typeof body.unsupported === 'string' &&
-            (unsupportedReasons as readonly string[]).includes(body.unsupported)) {
-          return { ok: true, unsupported: body.unsupported as typeof unsupportedReasons[number] };
-        }
-        return { ok: false, reason: 'invalid' };
-      }
-      if (!isPayload(body) ||
-          body.castVersion !== opts.castVersion) return { ok: false, reason: 'invalid' };
-      if (typeof body.sig !== 'string') return { ok: false, reason: 'bad-signature' };
-      if (controller.signal.aborted) return { ok: false, reason: 'timeout' };
-      try {
-        const jwk = await fetchPublicKey(opts.baseUrl, (input, init) => fetcher(input, { ...init, signal: controller.signal }));
-        if (controller.signal.aborted) return { ok: false, reason: 'timeout' };
-        if (!await verifySignedClaim(body, body.sig, jwk)) return { ok: false, reason: 'bad-signature' };
-      } catch (error) {
-        return { ok: false, reason: error instanceof PublicKeyError ? error.reason : 'unknown' };
-      }
-      return { ok: true, claim: body.claim, castVersion: body.castVersion, issuedAt: body.issuedAt, sig: body.sig };
     };
-    return await Promise.race([request(), deadline]);
+    const received = await Promise.race([request(), deadline]);
+    clearTimeout(timer);
+    if (!('response' in received)) return received;
+    const { response, body } = received;
+    if (!response.ok) {
+      const reason = record(body) ? body.reason : undefined;
+      return { ok: false, reason: typeof reason === 'string' && (workerReasons as readonly string[]).includes(reason)
+        ? reason as typeof workerReasons[number] : 'unknown' };
+    }
+    if (!record(body)) return { ok: false, reason: 'invalid' };
+    if (Object.hasOwn(body, 'unsupported')) {
+      if (fields(body, ['unsupported', 'castVersion', 'issuedAt'], ['unsupported', 'castVersion', 'issuedAt']) &&
+          isMetadata(body) && body.castVersion === opts.castVersion && typeof body.unsupported === 'string' &&
+          (unsupportedReasons as readonly string[]).includes(body.unsupported)) {
+        return { ok: true, unsupported: body.unsupported as typeof unsupportedReasons[number] };
+      }
+      return { ok: false, reason: 'invalid' };
+    }
+    if (!isPayload(body) ||
+        body.castVersion !== opts.castVersion) return { ok: false, reason: 'invalid' };
+    if (typeof body.sig !== 'string') return { ok: false, reason: 'bad-signature' };
+    if (controller.signal.aborted) return { ok: false, reason: 'timeout' };
+    try {
+      const jwk = await fetchPublicKey(opts.baseUrl, fetcher);
+      if (controller.signal.aborted) return { ok: false, reason: 'timeout' };
+      if (!await verifySignedClaim(body, body.sig, jwk)) return { ok: false, reason: 'bad-signature' };
+    } catch (error) {
+      return { ok: false, reason: error instanceof PublicKeyError ? error.reason : 'unknown' };
+    }
+    return { ok: true, claim: body.claim, castVersion: body.castVersion, issuedAt: body.issuedAt, sig: body.sig };
   } catch { return { ok: false, reason: 'unknown' }; }
   finally { if (timer !== undefined) clearTimeout(timer); }
 }

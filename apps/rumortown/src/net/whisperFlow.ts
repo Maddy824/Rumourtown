@@ -1,4 +1,5 @@
 import { interpretWhisper, type InterpretOptions, type InterpretResult } from './interpret.js';
+import { fetchPublicKey } from './verify.js';
 import type { TurnstileClient } from './turnstile.js';
 
 type DoneResult = Extract<InterpretResult, { claim: unknown }>;
@@ -8,11 +9,12 @@ export type WhisperState =
   | { status: 'done'; result: DoneResult }
   | { status: 'resting'; result: RestingResult; line: string };
 export interface WhisperFlowDependencies extends Omit<InterpretOptions, 'turnstileToken'> {
-  turnstile: Pick<TurnstileClient, 'getToken'>;
+  turnstile: Pick<TurnstileClient, 'getToken'> & Partial<Pick<TurnstileClient, 'warm'>>;
   onStateChange?: (state: WhisperState) => void;
 }
 export interface WhisperFlow {
   readonly state: WhisperState;
+  warm(): void;
   /** While busy, repeated starts share the first operation without another call. */
   start(text: string): Promise<InterpretResult>;
 }
@@ -28,14 +30,17 @@ function lineFor(result: RestingResult): string {
   }
   switch (result.reason) {
     case 'limit-visitor': return "You've whispered a lot this hour. Try a ready-made rumor, or come back later.";
+    case 'timeout': return 'The village took too long. Try again.';
     case 'turnstile': return "Couldn't check you're human. Try again.";
-    default: return restingLine;
+    case 'budget': case 'limit-global': return restingLine;
+    default: return "Couldn't ask the village. Try again.";
   }
 }
 
 export function createWhisperFlow(deps: WhisperFlowDependencies): WhisperFlow {
   let state: WhisperState = { status: 'idle' };
   let active: Promise<InterpretResult> | undefined;
+  let attempted = false;
   function transition(next: WhisperState): void {
     state = next;
     try { deps.onStateChange?.(next); } catch { /* UI observers cannot interrupt verification. */ }
@@ -43,27 +48,34 @@ export function createWhisperFlow(deps: WhisperFlowDependencies): WhisperFlow {
   async function run(text: string): Promise<InterpretResult> {
     transition({ status: 'checking' });
     let result: InterpretResult;
-    const deadlineMs = Math.min(deps.timeoutMs ?? 5_800, 5_800);
-    const started = performance.now();
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), deadlineMs); });
+    const tokenDeadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { controller.abort(); reject('turnstile'); }, attempted ? 6_000 : 12_000);
+    });
+    attempted = true;
     try {
-      const turnstileToken = await Promise.race([deps.turnstile.getToken(), timeout]);
-      if (!turnstileToken.trim()) throw new Error('turnstile');
+      const turnstileToken = await Promise.race([deps.turnstile.getToken(controller.signal), tokenDeadline]);
+      if (!turnstileToken.trim()) throw 'turnstile';
+      clearTimeout(timer);
       transition({ status: 'asking' });
-      // interpretWhisper verifies before exposing a successful claim to any caller.
-      result = await Promise.race([interpretWhisper(text, {
+      // The request gets its full budget after the human check finishes.
+      result = await interpretWhisper(text, {
         baseUrl: deps.baseUrl, castVersion: deps.castVersion, fetch: deps.fetch,
-        timeoutMs: Math.max(0, deadlineMs - (performance.now() - started)), turnstileToken,
-      }), timeout]);
-    } catch (error) { result = { ok: false, reason: error instanceof Error && error.message === 'timeout' ? 'timeout' : 'turnstile' }; }
-    finally { if (timer !== undefined) clearTimeout(timer); }
+        timeoutMs: Math.min(deps.timeoutMs ?? 6_000, 6_000), turnstileToken,
+      });
+    } catch { result = { ok: false, reason: 'turnstile' }; }
+    finally { clearTimeout(timer); }
     if (result.ok && 'claim' in result) transition({ status: 'done', result });
     else transition({ status: 'resting', result, line: lineFor(result) });
     return result;
   }
   return {
     get state() { return state; },
+    warm() {
+      void deps.turnstile.warm?.().catch(() => undefined);
+      void fetchPublicKey(deps.baseUrl, deps.fetch).catch(() => undefined);
+    },
     start(text) {
       if (!active) {
         // Set active before notifying observers, including synchronous reentrant starts.

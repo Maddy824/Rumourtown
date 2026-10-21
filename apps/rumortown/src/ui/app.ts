@@ -335,6 +335,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     walkTo: (id) => walkToVillager(id),
     onOpenChange: (open) => {
       if (open) {
+        whisper.warm();
         hold('whisper');
         hideToast();
       } else release('whisper');

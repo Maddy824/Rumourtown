@@ -27,12 +27,13 @@ export interface WhisperContext {
   walkTo: (id: VillagerId) => void;
   onOpenChange: (open: boolean) => void;
   /** Injectable verified flow for UI checks. Production uses the configured API. */
-  flow?: WhisperFlow;
+  flow?: Pick<WhisperFlow, 'state' | 'start'> & Partial<Pick<WhisperFlow, 'warm'>>;
 }
 
 export interface WhisperSheet {
   readonly el: HTMLElement;
   open(opts?: { listener?: VillagerId; opener?: Element | null }): void;
+  warm(): void;
   close(): void;
   isOpen(): boolean;
   cover(): number;
@@ -53,8 +54,11 @@ export const inReach = (snap: WorldSnapshot): VillagerView[] => nearbyPeople(sna
 export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const content = h('div', { class: 'whisper-content' });
   const feedback = h('p', { class: 'whisper-feedback', role: 'status' });
+  const retryBtn = h('button', { class: 'button button-quiet', type: 'button', hidden: true, onclick: () => {
+    manual = false; confirmed = null; api.warm(); void submit();
+  } }, 'Try again');
   const sendBtn = h('button', { class: 'button button-primary', type: 'submit', disabled: true }, 'Whisper');
-  const form = h('form', { class: 'whisper-form', novalidate: true }, content, h('div', { class: 'whisper-actions' }, feedback, sendBtn));
+  const form = h('form', { class: 'whisper-form', novalidate: true }, content, h('div', { class: 'whisper-actions' }, feedback, retryBtn, sendBtn));
   const el = h('section', { class: 'sheet whisper', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-whisper-title', hidden: true },
     h('div', { class: 'sheet-paper' },
       h('header', { class: 'sheet-head' },
@@ -75,6 +79,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   let manual = false;
   let busy = false;
   let revision = 0;
+  let activeRevision = 0;
   let turnstile: TurnstileClient | undefined;
   let flow = ctx.flow;
   const baseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -82,9 +87,10 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const ai = Boolean(flow || (baseUrl && siteKey));
   let showConfirmation = (): void => {};
   let showManual = (): void => {};
-  const invalidate = (): void => { revision++; confirmed = null; manual = false; };
+  const invalidate = (): void => { revision++; confirmed = null; manual = false; retryBtn.hidden = true; };
 
   const update = (): void => {
+    retryBtn.disabled = busy;
     sendBtn.disabled = busy || !(listener && (claimId || (ownText.trim() && (ai && !manual || about && about !== listener))));
     sendBtn.textContent = confirmed ? 'Whisper it' : 'Whisper';
   };
@@ -102,17 +108,15 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     if (ownText.trim()) {
       if (ai && !manual && !confirmed) {
         const requestRevision = revision;
+        activeRevision = revision;
+        retryBtn.hidden = true;
         busy = true;
         update();
         form.setAttribute('aria-busy', 'true');
-        feedback.textContent = 'Asking the village…';
+        feedback.textContent = "Checking you're human…";
         try {
-          if (!flow) {
-            const container = h('div', { class: 'whisper-challenge' });
-            content.appendChild(container);
-            turnstile = loadTurnstile(siteKey, container);
-            flow = createWhisperFlow({ baseUrl, castVersion, turnstile });
-          }
+          api.warm();
+          if (!flow) throw new Error('unavailable');
           const result = await flow.start(ownText);
           if (!open || requestRevision !== revision) return;
           if (result.ok && 'claim' in result) {
@@ -127,21 +131,24 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
               showConfirmation();
             }
           } else {
-            feedback.textContent = flow.state.status === 'resting' ? flow.state.line : "The town's gossip is resting. Try a ready-made rumor.";
-            manual = true;
-            showManual();
+            feedback.textContent = flow.state.status === 'resting' ? flow.state.line : "Couldn't ask the village. Try again.";
+            const retryable = !result.ok && !['budget', 'limit-global', 'limit-visitor'].includes(result.reason);
+            retryBtn.hidden = !retryable;
+            manual = !retryable;
+            if (manual) showManual();
           }
         } catch {
           if (open && requestRevision === revision) {
-            feedback.textContent = "The town's gossip is resting. Try a ready-made rumor.";
-            manual = true;
-            showManual();
+            feedback.textContent = "Couldn't ask the village. Try again.";
+            retryBtn.hidden = false;
           }
         } finally {
-          busy = false;
-          form.removeAttribute('aria-busy');
-          update();
-          if (open && confirmed) sendBtn.focus();
+          if (activeRevision === requestRevision) {
+            busy = false;
+            form.removeAttribute('aria-busy');
+            update();
+            if (open && confirmed) sendBtn.focus();
+          }
         }
         return;
       }
@@ -290,6 +297,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       const picked = claimId ? sim.claims.get(claimId) : undefined;
       const helps = picked ? picked.valence > 0 : ['kindness', 'paid-debt', 'nursed'].includes(kind);
       preview.textContent = picked ? `Selected: ${picked.text}` : `${ownText.length}/${MAX_WRITTEN_TEXT} characters. ${helps ? 'Helps' : 'Hurts'} ${sim.cast.get(about)?.name ?? 'the subject'}’s reputation. Your words are only read to understand the rumor; the village repeats the rumor, not your words.`;
+      suggestions.open = !ownText.trim();
       feedback.textContent = about === listener && ownText.trim() ? 'Pick someone else to hear this story.' : '';
       update();
     };
@@ -319,11 +327,11 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         } }, 'Change it'));
       confirmation.hidden = false;
     };
-    const suggestions = h('details', { class: 'whisper-suggestions', open: true }, h('summary', null, 'Choose a village story'), what);
-    content.replaceChildren(people, who, suggestions,
+    const suggestions = h('details', { class: 'whisper-suggestions', open: true }, h('summary', null, 'Or choose a village story'), what);
+    content.replaceChildren(who,
       h('label', { class: 'own-claim', for: 'rt-own-story' }, h('span', null, 'Write your whisper'), typed),
       h('p', { class: 'sheet-note' }, ai ? 'Write it in your own words. The village will ask you to confirm the rumor.' : 'Write it in your own words. Choose how the villagers should treat it.'),
-      manualFields, confirmation, preview);
+      manualFields, confirmation, preview, suggestions);
     describe();
     update();
   };
@@ -331,6 +339,12 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const api: WhisperSheet = {
     el,
     open(opts = {}) {
+      turnstile?.destroy();
+      turnstile = undefined;
+      if (!ctx.flow) flow = undefined;
+      activeRevision = -1;
+      busy = false;
+      form.removeAttribute('aria-busy');
       build(opts.listener);
       if (!open) {
         open = true;
@@ -338,17 +352,35 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         ctx.layers.open({ id: 'whisper', el, modal: true, close: () => api.close() }, opts.opener);
         ctx.onOpenChange(true);
       }
-      // Start with writing; with nobody in reach, offer the first walk-to button.
-      const target = ['.whisper-what input', '.walk-to', '.close']
-        .map((sel) => el.querySelector<HTMLElement>(sel))
-        .find((x): x is HTMLElement => x !== null);
-      target?.focus({ preventScroll: true });
-      el.querySelector('.claim input:checked')?.closest('.claim')?.scrollIntoView({ block: 'nearest' });
+      api.warm();
+      // Keep the phone keyboard closed; the listener remains keyboard reachable.
+      const target = el.querySelector<HTMLElement>(inReach(ctx.snapshot()).length
+        ? ctx.isPhone() ? '.whisper-who input' : '.own-claim textarea'
+        : '.walk-to');
+      (target ?? el.querySelector<HTMLElement>('.close'))?.focus({ preventScroll: true });
+    },
+    warm() {
+      if (!ai || !open) return;
+      if (!flow) {
+        const container = h('div', { class: 'whisper-challenge' });
+        content.appendChild(container);
+        turnstile = loadTurnstile(siteKey, container);
+        const clientFlow = createWhisperFlow({ baseUrl, castVersion, turnstile, onStateChange: state => {
+          if (!open || !busy || activeRevision !== revision || flow !== clientFlow) return;
+          if (state.status === 'checking') feedback.textContent = "Checking you're human…";
+          if (state.status === 'asking') feedback.textContent = 'Asking the village…';
+        } });
+        flow = clientFlow;
+      }
+      flow.warm?.();
     },
     close() {
       if (!open) return;
       open = false;
       invalidate();
+      activeRevision = -1;
+      busy = false;
+      form.removeAttribute('aria-busy');
       turnstile?.destroy();
       turnstile = undefined;
       if (!ctx.flow) flow = undefined;
