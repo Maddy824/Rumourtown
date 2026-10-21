@@ -1,6 +1,6 @@
 # Task 21: Watch a rumor grow
 
-STATUS: IN PROGRESS — implementation, independent review and final verification complete; deployment underway.
+STATUS: DONE
 
 ## Changes
 
@@ -35,3 +35,15 @@ Fresh 19:00 and 00:00 arrivals start at ticks 780 and 1080 with the correspondin
 Final root checks passed: typecheck, **777 tests in 65 files**, production build, compressed asset gate (**346,236 bytes**, below 400,000), and `git diff --check`. The committed suite excludes the 12 unrelated untracked SEO tests: 765 tests in 64 files. Existing Vite advisories about native config loading and the minified chunk size remain; the required gzip gate passes.
 
 Unrelated `reports/19b-report.md`, `src/seo.test.ts`, and generated build-info changes are preserved outside task 21's commits. The local suite includes 12 tests from that pre-existing untracked SEO file.
+
+
+## Production deployment
+
+- Code commit: `b147aaf6f5da1cd12178803ef503aa8067760c89`, pushed to `build/village` with the prescribed owner attribution.
+- Both Node 22 and Node 25 jobs passed in [CI run 39636044440](https://github.com/Maddy824/Rumourtown/actions/runs/39636044440).
+- Rebuilt with the production API URL and public Turnstile site key from `CONTINUE.md`; production assets total **346,217 gzip bytes**. Verified the compiled bundle's API URL, Next beat/local-clock copy and canonical/head metadata.
+- Deployed the assets-only `rumortown` Worker to `rumourtown.dev` and `www.rumourtown.dev` on 2026-10-21. Cloudflare version: `c540792e-8ba3-475d-af0c-b743a26b9a04`.
+- Live `/`, `/about` and `/sitemap.xml` return HTTP 200 with a browser user agent. Python's default user agent received 403; Chrome and curl with a browser user agent both passed. API `/health` returns `{"ok":true}`. The API Worker was unchanged and not redeployed.
+- Public-site Chrome checks passed at 1280 × 800 and 360 × 800: exact new asset `/assets/main-DRCYzOob.js`, automatic Follow, visible dialogue, the actual Next beat button stops at 07:18 and remains paused, no horizontal overflow, no page errors, and no development handle. No interpretation requests were sent. Evidence: `21-live-results.json`, `21-live-1280.png`, `21-live-360.png`, `21-live.mjs`.
+
+Task 21 and the requested production deployment are complete. The remaining queue item is task 23's separate whole-branch review, followed by owner launch/account steps.

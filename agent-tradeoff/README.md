@@ -59,5 +59,5 @@ Update this table as tasks complete. Things only the owner can do are in `owner-
 | 18 | done; writing-first sheet, Turnstile pre-warm, scoped deadlines |
 | 19 | B done and live; A and C13 committed in 863c47e; offline eval: 140/140 correct answers, 44/44 out-of-scope abstentions, 17.5% need Worker; see [19a report](reports/19a-report.md) |
 | 20 | done; light and time of day, shadows, figures, interiors, wind, paper board |
-| 21 | implemented and verified; readable exchanges, Slow/Next beat, local-clock v2 replay, projected anchors; deployment underway, see reports/21-report.md |
+| 21 | done and live; readable exchanges, Slow/Next beat, local-clock v2 replay, projected anchors; Node 22/25 CI and live desktop/phone checks passed, see reports/21-report.md |
 | 22 | A–D complete; reviewed and fixed, replay matches Node 22/25 and Chrome, desktop/360 px night and keyboard checks verified; see reports/22-report.md |

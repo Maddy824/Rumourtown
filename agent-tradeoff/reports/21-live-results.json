@@ -1,0 +1,28 @@
+[
+  {
+    "width": 1280,
+    "status": 200,
+    "clock": "07:18",
+    "script": "/assets/main-DRCYzOob.js",
+    "dialogue": "Watching Mira tell Rosa\nSkip\nMira\n\nGood. I wanted a word with someone I trust.\n\nNext",
+    "paused": "0",
+    "tracing": "true",
+    "overflow": false,
+    "devHandle": "undefined",
+    "errors": [],
+    "interpretRequests": 0
+  },
+  {
+    "width": 360,
+    "status": 200,
+    "clock": "07:18",
+    "script": "/assets/main-DRCYzOob.js",
+    "dialogue": "Watching Mira tell Rosa\nSkip\nMira\n\nGood. I wanted a word with someone I trust.\n\nNext",
+    "paused": "0",
+    "tracing": "true",
+    "overflow": false,
+    "devHandle": "undefined",
+    "errors": [],
+    "interpretRequests": 0
+  }
+]

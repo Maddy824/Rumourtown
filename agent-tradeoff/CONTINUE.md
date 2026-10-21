@@ -21,9 +21,9 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 |---|---|---|---|
 | 22 | `22-night.md` | completed and verified; see `reports/22-report.md` | Full-day replay matches Node 22/25 and Chrome; desktop/phone and frame budget verified. Check `22:` commits and skip once clean. |
 | 19A | `19-local-first-interpretation.md` section A | committed in `863c47e` | Preserve the implemented local interpreter and recorded offline eval; do not rebuild it. |
-| 21 | `21-watch-a-rumor-grow.md` (sections A–E) | implemented and verified | See `reports/21-report.md`; full-day local arrival, readable exchanges and projected anchors are complete. Deployment underway. |
-| — | Redeploy and live check | after 21 | Section 5, then section 6. |
-| 23 | Final whole-branch review | after the redeploy | Run `03-final-review.md`'s command against the whole branch again, then `04-final-fixes.md`. |
+| 21 | `21-watch-a-rumor-grow.md` (sections A–E) | complete and live, code `b147aaf` | See `reports/21-report.md`; full-day local arrival, readable exchanges and projected anchors passed Node 22/25 CI and live desktop/phone checks. |
+| — | Redeploy and live check | complete 2026-10-21 | Cloudflare version `c540792e-8ba3-475d-af0c-b743a26b9a04`; game, About, sitemap and API health verified. |
+| 23 | Final whole-branch review | next | Run `03-final-review.md`'s command against the whole branch again, then `04-final-fixes.md`. |
 | — | Owner steps | any time | `owner-checklist.md` (CI token, key cap, domain email, launch). |
 
 A task is "committed" when `git log --oneline -30` shows its number prefix and `git status --short` shows nothing of it left. A task is "BLOCKED on commit" when its report says so and its files are still in the working tree: verify and commit them yourself; that is the common case, because the sandbox often cannot write `.git`.
