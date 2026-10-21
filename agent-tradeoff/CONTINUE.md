@@ -18,7 +18,8 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 ## 1b. Latest state (2026-10-22, controller)
 - Live at 706fda2 plus deploys of 912b238: the conversation orchestrator (`apps/rumortown/src/agentic/orchestrator.ts`) answers moves, visits, provenance and news from simulation state with no model call; open conversation goes to `/play` with grounded `facts` and is voiced by `@cf/meta/llama-3.3-70b-instruct-fp8-fast`; `/rumor` also uses 70B; chat has its own allowance (`PLAY_PER_VISITOR_PER_HOUR=30`); the Talk sheet shows "<name> is thinking" immediately and warms Turnstile on open.
 - Human QA report: `reports/qa-2026-10-22.md`. Done from task 23: items 1, 2, 3, 4 (model, deterministic moves, grounding, separate allowance). Still open: items 5 (night guidance), 6 (first-screen copy), 7 (timeline noise, stale status lines, blank signs), 8 (phone talk sheet), 9 (shared-text moderation), plus: library-rumor beats read "X told Y a village rumor" and should name the rumor.
-- Research track: `24-slm-agent-study.md` (build list items 1–5).
+- Research track: `docs/research/slm-limits-program.md`, `docs/research/paper-plan.md`, `docs/research/product-impact.md`; harness brief `25-slm-harness.md`; verifier and runtime guard in `apps/rumortown/src/agentic/` (verifier.ts, guard.ts).
+- Pending deploy: `apps/rumortown/src/ui/play.ts` holds both the controller's guard wiring (guardReply before showing model replies) and task 23 item 8's phone typing changes; commit it with task 23, then deploy game and API.
 
 ## 2. The queue, in order
 
