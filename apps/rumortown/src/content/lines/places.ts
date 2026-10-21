@@ -14,4 +14,8 @@ export const PLACE_PHRASES: Readonly<Record<string, string>> = {
   bridge: 'the bridge',
   riverside: 'the riverside',
   orchard: 'the orchard',
+  pottery: 'the pottery', boathouse: 'the boat workshop', seedshop: 'the seed exchange',
+  'reading-room': 'the reading room', posthouse: 'the posthouse', teahouse: 'the teahouse',
+  woodland: 'the woodland loop', gardens: 'the community gardens',
+  'east-market': 'the Eastbank market', 'bridge-south': 'the commons bridge',
 };

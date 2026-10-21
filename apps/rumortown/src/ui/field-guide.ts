@@ -40,27 +40,54 @@ export function createFieldGuide(ctx: {
   }
   const player = svg('g', null, svg('circle', { r: 5, fill: '#f1b942', stroke: '#382f29', 'stroke-width': 2 }), svg('text', { y: -8, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#241e1a', 'paint-order': 'stroke', stroke: '#fff1ce', 'stroke-width': 2 }, 'You'));
   mapEl.append(player);
+  const nameToggle = h('input', { type: 'checkbox' });
+  nameToggle.addEventListener('change', () => { mapEl.dataset.names = String(nameToggle.checked); });
+  mapEl.dataset.names = 'false';
+  const districtNote = h('p', { class: 'district-note' }, 'Explore the whole town, or choose a neighbourhood for a closer look.');
+  const districtButtons = h('div', { class: 'district-tabs', role: 'group', 'aria-label': 'Neighbourhoods' });
+  const districts = [{ id: '', name: 'Whole town', description: 'Explore both riverbanks and meet the neighbours along the way.' }, ...(ctx.map.districts ?? [])];
+  for (const district of districts) {
+    districtButtons.append(h('button', { type: 'button', class: 'button button-quiet', 'aria-pressed': String(!district.id),
+      'data-district': district.id, onclick: () => selectDistrict(district.id) }, district.name));
+  }
+  function selectDistrict(id: string): void {
+    for (const b of districtButtons.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.district === id));
+    districtNote.textContent = districts.find(d => d.id === id)?.description ?? '';
+    const places = ctx.map.places.filter(p => !id || p.district === id);
+    let x = 0, y = 0, right = ctx.map.width, bottom = ctx.map.height;
+    if (id && places.length) {
+      x = Math.max(0, Math.min(...places.map(p => p.rect.x)) - 2);
+      y = Math.max(0, Math.min(...places.map(p => p.rect.y)) - 2);
+      right = Math.min(ctx.map.width, Math.max(...places.map(p => p.rect.x + p.rect.w)) + 2);
+      bottom = Math.min(ctx.map.height, Math.max(...places.map(p => p.rect.y + p.rect.h)) + 2);
+    }
+    mapEl.setAttribute('viewBox', `${x * 10} ${y * 10} ${(right - x) * 10} ${(bottom - y) * 10}`);
+    for (const button of travel.querySelectorAll('button')) button.hidden = !!id && button.dataset.district !== id;
+    for (const row of peopleList.querySelectorAll('li')) row.hidden = !!id && !row.dataset.districts?.split(' ').includes(id);
+    peopleSummary.textContent = id ? `Meet people from ${districts.find(d => d.id === id)?.name}` : `Meet all ${ctx.sim().cast.size} people`;
+  }
   const whereabouts = h('p', { class: 'guide-location' });
   const travel = h('div', { class: 'travel-grid' });
   for (const place of ctx.map.places.filter(p => p.kind !== 'home' && p.id !== 'well')) {
-    travel.append(h('button', { type: 'button', class: 'button button-quiet', onclick: () => { api.close(); ctx.walkTo(place.door); } }, place.name));
+    travel.append(h('button', { type: 'button', class: 'button button-quiet', 'data-district': place.district ?? '', onclick: () => { api.close(); ctx.walkTo(place.door); } }, place.name));
   }
   const peopleList = h('ul', { class: 'guide-people' });
   const peopleStatus = new Map<string, HTMLElement>();
   for (const d of ctx.sim().cast.values()) {
     const status = h('span'); peopleStatus.set(d.id, status);
-    peopleList.append(h('li', null,
+    peopleList.append(h('li', { 'data-districts': ctx.map.places.filter(p => p.id === d.home || p.id === d.workplace).map(p => p.district).join(' ') },
       h('button', { type: 'button', class: 'text-button', onclick: () => { api.close(); ctx.inspect(d.id); } }, `${d.name}, ${d.role}`), status));
   }
+  const peopleSummary = h('summary', null, `Meet all ${ctx.sim().cast.size} people`);
   const conversations = h('ul', { class: 'guide-conversations' });
   const explore = h('div', { class: 'guide-body' },
     h('p', { class: 'guide-intro' }, 'A village in motion'),
     h('p', null, 'Tap the map or choose a destination to walk there. Tap a person to meet them. Gold is you; red marks someone speaking.'),
-    mapEl, whereabouts,
+    districtButtons, districtNote, h('label', { class: 'atlas-name-toggle' }, nameToggle, 'Show everyone’s name'), mapEl, whereabouts,
     h('h3', null, 'Where would you like to go?'), travel,
-    h('details', { class: 'guide-people-list' }, h('summary', null, `Meet all ${ctx.sim().cast.size} people`), peopleList),
+    h('details', { class: 'guide-people-list' }, peopleSummary, peopleList),
     h('h3', null, 'Conversations around the village'), conversations,
-    h('p', { class: 'empty' }, 'Click the ground to walk. Hold W, A, S, D or an arrow key to keep moving. Enter meets someone nearby; Space pauses time. Water and walls block walking. The bridge is the only river crossing.'));
+    h('p', { class: 'empty' }, 'Click the ground to walk. Hold W, A, S, D or an arrow key to keep moving. Enter meets someone nearby; Space pauses time. Water and walls block walking. Cross the river at the old bridge or the commons bridge.'));
 
   const metrics = h('p', { class: 'guide-metrics' });
   const noteStatus = h('p', { class: 'guide-status', role: 'status', 'aria-live': 'polite' });
@@ -133,7 +160,7 @@ export function createFieldGuide(ctx: {
   function placeName(pos: Vec2): string {
     let best: VillageMap['places'][number] | undefined;
     for (const p of ctx.map.places) if (pos.x >= p.rect.x && pos.x < p.rect.x + p.rect.w && pos.y >= p.rect.y && pos.y < p.rect.y + p.rect.h && (!best || p.rect.w * p.rect.h < best.rect.w * best.rect.h)) best = p;
-    return best?.name ?? (pos.x >= 39 ? 'Riverside lane' : 'Village lanes');
+    return best?.name ?? (pos.y >= 33 ? 'Commons lanes' : pos.x >= 43 ? 'Eastbank lanes' : pos.x >= 39 ? 'Riverside lane' : 'Village lanes');
   }
   function setMode(next: Mode): void {
     mode = next;

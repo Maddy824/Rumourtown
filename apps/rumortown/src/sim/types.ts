@@ -54,6 +54,7 @@ export type PlaceKind =
 export type Need = 'hunger' | 'rest' | 'social' | 'duty';
 
 export interface Place {
+  district?: string;
   id: PlaceId;
   name: string;
   kind: PlaceKind;
@@ -67,6 +68,7 @@ export interface Place {
 }
 
 export interface VillageMap {
+  districts?: { id: string; name: string; description: string }[];
   width: number;
   height: number;
   /** Row-major, length width * height. */

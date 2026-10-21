@@ -5,7 +5,7 @@ import { readRegisteredClaim } from '../sim/registered-claim.js';
 import * as decisionParameters from '../sim/agents/params.js';
 import type { Intervention, Simulation, VillageMap } from '../sim/types.js';
 
-export const MODEL_VERSION = 'v2-spatial-motives-1';
+export const MODEL_VERSION = 'v3-neighbourhoods-1';
 export const GAME_TUNING: Tuning = { ...DEFAULT_TUNING, sourceMemoryHalfLifeTicks: 2 };
 export const SOURCES = [
   { title: 'Gossip and reputation in everyday life (2021)', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC8487731/', use: 'Relationships between sender, receiver and target shape information sharing. Field observations, not a calibration of this village.' },

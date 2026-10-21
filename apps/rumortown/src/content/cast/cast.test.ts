@@ -10,6 +10,7 @@ const FIXED_PLACES = [
   'square', 'well', 'bakery', 'mill', 'inn', 'chapel', 'school', 'shop', 'smithy', 'field-north',
   'field-south', 'bridge', 'riverside', 'orchard', 'home-mira', 'home-tom', 'home-ada', 'home-rosa',
   'home-jonah', 'home-ben', 'home-elin', 'home-pim', 'home-sol', 'home-ivo', 'home-nell', 'home-otto',
+  'home-suri', 'home-oren', 'home-leela', 'home-bram', 'home-vesa', 'home-dara', 'pottery', 'boathouse', 'seedshop', 'reading-room', 'posthouse', 'teahouse', 'woodland', 'gardens', 'east-market', 'bridge-south',
 ];
 const FIXED_CAST: [id: string, role: string, age: number, pronoun: 'she' | 'he' | 'they', tier: Dossier['tier']][] = [
   ['mira', 'baker', 44, 'she', 'core'],
@@ -36,6 +37,12 @@ const FIXED_CAST: [id: string, role: string, age: number, pronoun: 'she' | 'he' 
   ['rook', 'gravedigger', 59, 'he', 'background'],
   ['tess', 'barmaid', 24, 'she', 'background'],
   ['yan', 'tinker', 36, 'he', 'background'],
+  ['suri', 'potter', 32, 'she', 'regular'], ['oren', 'boatwright', 45, 'he', 'regular'],
+  ['leela', 'bookseller', 37, 'she', 'regular'], ['tavi', 'kiln apprentice', 20, 'they', 'regular'],
+  ['edda', 'river guide', 52, 'she', 'regular'], ['arun', 'courier', 26, 'he', 'regular'],
+  ['bram', 'community gardener', 63, 'he', 'regular'], ['nia', 'seed keeper', 31, 'she', 'regular'],
+  ['vesa', 'teahouse keeper', 40, 'they', 'regular'], ['cora', 'storyteller', 57, 'she', 'regular'],
+  ['dara', 'woodland ranger', 34, 'they', 'regular'], ['silas', 'surveyor', 48, 'he', 'regular'],
 ];
 const PRONOUNS = {
   she: { subject: 'she', object: 'her', possessive: 'her' },
@@ -57,6 +64,7 @@ const LODGINGS: Record<string, string> = {
   cass: 'home-elin',
   fen: 'home-sol',
   mab: 'home-ivo',
+  tavi: 'home-suri', edda: 'home-oren', arun: 'home-leela', nia: 'home-bram', cora: 'home-vesa', silas: 'home-dara',
 };
 const CLAIM_KINDS: ClaimKind[] = [
   'theft', 'cheating', 'romance', 'lying', 'broken-promise', 'insult', 'hoarding', 'shirking',
@@ -85,8 +93,8 @@ const coveringEntry = (d: Dossier, place: string, [from, to]: [number, number]) 
 const allSecrets = cast.flatMap((d) => d.secrets.map((s) => ({ owner: d, secret: s })));
 
 describe('roster', () => {
-  it('has the 24 fixed villagers in order with their roles, ages, pronouns and tiers', () => {
-    expect(cast).toHaveLength(24);
+  it('has the 36 fixed villagers in order with their roles, ages, pronouns and tiers', () => {
+    expect(cast).toHaveLength(36);
     expect(cast.map((d) => d.id)).toEqual(FIXED_CAST.map(([id]) => id));
     for (const [id, role, age, pronoun, tier] of FIXED_CAST) {
       const d = villager(id);
@@ -100,11 +108,11 @@ describe('roster', () => {
 
   it('has unique ids and the cast version', () => {
     expect(new Set(cast.map((d) => d.id)).size).toBe(cast.length);
-    expect(castVersion).toBe('v2');
+    expect(castVersion).toBe('v3');
   });
 
-  it('gives all 24 people distinct inner lives and bounded authored motives', () => {
-    expect(new Set(cast.map(d => d.character?.aspiration)).size).toBe(24);
+  it('gives all 36 people distinct inner lives and bounded authored motives', () => {
+    expect(new Set(cast.map(d => d.character?.aspiration)).size).toBe(36);
     for (const d of cast) {
       expect(d.character?.worry.length, d.id).toBeGreaterThan(20);
       expect(d.character?.habit.length, d.id).toBeGreaterThan(20);

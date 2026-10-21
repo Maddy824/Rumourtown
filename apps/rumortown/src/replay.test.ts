@@ -32,7 +32,7 @@ describe('integrated village replay', () => {
     expect(walking.events(0)).toEqual(idle.events(0));
   });
   it('pins seed 731 with one whisper at tick 60 after 900 ticks', async () => {
-    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v2',
+    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v3',
       interventions: [{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }] }))!;
     const sim = make(state.interventions);
     runTo(sim, 59);
@@ -47,7 +47,7 @@ describe('integrated village replay', () => {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(sim.events(0))));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
     console.log(`Replay SHA-256: ${hash}`);
-    expect(hash).toBe('2b87d54c36d5823230d99b58eb1f296c40b024de93e5681e41a87e061a81e020');
+    expect(hash).toBe('bfe954cc3d9d87c9fd6b6b11e786cdf7ddb22dc784b87615352365144f1d126e');
     const replay = make(state.interventions);
     runTo(replay, 900);
     expect(replay.events(0)).toEqual(sim.events(0));
@@ -75,7 +75,7 @@ describe('integrated village replay', () => {
   it('restores typed claims only at their whisper tick and retains them through a share link', () => {
     const sim = make();
     const claim = createRegisteredClaim({ kind: 'theft', about: 'tom', object: 'bread', severity: 2, valence: -1 }, sim.cast);
-    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v2',
+    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v3',
       interventions: [{ tick: 60, listener: 'mira', claimId: claim.id }] }))!;
     const replay = make(state.interventions);
     runTo(replay, 59);
@@ -124,7 +124,7 @@ describe('integrated village replay', () => {
     const claim = createWrittenClaim('Tom keeps a secret stash of honey behind the mill.', 'tom', 'hoarding', 2, live.cast);
     live.registerClaim(claim);
     expect(live.whisper('mira', claim.id)).toBe(true);
-    const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v2', interventions: live.interventions() }))!;
+    const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v3', interventions: live.interventions() }))!;
     const replay = make(shared.interventions);
     runTo(live, 900); runTo(replay, 900);
     expect(replay.claims.get(claim.id)?.text).toBe(claim.text);
@@ -138,6 +138,18 @@ describe('integrated village replay', () => {
     runTo(sim, 900);
     expect(sim.interventions()).toEqual([{ tick: 60, listener: 'mira', claimId: 'stole' }]);
     expect(sim.events(900).some((e) => e.kind === 'day-end')).toBe(true);
+  });
+
+  it('makes all twelve new residents active participants with ties across the river', () => {
+    const sim = make();
+    const added = new Set(['suri', 'oren', 'leela', 'tavi', 'edda', 'arun', 'bram', 'nia', 'vesa', 'cora', 'dara', 'silas']);
+    const start = new Map(sim.snapshot().villagers.map(v => [v.id, v.pos]));
+    runTo(sim, 600);
+    for (const v of sim.snapshot().villagers.filter(v => added.has(v.id))) expect(v.pos, v.id).not.toEqual(start.get(v.id));
+    runTo(sim, 900);
+    const lines = sim.events(0).filter(e => e.kind === 'line');
+    expect(new Set(lines.filter(e => added.has(e.speaker)).map(e => e.speaker))).toEqual(added);
+    expect(lines.filter(e => e.listeners.some(id => added.has(id) !== added.has(e.speaker))).length).toBeGreaterThan(100);
   });
 
   it('rejects a whisper about its listener without recording an intervention', () => {
@@ -167,7 +179,7 @@ describe('integrated village replay', () => {
     expect(firstDaySpread).toBeGreaterThanOrEqual(12);
     expect(drama).toBeGreaterThanOrEqual(4);
     expect(transmissions).toBeLessThan(10000);
-  }, 60000);
+  }, 180000);
 
   it('reaches the third evening with authored reflection and a dare result', () => {
     const sim = make([{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }]);

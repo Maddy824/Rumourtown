@@ -30,6 +30,9 @@ export const PLACE_IDS = [
   'home-ivo',
   'home-nell',
   'home-otto',
+  'home-suri', 'home-oren', 'home-leela', 'home-bram', 'home-vesa', 'home-dara',
+  'pottery', 'boathouse', 'seedshop', 'reading-room', 'posthouse', 'teahouse',
+  'woodland', 'gardens', 'east-market', 'bridge-south',
 ] as const;
 export type FixedPlaceId = (typeof PLACE_IDS)[number];
 
@@ -59,6 +62,7 @@ export const CAST_IDS = [
   'rook',
   'tess',
   'yan',
+  'suri', 'oren', 'leela', 'tavi', 'edda', 'arun', 'bram', 'nia', 'vesa', 'cora', 'dara', 'silas',
 ] as const;
 export type CastId = (typeof CAST_IDS)[number];
 

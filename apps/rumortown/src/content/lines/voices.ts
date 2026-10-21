@@ -27,6 +27,8 @@ export const VOICES: Readonly<Record<VillagerId, VoiceArchetype>> = {
   rook: 'weary',
   tess: 'sharp',
   yan: 'jolly',
+  suri: 'gentle', oren: 'blunt', leela: 'gentle', tavi: 'dreamy', edda: 'weary', arun: 'jolly',
+  bram: 'blunt', nia: 'sharp', vesa: 'jolly', cora: 'dreamy', dara: 'gentle', silas: 'sharp',
 };
 
 /** The archetype for a villager: from the map above, or guessed from traits for anyone not in it. */

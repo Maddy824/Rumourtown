@@ -1,12 +1,12 @@
 # RumorTown as an exploratory social model
 
-Model `v2-spatial-motives-1`, cast `v2`, 21 October 2026. This document follows the Overview, Design concepts and Details (ODD) structure. It describes executable assumptions, not a validated theory of human behaviour.
+Model `v3-neighbourhoods-1`, cast `v3`, 21 October 2026. This document follows the Overview, Design concepts and Details (ODD) structure. It describes executable assumptions, not a validated theory of human behaviour.
 
 ## Purpose and boundaries
 
 Use the village to explore how location, repeated contact, social relationships and information provenance interact. Useful questions include where a claim travels, whether a correction reaches the same people, and how outcomes change when an assumption is removed. Classroom demonstrations and hypothesis generation are appropriate uses. Predicting real individuals, reporting model outcomes as participant data, or claiming human causal effects is unsupported.
 
-There are 24 fictional adult agents, 26 places and a 48 by 32 tile world. Each person has an authored role, routine, relationships, six trait values, private events, aspirations, worries, habits and four social motive weights. Those values are fictional character design, not psychometric assessments. The player travels through the same world and can whisper a structured claim to a nearby person.
+There are 36 fictional adult agents, 42 places and a 64 by 44 tile world. Each person has an authored role, routine, relationships, six trait values, private events, aspirations, worries, habits and four social motive weights. Those values are fictional character design, not psychometric assessments. The player travels through the same world and can whisper a structured claim to a nearby person.
 
 ## Research reviewed and translation into rules
 
@@ -41,7 +41,9 @@ Randomness comes from one seeded stream in fixed agent order. Player movement is
 
 ## Spatial and character rules
 
-Water, walls, trees and the well are impassable. The three bridge tiles are the only river crossing. Route costs are 1 on paths, floors, doors and the bridge; 4 on grass; 3 on fields. These are route preferences, not time multipliers. Longer paved routes can win over short grass shortcuts. Grass stays accessible to reach field and orchard work spots. Routes include doorways rather than crossing building walls. Private events were checked again for sufficient travel time after the routing change.
+Four neighbourhoods organise the travel atlas: Old village, Eastbank, Woodland and South commons. These are geographic labels, not additional psychological variables. The twelve new residents retain the same four overlapping social communities as the original cast. Their authored close ties connect them to older residents, and their daily errands and evening visits connect the districts. Twenty-four new claims pair harmful allegations with specific, observable alternatives.
+
+Water, walls, trees and the well are impassable. Two three-tile bridges are the only river crossings. Route costs are 1 on paths, floors, doors and the bridge; 4 on grass; 3 on fields. These are route preferences, not time multipliers. Longer paved routes can win over short grass shortcuts. Grass stays accessible to reach field and orchard work spots. Routes include doorways rather than crossing building walls. Private events were checked again for sufficient travel time after the routing change.
 
 Character motives modify the utility of an already eligible telling:
 
@@ -74,7 +76,7 @@ Metrics are operational definitions:
 | Mean trust in stranger | Arithmetic mean of all agents' trust toward the player. |
 | Mean mood | Arithmetic mean of current model mood values. |
 
-Report the version, condition, inputs and all seeds when using results. Five seeds are a small exploratory sample, not a powered statistical study. Preserve the source revision with the downloaded data. Old cast-v1 links intentionally omit their whispers in cast v2 because changed routes and motives produce different social histories.
+Report the version, condition, inputs and all seeds when using results. Five seeds are a small exploratory sample, not a powered statistical study. Preserve the source revision with the downloaded data. Older cast-v1/v2 links explicitly start a fresh cast-v3 run without their whispers. Population, routes, routines and dialogue changed, so an old seed alone cannot recreate the old social history. Use the source revision that produced an old export to reproduce it.
 
 ## Verification and remaining validation work
 

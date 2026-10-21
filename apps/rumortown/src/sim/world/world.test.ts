@@ -38,13 +38,13 @@ function independentRouteCost(map: VillageMap, from: Vec2, to: Vec2): number | n
 
 describe('village map', () => {
   const world = createWorld(villageMap);
-  const homes = ['mira', 'tom', 'ada', 'rosa', 'jonah', 'ben', 'elin', 'pim', 'sol', 'ivo', 'nell', 'otto'];
-  const buildings = ['bakery', 'mill', 'inn', 'chapel', 'school', 'shop', 'smithy', ...homes.map((id) => `home-${id}`)];
-  const expectedIds = [...buildings, 'square', 'well', 'field-north', 'field-south', 'bridge', 'riverside', 'orchard'];
-  const busyPlaces = ['inn', 'square', 'chapel', 'well', 'field-north', 'field-south', 'riverside', 'bakery', 'school'];
+  const homes = ['mira', 'tom', 'ada', 'rosa', 'jonah', 'ben', 'elin', 'pim', 'sol', 'ivo', 'nell', 'otto', 'suri', 'oren', 'leela', 'bram', 'vesa', 'dara'];
+  const buildings = ['bakery', 'mill', 'inn', 'chapel', 'school', 'shop', 'smithy', 'pottery', 'boathouse', 'seedshop', 'reading-room', 'posthouse', 'teahouse', ...homes.map((id) => `home-${id}`)];
+  const expectedIds = [...buildings, 'square', 'well', 'field-north', 'field-south', 'bridge', 'riverside', 'orchard', 'woodland', 'gardens', 'east-market', 'bridge-south'];
+  const busyPlaces = ['inn', 'square', 'chapel', 'well', 'field-north', 'field-south', 'riverside', 'bakery', 'school', 'reading-room', 'teahouse', 'east-market'];
 
   it('has the exact dimensions and fixed place ids', () => {
-    expect([villageMap.width, villageMap.height, villageMap.tiles.length]).toEqual([48, 32, 1536]);
+    expect([villageMap.width, villageMap.height, villageMap.tiles.length]).toEqual([64, 44, 2816]);
     expect(villageMap.places.map((p) => p.id).sort()).toEqual(expectedIds.sort());
   });
 
@@ -105,7 +105,7 @@ describe('village map', () => {
     for (const spot of world.place('well').spots) expect(squareSpots).not.toContainEqual(spot);
   });
 
-  it('builds nineteen cut-away rooms with intact wall rings, one door, and an adjacent path entry', () => {
+  it('builds thirty-one cut-away rooms with intact wall rings, one door, and an adjacent path entry', () => {
     for (const id of buildings) {
       const place = world.place(id);
       const { x, y, w, h } = place.rect;
@@ -149,8 +149,8 @@ describe('village map', () => {
     }
   });
 
-  it('has exactly one river crossing and trees with reachable ground in the orchard', () => {
-    expect(villageMap.tiles.filter((tile) => tile === 'bridge')).toHaveLength(3);
+  it('has exactly two river crossings and trees with reachable ground in the orchard', () => {
+    expect(villageMap.tiles.filter((tile) => tile === 'bridge')).toHaveLength(6);
     const withoutBridge = createWorld({
       ...villageMap,
       tiles: villageMap.tiles.map((tile) => tile === 'bridge' ? 'water' : tile),
@@ -172,6 +172,16 @@ describe('village map', () => {
     for (const id of ['square', 'inn', 'chapel', 'well']) expect(world.place(id).satisfies).toContain('social');
     for (const id of ['bakery', 'mill', 'inn', 'chapel', 'school', 'shop', 'smithy', 'field-north', 'field-south', 'bridge', 'riverside', 'orchard']) {
       expect(world.place(id).satisfies).toContain('duty');
+    }
+  });
+
+  it('keeps both bridges functional, and offers a route if either crossing is closed', () => {
+    for (const y of [15, 36]) {
+      const tiles = villageMap.tiles.slice();
+      for (const x of [40, 41, 42]) tiles[y * villageMap.width + x] = 'water';
+      const route = createWorld({ ...villageMap, tiles }).findPath(world.place('gardens').door, world.place('east-market').door);
+      expect(route).not.toBeNull();
+      expect(route!.some(p => p.x === 41 && p.y === (y === 15 ? 36 : 15))).toBe(true);
     }
   });
 });

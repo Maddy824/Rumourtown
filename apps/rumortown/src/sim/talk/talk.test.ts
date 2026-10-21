@@ -281,7 +281,7 @@ describe('line bank content', () => {
 
   it('assigns every villager a voice archetype', () => {
     for (const d of village) expect(VOICE_ARCHETYPES).toContain(VOICES[d.id]);
-    expect(Object.keys(VOICES)).toHaveLength(24);
+    expect(Object.keys(VOICES)).toHaveLength(36);
   });
 });
 

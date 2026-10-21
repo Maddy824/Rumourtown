@@ -2,6 +2,7 @@
  * The line bank: every authored line, in a fixed order (line ids depend on it).
  * Core villagers speak their own lines first, then their voice archetype's, then the generic ones.
  */
+import { newcomerSets } from './newcomers.js';
 import { withAddressing } from './addressing.js';
 import { coreNuanceSets } from './core/nuance.js';
 import { nuanceSets } from './archetypes/nuance.js';
@@ -32,4 +33,4 @@ export const coreSets: readonly LineSet[] = withAddressing([...miraSets, ...tomS
 
 export const archetypeSets: readonly LineSet[] = withAddressing([...bluntSets, ...gentleSets, ...sharpSets, ...dreamySets, ...piousSets, ...jollySets, ...wearySets, ...nuanceSets]);
 
-export const lineBank: readonly LineSet[] = [...coreSets, ...archetypeSets, ...genericSets];
+export const lineBank: readonly LineSet[] = [...coreSets, ...archetypeSets, ...genericSets, ...withAddressing(newcomerSets)];

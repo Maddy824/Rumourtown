@@ -2358,3 +2358,10 @@ button.chain-actor:hover span {
 .rt[data-layout='phone'] .dare-note { top: calc(100% + 2px); width: min(300px, calc(100% - 24px)); }
 .rt[data-layout='phone'] .story-meaning { grid-template-columns: 1fr 1fr; }
 .rt[data-layout='phone'] .story-meaning label:last-child { grid-column: 1 / -1; grid-template-columns: 1fr 2fr; align-items: center; }
+
+.district-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.district-tabs [aria-pressed='true'] { background: var(--oat); box-shadow: inset 0 0 0 2px var(--ink); }
+.district-note { min-height: 2.8em; color: var(--ink-soft); }
+.atlas-name-toggle { display: flex; align-items: center; gap: 7px; font-size: var(--fs-s); margin: 8px 0; }
+.atlas-map[data-names='false'] [data-villager] text { display: none; }
+.atlas-map[data-names='false'] [data-villager]:hover text { display: block; }

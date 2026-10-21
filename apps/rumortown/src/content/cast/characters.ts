@@ -5,7 +5,7 @@ import type { CastId } from './ids.js';
 const person = (aspiration: string, worry: string, habit: string, protect: number, bond: number, status: number, verify: number): SocialCharacter =>
   ({ aspiration, worry, habit, motives: { protect, bond, status, verify } });
 
-export const characters: Record<CastId, SocialCharacter> = {
+export const characters: Partial<Record<CastId, SocialCharacter>> = {
   mira: person('Keep the bakery dependable enough to hand it to Wren one day.', 'One missing loaf feels like someone taking her years of work for granted.', 'Counts the trays twice before joining the evening crowd at the well.', .8, .35, .65, .55),
   tom: person('Build things that make the village easier to live in.', 'Being called unreliable hurts more than losing a day’s pay.', 'Checks on Ada before taking on another repair.', .9, .4, .1, .7),
   ben: person('Make sure nobody he loves has to face trouble alone.', 'His loyalty can turn a doubtful story into a fight.', 'Brings river news into the bakery, then stays longer than he meant to.', .95, .9, .3, .2),

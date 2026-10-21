@@ -45,6 +45,6 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 08 | Launch copy | done; titles, post, clip storyboard and GIF plan prepared |
 | 09 | Interactive village and research observations | done; live atlas, travel, richer cast, river, exports and comparisons verified |
 | 10 | Readable conversations, typed stories and focused rumor trails | done; local writing, exact replay, step controls and phone layout verified |
-| 11 | Expand the world and cast | in progress; requested after task 10 |
+| 11 | Expand the world and cast | done; 36 residents, 42 places, four districts, two bridges and new replay verified |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.
