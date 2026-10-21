@@ -1,22 +1,29 @@
-/**
- * Entry point. Mounts the shell on whatever `deps` provides. Until the real engine is wired in
- * (Task 8), the village runs on the fake simulation; the felt renderer is loaded if it is present
- * and the plain stand-in is used if it is missing or fails.
- */
+/** Mount the real village; ?fake=1 keeps the UI stand-in available. */
+import { cast, claims, castVersion } from './content/cast/index.js';
+import { villageMap } from './content/map/index.js';
+import { createSimulation } from './sim/engine.js';
 import { createFakeMap, createFakeSimulation } from './sim/fake.js';
+import { createTalk } from './sim/talk/index.js';
+import { createMover, createWorld } from './sim/world/index.js';
 import type { Renderer, VillageMap } from './sim/types.js';
 import { mountApp, type AppDeps } from './ui/app.js';
-import { withFakeReplay } from './ui/fake-replay.js';
 import { createStubRenderer } from './ui/stub-renderer.js';
 
 type CreateRenderer = (canvas: HTMLCanvasElement, map: VillageMap) => Renderer;
 
-/** What the shell runs on. Integration swaps in `createSimulation`, the village map and the cast here. */
+const fake = new URLSearchParams(window.location.search).get('fake') === '1';
+const world = { ...createWorld(villageMap), createMover };
+
 export const deps: AppDeps = {
-  map: createFakeMap(),
-  castVersion: 'v1',
-  createSim: (seed, interventions) => withFakeReplay(createFakeSimulation(seed), interventions),
+  map: fake ? createFakeMap() : villageMap,
+  castVersion,
+  createSim: (seed, interventions) => fake
+    ? createFakeSimulation(seed, interventions)
+    : createSimulation({ seed, world, cast, claims, talk: createTalk(cast), interventions }),
   createRenderer: createStubRenderer,
+  whisperClient: import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_TURNSTILE_SITE_KEY
+    ? { baseUrl: import.meta.env.VITE_API_BASE_URL, siteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY }
+    : undefined,
 };
 
 /*

@@ -78,6 +78,8 @@ export type Facing = 'n' | 's' | 'e' | 'w';
 
 export interface WorldApi {
   readonly map: VillageMap;
+  /** Optional world-owned movement implementation. */
+  createMover?(start: Vec2): Mover;
   isWalkable(x: number, y: number): boolean;
   /** 4-connected A* on integer tiles. Excludes `from`, includes `to`. Null when unreachable. */
   findPath(from: Vec2, to: Vec2): Vec2[] | null;
@@ -384,6 +386,8 @@ export interface Simulation {
   step(): void;
   snapshot(): WorldSnapshot;
   inspect(id: VillagerId): Inspection;
+  /** Add a claim before whispering it. Existing ids cannot be replaced. */
+  registerClaim(claim: GameClaim): void;
   /** Whisper at the current tick. Returns false when the player is not within two tiles of the listener. */
   whisper(listener: VillagerId, claimId: ClaimId): boolean;
   /** Walk the player toward a tile. */

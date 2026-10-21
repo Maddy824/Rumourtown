@@ -471,6 +471,23 @@ body {
   font-weight: 560;
 }
 
+.dare-note {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: var(--gutter);
+  width: min(300px, calc(50% - 24px));
+  padding: 8px 10px;
+  border-radius: 2px;
+  background: var(--paper);
+  box-shadow: var(--lift-card);
+  font-size: var(--fs-s);
+}
+
+.dare-note summary { cursor: pointer; }
+.dare-note p { margin: 6px 0 0; }
+.debrief-check { margin: 16px 0; padding: 12px; min-width: 0; }
+.debrief-check .card-actions { margin-top: 10px; }
+
 /* ---------------- Bottom: the postbox, the prompt and the time ribbon ---------------- */
 
 .rt-bottom {
@@ -2063,7 +2080,7 @@ button.chain-actor:hover span {
 }
 
 .rt[data-layout='phone'] .threads-note {
-  max-width: 200px;
+  max-width: calc(50% - 24px);
 }
 
 .rt[data-layout='phone'] .postbox {

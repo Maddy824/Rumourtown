@@ -4,6 +4,7 @@
  * renderer draws every animation frame, blending the previous and current snapshots.
  */
 import type { ClaimId } from 'rumormind';
+import { readRegisteredClaim } from '../sim/registered-claim.js';
 import {
   DAY_START_MINUTE,
   MINUTES_PER_DAY,
@@ -21,6 +22,7 @@ import {
 import { createBubbles } from './bubbles.js';
 import { createCameraRig } from './camera.js';
 import { createDayEnd } from './day-end.js';
+import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js';
 import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
 import { dialArt, postboxArt } from './icons.js';
@@ -45,6 +47,8 @@ export interface AppDeps {
   startTick?: number;
   /** Length of the timeline ribbon in days. Default 3. */
   runDays?: number;
+  /** Typed whispers are available only when both deployment settings exist. */
+  whisperClient?: { baseUrl: string; siteKey: string };
 }
 
 export interface AppHandle {
@@ -109,7 +113,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     interventions = [];
     sim = deps.createSim(seed, []);
   }
-  const valid = interventions.filter((i) => sim.cast.has(i.listener) && sim.claims.has(i.claimId));
+  const valid = interventions.filter((i) => sim.cast.has(i.listener) &&
+    (sim.claims.has(i.claimId) || readRegisteredClaim(i.claimId, sim.cast) !== null));
   if (valid.length !== interventions.length) {
     interventions = valid;
     sim = deps.createSim(seed, interventions.slice());
@@ -120,7 +125,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       ? 'You are watching a replay. The whisper happens again at the same moment.'
       : `You are watching a replay. All ${interventions.length} whispers happen again at the same moments.`;
   }
-  const startTick = Math.max(0, deps.startTick ?? 130);
+  const reflection = runReflection(seed);
+  const startTick = Math.min(runTicks, Math.max(0, deps.startTick ?? 130));
   while (sim.tick < startTick) sim.step();
 
   const shareState = (): ShareState => ({ v: 1, seed, cast: castVersion, interventions: interventions.slice() });
@@ -154,7 +160,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Pin to the board');
   const pins = h('nav', { class: 'pins', 'aria-label': 'Board' }, threadsBtn, storyBtn, shareBtn);
   const threadsNote = h('p', { class: 'threads-note', hidden: true }, 'Each red thread is one telling.');
-  const top = h('header', { class: 'rt-top' }, clock, pins, threadsNote);
+  const dareNote = h('details', { class: 'dare-note', open: true },
+    h('summary', null, 'Your dare'), h('p', null, reflection.dare.text));
+  const top = h('header', { class: 'rt-top' }, clock, pins, threadsNote, dareNote);
 
   const postbox = h('button', { class: 'postbox', type: 'button', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper'));
   const prompt = h('p', { class: 'prompt', hidden: interventions.length > 0 }, 'Whisper something to someone.');
@@ -254,6 +262,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   };
 
   const whisper = createWhisperSheet({
+    client: deps.whisperClient ? { ...deps.whisperClient, castVersion } : undefined,
     sim: () => sim,
     snapshot: () => cur,
     isPhone,
@@ -325,6 +334,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     reducedMotion,
     onContinue: () => {
       release('dayend');
+      if (sim.tick >= runTicks) setSpeed(0);
       syncScrim();
     },
     onShare: (opener) => share.open(opener),
@@ -529,7 +539,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     closeSheetsForPhone('');
     whisper.close();
     const whispered = interventions.some((i) => i.tick <= sim.tick);
-    dayEnd.show(ev, whispered ? averageTrust() : null);
+    const dareResult = `${reflection.dare.text} ${evaluateDare(sim, reflection.dare, ev)}`;
+    dareNote.querySelector('p')!.textContent = dareResult;
+    dayEnd.show(ev, whispered ? averageTrust() : null, {
+      dare: dareResult,
+      paragraphs: ev.dayIndex === 2 ? reflectionParagraphs(sim, ev) : [],
+      checks: reflection.checks,
+    });
     syncScrim();
   }
 
@@ -537,6 +553,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function stepOnce(): boolean {
     prev = cur;
     sim.step();
+    if (sim.tick === cur.tick) { setSpeed(0); return true; }
     cur = sim.snapshot();
     if (sim.tick > maxTick) maxTick = sim.tick;
     const fresh = consumeEvents();
@@ -678,7 +695,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function measureInsets(): void {
     const height = root.clientHeight || window.innerHeight;
-    const topBottom = Math.max(clock.getBoundingClientRect().bottom, pins.getBoundingClientRect().bottom);
+    const topBottom = Math.max(clock.getBoundingClientRect().bottom, pins.getBoundingClientRect().bottom, dareNote.getBoundingClientRect().bottom);
     const bottomTop = Math.min(postbox.getBoundingClientRect().top, phone ? time.tab.getBoundingClientRect().top : time.bar.getBoundingClientRect().top);
     insets = { top: Math.round(topBottom + 6), bottom: Math.round(Math.max(0, height - bottomTop + 6)) };
   }
@@ -706,6 +723,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   phoneQuery.addEventListener('change', applyLayout);
   const onResize = (): void => resize();
   window.addEventListener('resize', onResize);
+  dareNote.addEventListener('toggle', onResize);
   applyLayout();
 
   /* ---------------- Frame ---------------- */
@@ -796,7 +814,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       // Projected positions are canvas-relative; DOM rectangles use viewport coordinates.
       exclusions: phone ? (() => {
         const origin = canvas.getBoundingClientRect();
-        return [clock, pins, threadsBtn, storyBtn, shareBtn].map((control) => {
+        return [clock, pins, threadsBtn, storyBtn, shareBtn, dareNote].map((control) => {
           const r = control.getBoundingClientRect();
           return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
         });
@@ -857,6 +875,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       return p ? renderer.project(p, rig.camera) : null;
     },
     destroy() {
+      whisper.destroy();
       window.cancelAnimationFrame(rafId);
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('hashchange', onHash);

@@ -61,8 +61,7 @@ room('school', 'School', 'school', 18, 8, 7, 4, ['duty'], 8);
 room('chapel', 'Chapel', 'chapel', 26, 8, 7, 4, ['social', 'duty'], 8);
 room('mill', 'Mill', 'mill', 34, 8, 5, 4, ['duty']);
 room('inn', 'Inn', 'inn', 1, 20, 7, 5, ['hunger', 'rest', 'social', 'duty'], 10);
-// The shared PlaceKind union has no smithy, orchard, or riverside variants.
-room('smithy', 'Smithy', 'shop', 10, 20, 6, 5, ['duty']);
+room('smithy', 'Smithy', 'smithy', 10, 20, 6, 5, ['duty']);
 
 const northHomes = ['Mira', 'Tom', 'Ada', 'Rosa', 'Jonah', 'Ben'];
 const southHomes = ['Elin', 'Pim', 'Sol', 'Ivo', 'Nell', 'Otto'];
@@ -120,7 +119,7 @@ places.push(
     satisfies: ['duty'],
   },
   {
-    id: 'riverside', name: 'Riverside', kind: 'square',
+    id: 'riverside', name: 'Riverside', kind: 'riverside',
     rect: { x: 39, y: 1, w: 1, h: 30 }, door: { x: 39, y: 18 },
     spots: [
       { x: 39, y: 3 }, { x: 39, y: 7 }, { x: 39, y: 11 }, { x: 39, y: 13 },
@@ -129,7 +128,7 @@ places.push(
     satisfies: ['duty'],
   },
   {
-    id: 'orchard', name: 'Orchard', kind: 'field',
+    id: 'orchard', name: 'Orchard', kind: 'orchard',
     rect: { x: 43, y: 2, w: 5, h: 11 }, door: { x: 43, y: 12 },
     spots: [{ x: 44, y: 4 }, { x: 46, y: 7 }, { x: 44, y: 10 }],
     satisfies: ['duty'],

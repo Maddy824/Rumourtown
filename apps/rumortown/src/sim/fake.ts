@@ -4,6 +4,7 @@
  */
 import { createRng } from 'rumormind';
 import type { ClaimId } from 'rumormind';
+import { readRegisteredClaim } from './registered-claim.js';
 import {
   DAY_START_MINUTE,
   MINUTES_PER_DAY,
@@ -97,7 +98,7 @@ export function createFakeCast(seed = 1): Dossier[] {
   }));
 }
 
-export function createFakeSimulation(seed = 1): Simulation {
+export function createFakeSimulation(seed = 1, replay: Intervention[] = []): Simulation {
   const rng = createRng(seed);
   const map = createFakeMap();
   const cast = createFakeCast(seed);
@@ -137,6 +138,27 @@ export function createFakeSimulation(seed = 1): Simulation {
     return { moving: true, facing: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : dy > 0 ? 's' : 'n' };
   };
 
+  const pending = replay.slice().sort((a, b) => a.tick - b.tick);
+  let pendingIndex = 0;
+  const applyWhisper = (listener: VillagerId, claimId: ClaimId, force = false): boolean => {
+    const b = bodies.find((x) => x.view.id === listener);
+    if (!b || !claims.has(claimId) || (!force && Math.hypot(b.view.pos.x - player.pos.x, b.view.pos.y - player.pos.y) > 2)) return false;
+    interventions.push({ tick, listener, claimId });
+    threads.push({ from: 'stranger', to: listener, claimId, tick });
+    events.push({ kind: 'whisper', tick, listener, claimId, witnesses: [] });
+    b.view.bubble = { text: 'Is that so?', untilTick: tick + 6 };
+    return true;
+  };
+  const applyPending = (): void => {
+    while (pendingIndex < pending.length && pending[pendingIndex]!.tick <= tick) {
+      const iv = pending[pendingIndex++]!;
+      const claim = readRegisteredClaim(iv.claimId, new Map(cast.map((d) => [d.id, d])));
+      if (claim && !claims.has(claim.id)) claims.set(claim.id, claim);
+      applyWhisper(iv.listener, iv.claimId, true);
+    }
+  };
+  applyPending();
+
   return {
     get tick() {
       return tick;
@@ -169,6 +191,11 @@ export function createFakeSimulation(seed = 1): Simulation {
         if (m.moving) player.facing = m.facing;
         else player.target = null;
       }
+      if (tick % MINUTES_PER_DAY === 0) events.push({
+        kind: 'day-end', tick, dayIndex: tick / MINUTES_PER_DAY - 1, ending: 'quiet',
+        summary: 'The stand-in village talked about bread and the weather.',
+      });
+      applyPending();
     },
     snapshot(): WorldSnapshot {
       return {
@@ -196,15 +223,11 @@ export function createFakeSimulation(seed = 1): Simulation {
         decisions: [{ tick, action: 'gossip', why: '64% sure Tom stole the bread; Ben is close and would want to know.' }],
       };
     },
-    whisper(listener, claimId) {
-      const b = bodies.find((x) => x.view.id === listener);
-      if (!b || Math.hypot(b.view.pos.x - player.pos.x, b.view.pos.y - player.pos.y) > 2) return false;
-      interventions.push({ tick, listener, claimId });
-      threads.push({ from: 'stranger', to: listener, claimId, tick });
-      events.push({ kind: 'whisper', tick, listener, claimId, witnesses: [] });
-      b.view.bubble = { text: 'Is that so?', untilTick: tick + 6 };
-      return true;
+    registerClaim(claim) {
+      if (!cast.some((d) => d.id === claim.about)) throw new Error(`unknown villager ${claim.about}`);
+      if (!claims.has(claim.id)) claims.set(claim.id, { ...claim, contradicts: [...(claim.contradicts ?? [])] });
     },
+    whisper: (listener, claimId) => applyWhisper(listener, claimId),
     movePlayer(target) {
       player.target = { x: Math.floor(target.x), y: Math.floor(target.y) };
     },

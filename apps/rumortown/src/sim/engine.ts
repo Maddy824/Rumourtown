@@ -17,6 +17,7 @@ import { currentEntryIndex, entryOf, onArrived, pathFrom, placeOf, updateSchedul
 import { whisper } from './agents/stranger.js';
 import { decide } from './agents/utility.js';
 import { tickWitnessing } from './agents/witness.js';
+import { readRegisteredClaim } from './registered-claim.js';
 import {
   DAY_START_MINUTE,
   MINUTES_PER_DAY,
@@ -36,10 +37,9 @@ import {
 
 const DEFAULT_DAYS = 3;
 
-/** The world module ships a mover but the contract does not carry it; use it when the world object offers one. */
+/** Prefer the world's movement implementation; retain the isolated engine fallback. */
 function moverFactory(world: SimulationOptions['world']): (start: Vec2) => Mover {
-  const candidate = (world as { createMover?: unknown }).createMover;
-  if (typeof candidate === 'function') return (start) => (candidate as (s: Vec2) => Mover).call(world, start);
+  if (world.createMover) return (start) => world.createMover!(start);
   return fallbackMover;
 }
 
@@ -69,6 +69,7 @@ export function createSimulation(opts: SimulationOptions): Simulation {
   const makeMover = moverFactory(world);
   const claims = new Map<ClaimId, GameClaim>();
   for (const c of opts.claims) claims.set(c.id, c);
+  const claimList = opts.claims.slice();
   const castMap = new Map<VillagerId, Dossier>();
   for (const d of opts.cast) castMap.set(d.id, d);
   const square = world.map.places.find((p) => p.id === 'square') ?? world.map.places[0];
@@ -81,7 +82,7 @@ export function createSimulation(opts: SimulationOptions): Simulation {
     world,
     talk: opts.talk,
     claims,
-    claimList: opts.claims.slice(),
+    claimList,
     castMap,
     agents,
     byId: new Map(),
@@ -151,6 +152,24 @@ export function createSimulation(opts: SimulationOptions): Simulation {
   }
   initRelationships(ctx);
 
+  const registerClaim = (claim: GameClaim): void => {
+    if (!castMap.has(claim.about)) throw new Error(`unknown villager ${claim.about}`);
+    // Registration is idempotent, and cannot rewrite claims already held in a ledger.
+    if (claims.has(claim.id)) return;
+    const alternatives = claimList.filter((c) => {
+      const harmful = c.alternativeOf ? claims.get(c.alternativeOf) : undefined;
+      return c.valence > 0 && c.about === claim.about && harmful?.kind === claim.kind;
+    });
+    const added = { ...claim, contradicts: alternatives.map((c) => c.id) };
+    claims.set(added.id, added);
+    claimList.push(added);
+    for (const alternative of alternatives) {
+      const updated = { ...alternative, contradicts: [...(alternative.contradicts ?? []), added.id] };
+      claims.set(updated.id, updated);
+      claimList[claimList.indexOf(alternative)] = updated;
+    }
+  };
+
   const interventions: Intervention[] = [];
   const pending = (opts.interventions ?? []).slice().sort((x, y) => x.tick - y.tick);
   let pendingIndex = 0;
@@ -160,6 +179,10 @@ export function createSimulation(opts: SimulationOptions): Simulation {
   const applyPending = (): void => {
     while (pendingIndex < pending.length && pending[pendingIndex]!.tick <= ctx.tick) {
       const iv = pending[pendingIndex++]!;
+      if (!claims.has(iv.claimId)) {
+        const claim = readRegisteredClaim(iv.claimId, castMap);
+        if (claim) registerClaim(claim);
+      }
       if (whisper(ctx, iv.listener, iv.claimId, true)) interventions.push({ tick: ctx.tick, listener: iv.listener, claimId: iv.claimId });
     }
   };
@@ -279,6 +302,7 @@ export function createSimulation(opts: SimulationOptions): Simulation {
     },
     claims,
     cast: castMap,
+    registerClaim,
     step,
     snapshot,
     inspect(id: VillagerId): Inspection {
