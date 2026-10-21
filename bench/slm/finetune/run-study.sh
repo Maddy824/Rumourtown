@@ -15,6 +15,8 @@ log() { echo "=== $* $(date +%H:%M)"; }
 log filter
 node --experimental-strip-types bench/slm/finetune/make-data.ts filter || exit 1
 cat bench/slm/data/finetune/stats.json
+# The same accepted, on-act replies in the live /play format, for a Workers AI adapter.
+node --experimental-strip-types bench/slm/finetune/game-format.ts --set act || log "game-format conversion failed"
 
 # Student, run name, training set. The deployable Workers AI student first.
 RUNS=(
@@ -23,6 +25,7 @@ RUNS=(
   "mlx-community/Qwen3-0.6B-bf16 qwen06b-verifier verifier"
   "mlx-community/Qwen3-0.6B-bf16 qwen06b-unfiltered unfiltered"
   "mlx-community/Llama-3.2-1B-Instruct-bf16 llama1b-act act"
+  "mlx-community/Llama-3.2-3B-Instruct llama3b-act-game act-game"
 )
 for spec in "${RUNS[@]}"; do
   set -- ${=spec}
