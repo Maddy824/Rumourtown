@@ -82,3 +82,9 @@ Scope ruling: the requested next step is completion of task 22. Task 21 remains 
 ### CI follow-up
 
 The first pushed run exposed the new night integration test's default five-second timeout on the shared Node 25 runner. It executes two real simulations through night and dawn; all other 742 committed tests passed. Its timeout now matches the existing replay/agent integration allowance of 20 seconds. No assertions, simulation steps, replay pins or performance limits were relaxed. The local suite includes 12 pre-existing untracked SEO tests, explaining the 755 local versus 743 committed-test count.
+
+The corrected code at `432aa0d` passed both Node 22 and Node 25 jobs in [GitHub Actions run 39632060218](https://github.com/Maddy824/Rumourtown/actions/runs/39632060218).
+
+### Deferred minor follow-up
+
+Independent review classified overnight dialogue selection as Minor: 00:00–05:59 still selects morning greetings/topics in `sim/talk/context.ts` and `sim/talk/index.ts`. Night routines, sleeping availability and gossip mechanics remain correct. Per `CONTINUE.md` section 7, defer this to a future night-dialogue content pass, with content tests and replay inspection; do not silently expand task 21's presentation scope or change the verified replay for this minor finding.
