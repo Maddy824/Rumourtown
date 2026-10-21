@@ -28,6 +28,10 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 
 A task is "committed" when `git log --oneline -30` shows its number prefix and `git status --short` shows nothing of it left. A task is "BLOCKED on commit" when its report says so and its files are still in the working tree: verify and commit them yourself; that is the common case, because the sandbox often cannot write `.git`.
 
+### Latest owner follow-up (2026-10-21)
+
+Manual landing entry and the subsequent music/play polish are published. Code commit `fb5c351` adds quiet local ambience, an angelic arrival, one-card onboarding, **Talk or act** with budgeted `POST /play`, independent rumor-line/reading toggles, and claim-aware dialogue. See [the full report](reports/play-polish-report.md). Both Node 22/25 CI jobs passed. Site version `f9539a50-9b32-405e-aef4-7c3003fad431`; API version `3aabb750-0c4b-4cd2-8fdd-a2a8371dd8c7`. Limits and secrets are unchanged. Live UI/audio checks passed; automated Turnstile 600010 prevented a real conversation request, so live model quality still needs a human-browser check. Task 23 remains the next whole-branch review.
+
 ## 3. Rules that bind every step
 
 - Stage explicit paths; never `git add -A`. Keep generated `tsconfig.tsbuildinfo` files out of commits.

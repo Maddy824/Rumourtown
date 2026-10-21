@@ -29,4 +29,12 @@ The pinned authored replay remains `6137d96970f7a28e05e2fb37b57b9495274d1c256208
 
 Final root checks passed: typecheck, **795 tests in 68 files**, production build, **350,201 gzip bytes** under the 400,000-byte gate, and whitespace checks. The committed suite excludes the existing 12 untracked SEO tests (783 tests in 67 files). Two workers were used to avoid competing CPU-heavy suites; an earlier fully parallel run hit pre-existing wall-time thresholds under concurrent browser load. The final repeat passed without changing those thresholds. Production API dry-run compilation also passed with unchanged bindings and caps. Both independent reviews have no remaining Critical or Important findings.
 
-Commit, CI and deployment evidence pending.
+- Code commit `fb5c351698136aa83adc11be1e79d9acec79fc23` pushed to `build/village` with the prescribed owner attribution.
+- [CI run 39641828024](https://github.com/Maddy824/Rumourtown/actions/runs/39641828024) passed on both Node 22 and Node 25.
+- Rebuilt with the production API URL and public Turnstile key; production assets total **351,164 gzip bytes**. Main asset: `/assets/main-D9ThIpih.js`.
+- API deployed first: Cloudflare version `3aabb750-0c4b-4cd2-8fdd-a2a8371dd8c7`. Site deployed next: version `f9539a50-9b32-405e-aef4-7c3003fad431`, on rumourtown.dev and www.rumourtown.dev.
+- Public game, About and sitemap returned HTTP 200. API health returned `{"ok":true}`.
+- Public Chrome desktop/360 px checks passed: correct new asset, no development handle, landing waits, no audio before entry, music starts on entry and suspends on mute, rumor-line toggle works, conversation opens without overflow, no page errors.
+- The first browser navigation timed out; retry loaded successfully. A real conversation attempt was stopped by Turnstile before `/play` was sent. A diagnostic with `/play` blocked captured Turnstile **600010**, in the documented 600-family bot-detection failures. No AI credits were consumed by live verification. Model output quality and a completed real conversation still need a normal human-browser check; mocks and API ledger/provider tests do not establish live generation quality. See [Cloudflare error codes](https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/) and [automated testing guidance](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+
+The requested changes are published. Remaining checks: owner conversation playtest after the human check, phone notification subscription, and the existing task 23 whole-branch/launch follow-up. No controls were weakened to bypass automated-browser verification.

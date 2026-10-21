@@ -1,0 +1,42 @@
+[
+  {
+    "width": 1280,
+    "waiting": {
+      "visible": true,
+      "playing": false,
+      "audio": 0,
+      "overflow": false,
+      "asset": "/assets/main-D9ThIpih.js",
+      "devHandle": "undefined"
+    },
+    "status": "Could not connect. Try again.",
+    "playRequests": 0,
+    "replies": [],
+    "end": {
+      "overflow": false,
+      "reply": "",
+      "actionButtons": 0
+    },
+    "errors": []
+  },
+  {
+    "width": 360,
+    "waiting": {
+      "visible": true,
+      "playing": false,
+      "audio": 0,
+      "overflow": false,
+      "asset": "/assets/main-D9ThIpih.js",
+      "devHandle": "undefined"
+    },
+    "status": "Conversation opened; no AI request sent.",
+    "playRequests": 0,
+    "replies": [],
+    "end": {
+      "overflow": false,
+      "reply": "",
+      "actionButtons": 0
+    },
+    "errors": []
+  }
+]
