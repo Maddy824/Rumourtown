@@ -31,5 +31,33 @@ PER_VISITOR_PER_HOUR = "5"
 GLOBAL_PER_MINUTE = "20"
 
 # Set secrets with wrangler secret put: TURNSTILE_SECRET, OPENROUTER_API_KEY, SIGNING_KEY_JWK
-# Replace ALLOWED_ORIGIN before deployment. Prepay credit, disable auto top-up, cap the key at $7.
-# USAGE_ALERT_URL is a secret ntfy.sh topic URL. Test phone delivery before setting AI_ENABLED=true.
+# Prepay credit, disable auto top-up, cap the key at $7.
+# USAGE_ALERT_URL is an optional secret ntfy.sh topic URL for non-blocking daily digests.
+
+# Production settings are explicit: local development keeps AI disabled.
+[env.production]
+name = "rumortown-api"
+routes = [{ pattern = "api.rumourtown.dev", custom_domain = true }]
+
+[env.production.vars]
+ALLOWED_ORIGIN = "https://rumourtown.dev"
+MODELS = "meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.5-flash-lite"
+AI_ENABLED = "true"
+DAILY_ALLOWANCE_USD = "0.019"
+LIFETIME_ALLOWANCE_USD = "7"
+PER_VISITOR_PER_HOUR = "5"
+GLOBAL_PER_MINUTE = "20"
+
+[[env.production.durable_objects.bindings]]
+name = "LEDGER"
+class_name = "BudgetLedger"
+
+[[env.production.ratelimits]]
+name = "EDGE_VISITOR_LIMIT"
+namespace_id = "82401"
+simple = { limit = 20, period = 60 }
+
+[[env.production.ratelimits]]
+name = "EDGE_TOTAL_LIMIT"
+namespace_id = "82402"
+simple = { limit = 60, period = 60 }

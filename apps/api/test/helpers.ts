@@ -4,7 +4,7 @@ import type { Env, Fetcher } from '../src/types';
 
 // A DO storage stub backed by Node's in-memory SQLite: it executes production SQL,
 // including actual UNIQUE constraints, ON CONFLICT updates and rollback semantics.
-export function memoryLedger(config: Partial<Env> = {}) {
+export function memoryLedger(config: Partial<Env> = {}, fetcher: Fetcher = mockFetch().fetcher) {
   const db = new DatabaseSync(':memory:');
   const sql = {
     exec(query: string, ...values: (string | number | null)[]) {
@@ -12,9 +12,13 @@ export function memoryLedger(config: Partial<Env> = {}) {
       return { toArray: () => rows };
     },
   };
+  const pending: Promise<unknown>[] = [];
+  const alarms: number[] = [];
   const ctx = {
+    waitUntil: (promise: Promise<unknown>) => { pending.push(promise); },
     storage: {
       sql,
+      setAlarm: async (time: number) => { alarms.push(time); },
       transactionSync<T>(action: () => T): T {
         db.exec('BEGIN IMMEDIATE');
         try { const result = action(); db.exec('COMMIT'); return result; }
@@ -22,21 +26,22 @@ export function memoryLedger(config: Partial<Env> = {}) {
       },
     },
   } as unknown as DurableObjectState;
-  const object = new BudgetLedger(ctx, config as Env);
+  const object = new BudgetLedger(ctx, config as Env, fetcher);
   const calls: { method: string; body: Record<string, unknown> }[] = [];
-  const fetcher = async (url: string, init?: RequestInit) => {
+  const ledgerFetch = async (url: string, init?: RequestInit) => {
     const request = new Request(url, init);
     calls.push({ method: new URL(url).pathname.slice(1), body: await request.clone().json() as Record<string, unknown> });
     return object.fetch(request);
   };
   const namespace = {
     idFromName: (name: string) => name,
-    get: () => ({ fetch: fetcher }),
+    get: () => ({ fetch: ledgerFetch }),
   } as unknown as DurableObjectNamespace;
   return {
-    db, calls, namespace,
+    db, calls, namespace, ctx, alarms, object,
+    async drain() { while (pending.length) await Promise.all(pending.splice(0)); },
     async rpc(method: string, body: unknown): Promise<Record<string, unknown>> {
-      const response = await fetcher(`https://ledger/${method}`, { method: 'POST', body: JSON.stringify(body) });
+      const response = await ledgerFetch(`https://ledger/${method}`, { method: 'POST', body: JSON.stringify(body) });
       return await response.json() as Record<string, unknown>;
     },
   };

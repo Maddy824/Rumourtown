@@ -1,6 +1,5 @@
 import { blockedReason, hash, normalise } from './moderation';
 import { actualCost, estimatePromptTokens, MAX_TOKENS, modelList, providerPriceCap, reservationCost } from './prices';
-import { notifyUsage } from './alerts';
 import { admit, Failure, readInput } from './admission';
 import { claimCache, type EdgeCache } from './edge-cache';
 import { systemPrompt } from './prompt';
@@ -10,6 +9,12 @@ import { schema, validate } from './validate';
 export { BudgetLedger } from './ledger';
 
 interface Dependencies { fetch?: Fetcher; now?: () => number; cache?: EdgeCache }
+
+function allowedOrigins(env: Env): string[] {
+  return env.ALLOWED_ORIGIN === 'https://rumourtown.dev'
+    ? [env.ALLOWED_ORIGIN, 'https://www.rumourtown.dev'] : [env.ALLOWED_ORIGIN];
+}
+interface Usage { dispatched: boolean; track?: boolean; reason?: string }
 
 // Single stable object for the whole deployment, never a per-visitor object.
 async function ledger(env: Env, method: string, body: unknown): Promise<Record<string, unknown>> {
@@ -38,12 +43,12 @@ async function turnstile(request: Request, token: string, env: Env, fetcher: Fet
     const response = await fetcher('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body, signal: controller.signal });
     const result: unknown = await response.json();
     if (!response.ok || !record(result) || result.success !== true) throw new Error('turnstile');
-    if (typeof result.hostname === 'string' && result.hostname !== new URL(env.ALLOWED_ORIGIN).hostname) throw new Error('hostname');
+    if (typeof result.hostname === 'string' && result.hostname !== new URL(request.headers.get('Origin')!).hostname) throw new Error('hostname');
   } catch { throw new Failure('turnstile'); }
   finally { clearTimeout(timer); }
 }
 
-async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number, cache?: EdgeCache): Promise<SignedPayload | Refusal> {
+async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number, usage: Usage, cache?: EdgeCache): Promise<SignedPayload | Refusal> {
   await admit(request, env);
   const input = await readInput(request);
   if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken', 'castVersion'].includes(key)) ||
@@ -56,6 +61,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   const unsupported = blockedReason(normalised);
   if (unsupported) return { unsupported, castVersion: input.castVersion, issuedAt: now() };
   await turnstile(request, input.turnstileToken, env, fetcher);
+  usage.track = true;
   const key = await hash(normalised);
   const edge = claimCache(cache, request, await hash(JSON.stringify([key, input.castVersion, publicKey(env.SIGNING_KEY_JWK)])));
   const edgePayload = await edge.get();
@@ -106,10 +112,9 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     // Invalid/missing secrets fail before dispatch and can safely release the reservation.
     if (!env.OPENROUTER_API_KEY) throw new Failure('model');
     publicKey(env.SIGNING_KEY_JWK);
-    try { await notifyUsage(env, fetcher, reservationId, worstCaseUsd); }
-    catch { throw new Failure('alerts'); }
     timer = setTimeout(() => controller.abort(), 6_000);
     dispatched = true;
+    usage.dispatched = true;
     const response = await fetcher('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify(body), signal: controller.signal,
@@ -145,16 +150,19 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
 
 export function createWorker(deps: Dependencies = {}) {
   return {
-    async fetch(request: Request, env: Env): Promise<Response> {
+    async fetch(request: Request, env: Env, ctx?: Pick<ExecutionContext, 'waitUntil'>): Promise<Response> {
       const origin = request.headers.get('Origin');
-      if (!env.ALLOWED_ORIGIN || origin !== env.ALLOWED_ORIGIN) return Response.json({ reason: 'invalid' }, { status: 403, headers: { Vary: 'Origin' } });
+      if (!env.ALLOWED_ORIGIN || !origin || !allowedOrigins(env).includes(origin)) return Response.json({ reason: 'invalid' }, { status: 403, headers: { Vary: 'Origin' } });
       const headers = {
-        'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN,
+        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400',
         'Access-Control-Expose-Headers': 'Retry-After', Vary: 'Origin', 'Cache-Control': 'no-store',
       };
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
+      const usage: Usage = { dispatched: false };
+      const isInterpret = request.method === 'POST' && new URL(request.url).pathname === '/interpret';
+      const requestTime = (deps.now ?? Date.now)();
       try {
         const path = new URL(request.url).pathname;
         if (request.method === 'OPTIONS' && ['/interpret', '/pubkey', '/health'].includes(path)) return new Response(null, { status: 204, headers });
@@ -162,13 +170,23 @@ export function createWorker(deps: Dependencies = {}) {
         if (request.method === 'GET' && path === '/pubkey') return json(publicKey(env.SIGNING_KEY_JWK));
         if (request.method === 'POST' && path === '/interpret') {
           const cache = deps.cache ?? (typeof caches === 'undefined' ? undefined : caches.default);
-          return json(await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, cache));
+          const result = await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, cache);
+          if ('unsupported' in result) usage.reason = result.unsupported;
+          return json(result);
         }
         return json({ reason: 'invalid' }, 404);
       } catch (error) {
+        usage.reason = error instanceof Failure ? error.reason : 'invalid';
         const response = json({ reason: error instanceof Failure ? error.reason : 'invalid' }, error instanceof Failure ? error.status : 503);
         if (error instanceof Failure && error.retryAfter) response.headers.set('Retry-After', String(error.retryAfter));
         return response;
+      } finally {
+        if (isInterpret && (usage.dispatched || usage.track && usage.reason)) {
+          // Aggregate bookkeeping and ntfy are never on the response critical path.
+          const recordUsage = ledger(env, 'usage', { ...usage, now: requestTime }).catch(() => undefined);
+          if (ctx) ctx.waitUntil(recordUsage);
+          else await recordUsage;
+        }
       }
     },
   };

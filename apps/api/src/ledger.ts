@@ -1,4 +1,5 @@
-import { record, type Env } from './types';
+import { DailyDigests } from './digests';
+import { record, type Fetcher, type Env } from './types';
 
 // Integer picodollars: all supported token prices are exactly representable here.
 const SCALE = 1_000_000_000_000;
@@ -20,8 +21,10 @@ function text(value: unknown): string {
 export class BudgetLedger {
   private readonly sql: SqlStorage;
   private prunedHour = -1;
-  constructor(private readonly ctx: DurableObjectState, private readonly env: Env) {
+  private readonly digests: DailyDigests;
+  constructor(private readonly ctx: DurableObjectState, private readonly env: Env, fetcher: Fetcher = fetch) {
     this.sql = ctx.storage.sql;
+    this.digests = new DailyDigests(ctx, env, fetcher);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS days (day TEXT PRIMARY KEY, reserved INTEGER NOT NULL, spent INTEGER NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS visitors (visitor TEXT NOT NULL, hour INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(visitor, hour))`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS minutes (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL)`);
@@ -103,6 +106,8 @@ export class BudgetLedger {
     });
   }
 
+  async alarm(): Promise<void> { await this.digests.flush(Date.now()); }
+
   async fetch(request: Request): Promise<Response> {
     try {
       if (request.method !== 'POST') throw new Error('method');
@@ -110,6 +115,7 @@ export class BudgetLedger {
       if (!record(body)) throw new Error('input');
       let result: unknown;
       switch (new URL(request.url).pathname) {
+        case '/usage': await this.digests.record(body); result = { ok: true }; break;
         case '/reserve': result = this.reserve(body); break;
         case '/settle': result = this.finish(body, false); break;
         case '/release': result = this.finish(body, true); break;

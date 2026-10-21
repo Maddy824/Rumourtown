@@ -124,7 +124,7 @@ describe('cache and accounting under concurrency', () => {
     rows.set(url, Response.json(bad));
     store.calls.length = 0; mock.calls.length = 0;
     expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ reason: 'ledger' });
-    expect(store.calls).toHaveLength(0);
+    expect(store.calls.filter(c => c.method !== 'usage')).toHaveLength(0);
     expect(mock.calls).toHaveLength(1);
     const blocked = createWorker({ cache, fetch: async () => Response.json({ success: false }) });
     expect(await (await blocked.fetch(interpretRequest(), env)).json()).toEqual({ reason: 'turnstile' });
