@@ -12,7 +12,8 @@ const make = (days = 3, extra: Intervention[] = []) => createSimulation({ seed: 
   world: { ...createWorld(villageMap), createMover }, talk: createTalk(cast),
   interventions: [{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }, ...extra] });
 
-describe('a full village night', () => {
+// Two long, real-world simulations also run on shared CI CPUs.
+describe('a full village night', { timeout: 20_000 }, () => {
   it('sleeps at home, refuses sleeping whispers, keeps the inn social, and ends at dawn', () => {
     const sim = make();
     while (sim.tick < 1020) sim.step(); // 23:00

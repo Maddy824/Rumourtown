@@ -43,7 +43,7 @@ Task 20's rendering and map work was preserved. The only index integration is th
 
 Every full day in the timeline has a shaded 21:30–06:00 band and an accessible 24-hour/night description. Clock labels continue through midnight. Quiet nights show “The village sleeps” with “Still awake” names underneath. Nearby sleepers show a disabled “Asleep” button and never enter the selectable whisper-listener list. Added UI tests exercise quiet-night copy, awake ordering and the actual sleeping whisper-sheet state.
 
-## Verification and remaining work
+## Initial implementation verification
 
 Final root checks after applying the two-line renderer wiring all pass on Node 25.8.2:
 
@@ -55,9 +55,9 @@ Final root checks after applying the two-line renderer wiring all pass on Node 2
 
 No render failures were ignored. No dependency changes. The production build emits its existing advisory about a minified chunk over 500 kB; the required compressed-asset budget passes.
 
-Browser verification is blocked: Vite cannot bind `127.0.0.1:5192` (`listen EPERM`), and Playwright's installed Chrome aborts on launch with `SIGABRT` under this sandbox. Desktop, 360 px layout, keyboard/focus behaviour, night screenshots, the 4 ms close-zoom frame budget and browser replay hashing remain to verify outside this sandbox. Node 25.8.2 is available locally; Node 22 still needs the existing CI matrix check against the same pin. Do not infer those checks passed from the unit tests.
+Browser verification was initially blocked (resolved in the continuation below): Vite cannot bind `127.0.0.1:5192` (`listen EPERM`), and Playwright's installed Chrome aborts on launch with `SIGABRT` under this sandbox. Desktop, 360 px layout, keyboard/focus behaviour, night screenshots, the 4 ms close-zoom frame budget and browser replay hashing remain to verify outside this sandbox. Node 25.8.2 is available locally; Node 22 still needs the existing CI matrix check against the same pin. Do not infer those checks passed from the unit tests.
 
-Git staging is blocked: `git add` cannot create `.git/index.lock` (`Operation not permitted`). No commits or pushes were made. Intended section messages are `22: run full days and protect sleep`, `22: author the village night`, `22: add night sky and lantern light`, and `22: show nights in the timeline and whisper sheet`. Commit with Madhav Sunil's prescribed attribution and explicit file paths when repository writes are available. Existing build-info files and other runs' work were preserved, including task 19A's network files and concurrent whisper-sheet additions.
+Git staging was initially blocked (resolved in the continuation below): `git add` cannot create `.git/index.lock` (`Operation not permitted`). No commits or pushes were made. Intended section messages are `22: run full days and protect sleep`, `22: author the village night`, `22: add night sky and lantern light`, and `22: show nights in the timeline and whisper sheet`. Commit with Madhav Sunil's prescribed attribution and explicit file paths when repository writes are available. Existing build-info files and other runs' work were preserved, including task 19A's network files and concurrent whisper-sheet additions.
 
 
 ## Continuation verification and rulings
@@ -77,3 +77,8 @@ Measured the warmed renderer at 40 CSS pixels/tile, 1280 × 800, device pixel ra
 The queue had a stale task-19 status: browser interpretation was already committed as `863c47e`, so it was preserved rather than rebuilt. Unrelated `19b-report.md`, `seo.test.ts` and generated build-info files remain outside this task's commits.
 
 Scope ruling: the requested next step is completion of task 22. Task 21 remains next; its old 07:00–22:00 clock language must be reconciled with the now-authoritative full day. Public redeployment is scheduled after task 21 by `CONTINUE.md`; this verification does not redeploy the current intermediate build.
+
+
+### CI follow-up
+
+The first pushed run exposed the new night integration test's default five-second timeout on the shared Node 25 runner. It executes two real simulations through night and dawn; all other 742 committed tests passed. Its timeout now matches the existing replay/agent integration allowance of 20 seconds. No assertions, simulation steps, replay pins or performance limits were relaxed. The local suite includes 12 pre-existing untracked SEO tests, explaining the 755 local versus 743 committed-test count.
