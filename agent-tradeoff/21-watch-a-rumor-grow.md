@@ -19,3 +19,9 @@ Owner feedback: "it's very fast right now; I need a slower look at how one rumou
 
 ## Rules and verification
 - No engine changes; the replay pin is unchanged. Tests: beat detection from a recorded event list; the slow-motion tick schedule (ticks per real second during and after a beat); "Next beat" stops at the right tick; the panel's minimum line time; first-whisper auto-follow. Typecheck, tests and build pass; gzip under 400 KB. Plain copy. Commits start with `21:`; no co-author lines. Report to `agent-tradeoff/reports/21-report.md`; finish with STATUS: DONE or STATUS: BLOCKED.
+
+## D. The village keeps your clock (owner request)
+10. On a fresh visit the village starts at the visitor's local time of day (the browser's time zone, `new Date()`), not at 07:00: the start tick is the visitor's minutes since 07:00, clamped to the day. Before 07:00 the village starts at 07:00; after 22:00 it starts at 20:00 (dusk, lanterns lit). The simulation stays deterministic: it always runs from tick 0 and fast-forwards to the start tick at load (900 ticks take well under 100 ms), behind the arrival sequence, so the villagers have already lived their morning when the visitor arrives at noon.
+11. The share link records the start tick (`start` in `ShareState`, bump to v2 with v1 still readable, start 0), so a friend sees the same days from the same moment; interventions keep absolute ticks.
+12. The clock, the daylight tint (`render/daylight.ts`), the arrival sky and the district banner all follow the village clock, so a visitor at 19:00 arrives into golden light and one at 21:00 into dusk with windows glowing. Day boundaries are unchanged (day ends at 22:00, next day starts at 07:00); the run still lasts three village days from the start.
+13. A small line in the clock's tooltip and in How it works: "The village keeps your clock."
