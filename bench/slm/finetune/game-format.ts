@@ -55,6 +55,9 @@ export function replayStates(game: Runtime, scenarios: Scenario[]): Map<string, 
   return states;
 }
 
+/** A probe the live /play endpoint would refuse; it is skipped and counted, not converted. */
+export class OutOfBounds extends Error {}
+
 export function gameContext(game: Runtime, scenario: Scenario, probe: Probe, state: State): PlayContext {
   const { inspection, minuteOfDay, dossier } = state;
   const history: PlayContext['history'] = [];
@@ -74,9 +77,9 @@ export function gameContext(game: Runtime, scenario: Scenario, probe: Probe, sta
     history: history.slice(-3),
     facts: game.villagerFacts({ ...inspection, beliefs }, minuteOfDay),
   };
-  if (!game.readPlayContext(context)) throw new Error(`Context exceeds /play bounds: ${probe.id}`);
+  if (!game.readPlayContext(context)) throw new OutOfBounds(`Context exceeds /play bounds: ${probe.id}`);
   if (!probe.utterance.trim() || probe.utterance.length > 280 || /[\u0000-\u001f\u007f]/u.test(probe.utterance)) {
-    throw new Error(`Utterance exceeds /play bounds: ${probe.id}`);
+    throw new OutOfBounds(`Utterance exceeds /play bounds: ${probe.id}`);
   }
   return context;
 }
@@ -90,7 +93,7 @@ export function convertExample(game: Runtime, example: TrainingExample, scenario
     { role: 'assistant', content: JSON.stringify({ reply: assistant.content, action: 'none', target: '' }) }] };
 }
 
-export async function convertSet(set: string, data = DATA): Promise<{ train: number; valid: number; out: string }> {
+export async function convertSet(set: string, data = DATA): Promise<{ train: number; valid: number; skipped: number; out: string }> {
   if (!/^[a-z0-9][a-z0-9_-]*$/i.test(set) || set.endsWith('-game')) throw new Error('Choose a source set name, for example act');
   const scenarios = new Map<string, Scenario>(), probes = new Map<string, Probe>();
   for await (const s of readJsonl<Scenario>(join(data, 'scenarios.jsonl'))) scenarios.set(s.id, s);
@@ -132,12 +135,16 @@ export async function convertSet(set: string, data = DATA): Promise<{ train: num
   const game = await loadGameRuntime();
   const states = replayStates(game, [...new Map(rows.map(r => [r.scenario.id, r.scenario])).values()]);
   const converted = { train: [] as TrainingExample[], valid: [] as TrainingExample[] };
-  for (const row of rows) converted[row.split].push(convertExample(game, row.example, row.scenario, row.probe, states.get(row.scenario.id)!));
+  let skipped = 0;
+  for (const row of rows) {
+    try { converted[row.split].push(convertExample(game, row.example, row.scenario, row.probe, states.get(row.scenario.id)!)); }
+    catch (error) { if (!(error instanceof OutOfBounds)) throw error; skipped++; }
+  }
   await mkdir(out, { recursive: true });
   for (const split of ['train', 'valid'] as const) {
     await writeFile(join(out, `${split}.jsonl`), converted[split].map(row => JSON.stringify(row)).join('\n') + (converted[split].length ? '\n' : ''));
   }
-  return { train: converted.train.length, valid: converted.valid.length, out };
+  return { train: converted.train.length, valid: converted.valid.length, skipped, out };
 }
 
 if (isMain(import.meta.url)) {
