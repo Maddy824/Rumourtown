@@ -4,7 +4,7 @@ Implemented brief items 1, 2, 3, 4, 6 and 7 under `bench/slm/`, plus npm scripts
 
 ## Deliverables
 
-- `scenarios.ts`, `types.ts`, `io.ts`: the real simulation, map, cast, claims and talk, loaded with the existing Vite benchmark approach. Seeds 1–200, three whispers, natural scheduled witnessing, inspection snapshots at ticks 0/180/420, persona and world-truth fields. One rotating cast member per seed/tick, with distinct general and held-out mechanism records.
+- `scenarios.ts`, `types.ts`, `io.ts`: the real simulation, map, cast, claims and talk, loaded with the existing Vite benchmark approach and an explicit library-source alias so fresh CI checkouts do not require a library dist build. Seeds 1–200, three whispers, natural scheduled witnessing, inspection snapshots at ticks 0/180/420, persona and world-truth fields. One rotating cast member per seed/tick, with distinct general and held-out mechanism records.
 - `probes.ts`: 48 reproducibly selected templates across all 12 stress axes, with complete requested sweeps, gold speech acts, history and explicit state overrides. Wording is fixed within each sweep. Larger contexts expose their actual size rather than manufacturing extra beliefs.
 - `providers.ts`: Ollama chat/schema support, Workers AI REST with the requested account and on-demand Wrangler OAuth configuration, schema-aware mock provider, injected transports, bounded requests, latency/token/throughput accounting and credential-safe failures. Sanitised protocol fixtures test request and response handling without network access.
 - `strategies.ts`: persona, grounded, cite, two-step plan, verifier-guided best-of-2/4/8, conditional 70B cascade and grammar-constrained citation. All generations and rejected candidates survive in output; malformed structures and invalid/uncited fact IDs fail the gate. World unfaithfulness alone does not reject a faithfully voiced false belief. Truth flags and unknown world facts never enter model prompts.
@@ -25,13 +25,13 @@ There are 450 training, 150 held-out-seed and 600 held-out-mechanism records. Al
 ## Validation
 
 - `npm run bench:slm:smoke`: **19 tests passed** in five files; includes the 30-probe × two-model-label × seven-method smoke with the test-only oracle substitute. Provider tests use fixture responses and temporary fake OAuth configuration, never the real credentials.
-- Native `node --experimental-strip-types bench/slm/run.ts` integration against mock providers and the controller's actual verifier import: **420 completed records, zero errors, zero skips**, all 12 axes and seven methods. Both `mock:qwen3:0.6b` and `mock:llama3.2:1b` contribute 210 records. Outputs and report are in `bench/slm/results/offline-final/`. A prior native 420-record run over pressure/facts also completed without errors.
+- Native `node --experimental-strip-types bench/slm/run.ts` integration against mock providers and the controller's actual verifier import: **420 completed records, zero errors, zero skips**, all 12 axes and seven methods, with training, held-out-seed and mechanism splits sampled. Both `mock:qwen3:0.6b` and `mock:llama3.2:1b` contribute 210 records. Outputs and report are in `bench/slm/results/offline-stratified/`. Prior native 420-record runs also completed without errors, including a byte-preserving resume of `offline-final/`.
 - Root `npm run typecheck`: passed.
 - Root `npm run build`: passed.
-- `node .github/workflows/check-bundle.mjs`: passed, 352,470 bytes gzipped against the 400,000-byte limit.
-- Root `npm test`: the first unrestricted run encountered timing failures in existing engine, regressions, night, research and talk tests under heavy worker contention. The initial benchmark configuration also timed out its export test. Benchmark tests were removed from the root suite and placed in their own one-worker configuration. A root rerun with `--maxWorkers=1 --no-file-parallelism` is being checked separately; final result will be recorded below.
+- `node .github/workflows/check-bundle.mjs`: passed, 352,778 bytes gzipped against the 400,000-byte limit on the latest build of the shared working tree.
+- Root `npm test -- --maxWorkers=1 --no-file-parallelism`: **939 tests passed in 78 files**. The first unrestricted run had 12 timing failures under heavy worker contention, including an initial benchmark export timeout. Benchmark tests were removed from the root suite and placed in their own one-worker configuration; the serialized root rerun passed all tests without changing any app test or timing threshold. The root Vitest configuration has no final diff.
 - Additional standalone strict TypeScript invocation reported only missing Node type definitions (`@types/node`, absent in this checkout). Root typechecking follows the existing workspace scope and does not cover Node benchmarks. No package was added in the offline sandbox.
-- Targeted diff whitespace check passed. Manual review checked every requested item, prompt truth separation, holdout leakage, schema failures, sample/cascade gates, resume integrity and error redaction. Important review fixes were applied: isolate simulation export checks, hold paraphrases fixed within sweeps, distinguish protocol acceptance from raw oracle faithfulness, and hash the verifier implementation behind its bridge.
+- Targeted diff whitespace check passed. Manual review checked every requested item, prompt truth separation, holdout leakage, schema failures, sample/cascade gates, resume integrity and error redaction. Important review fixes were applied: isolate simulation export checks, hold paraphrases fixed within sweeps, distinguish protocol acceptance from raw oracle faithfulness, hash the verifier implementation behind its bridge, stratify small selections across axes and held-out splits, and alias the library source for clean CI execution.
 
 ## Rulings and follow-up work
 
@@ -45,7 +45,9 @@ There are 450 training, 150 held-out-seed and 600 held-out-mechanism records. Al
 
 ## Commit handoff
 
-Staging the first explicit file group failed: `fatal: Unable to create '/Users/maddy/B2B/rumortown/.git/index.lock': Operation not permitted`. No commits, pushes or deployments were made. Existing uncommitted work and generated build-info files were preserved. No approval escalation was attempted.
+Staging the first explicit file group failed: `fatal: Unable to create '/Users/maddy/B2B/rumortown/.git/index.lock': Operation not permitted`. This task made no commits, pushes or deployments. Existing uncommitted work and generated build-info files were preserved. No approval escalation was attempted.
+
+During concurrent controller work, commit `0274084` recorded the npm/CI integration and an earlier version of this report with the owner's attribution. The harness implementation files remain untracked, and this report has later uncommitted updates. Preserve that controller commit; stage only remaining diffs when completing the groups below.
 
 Suggested explicit groups and plain commit messages, using `Madhav Sunil <94164709+Maddy824@users.noreply.github.com>` and no assistant trailers:
 
@@ -56,3 +58,7 @@ Suggested explicit groups and plain commit messages, using `Madhav Sunil <941647
 5. `25: record harness validation and remaining measurements` — this report.
 
 Do not stage the controller's verifier files, any `apps/` changes, generated build-info, or the ignored full datasets/results with these groups.
+
+STATUS: DONE
+
+Tests: 19 harness tests and 939 root tests passed; native 420-record mock integration, root typecheck, production build and bundle gate passed. Live model runs remain untested offline; commits are blocked by sandbox permissions.
