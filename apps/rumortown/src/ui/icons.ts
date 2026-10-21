@@ -41,36 +41,39 @@ export function postboxArt(): SVGSVGElement {
     svg('path', { d: 'M13.5 36a27 22 0 0 1 53 0', fill: 'none', stroke: 'rgba(246,240,228,.32)', 'stroke-width': 1.1, 'stroke-dasharray': '3 2.5' }));
 }
 
-/** The sun-dial: a paper half-disc whose shadow swings from 07:00 on the left to 22:00 on the right. */
+/**
+ * The sun-dial, drawn as a little paper dial plate seen at an angle: a gnomon stands on it, its shadow
+ * swings from the west rim at 07:00, through north at midday, to the east rim at 22:00, and the sun
+ * crosses the sky opposite the shadow.
+ */
 export function dialArt(): { root: SVGSVGElement; set: (fraction: number) => void } {
+  const cx = 22;
+  const cy = 19.5;
+  const rx = 19;
+  const ry = 7.4;
+  const at = (a: number, k: number): string => `${(cx + Math.cos(a) * rx * k).toFixed(2)} ${(cy + Math.sin(a) * ry * k).toFixed(2)}`;
   const ticks = [];
-  for (let i = 0; i <= 5; i++) {
-    const a = Math.PI + (i / 5) * Math.PI;
-    ticks.push(svg('path', {
-      d: `M${20 + Math.cos(a) * 14.5} ${21 + Math.sin(a) * 14.5}L${20 + Math.cos(a) * 17} ${21 + Math.sin(a) * 17}`,
-      stroke: '#2E2A22', 'stroke-width': 1.2, 'stroke-linecap': 'round',
-    }));
+  for (let i = 0; i <= 6; i++) {
+    const a = Math.PI + (i / 6) * Math.PI;
+    ticks.push(svg('path', { d: `M${at(a, 0.74)}L${at(a, 0.93)}`, stroke: '#2E2A22', 'stroke-width': 1, 'stroke-linecap': 'round' }));
   }
-  const shadow = svg('path', { d: 'M20 21L4.5 21', stroke: '#2E2A22', 'stroke-width': 2.4, 'stroke-linecap': 'round', opacity: 0.8 });
-  const sun = svg('circle', { cx: 20, cy: 3, r: 3, fill: '#D9A531', stroke: '#2E2A22', 'stroke-width': 0.9 });
-  const root = svg('svg', { class: 'dial', width: 40, height: 26, viewBox: '0 0 40 26', 'aria-hidden': 'true', focusable: 'false' },
-    svg('path', { d: 'M1.5 22.5a18.5 18.5 0 0 1 37 0z', fill: '#F6F0E4', stroke: '#2E2A22', 'stroke-width': 1.2 }),
-    svg('path', { d: 'M5 22.5a15 15 0 0 1 30 0', fill: 'none', stroke: 'rgba(46,42,34,.35)', 'stroke-width': 0.9, 'stroke-dasharray': '2 1.6' }),
+  const shadow = svg('path', { d: '', fill: 'rgba(46,42,34,.5)' });
+  const sun = svg('circle', { cx: 40, cy: 14, r: 2.7, fill: '#D9A531', stroke: '#2E2A22', 'stroke-width': 0.9 });
+  const root = svg('svg', { class: 'dial', width: 44, height: 28, viewBox: '0 0 44 28', 'aria-hidden': 'true', focusable: 'false' },
+    svg('ellipse', { cx, cy: cy + 1.6, rx: rx + 0.6, ry: ry + 0.4, fill: 'rgba(46,42,34,.22)' }),
+    svg('ellipse', { cx, cy, rx, ry, fill: '#F6F0E4', stroke: '#2E2A22', 'stroke-width': 1.2 }),
+    svg('ellipse', { cx, cy, rx: rx - 2.6, ry: ry - 1.4, fill: 'none', stroke: 'rgba(46,42,34,.32)', 'stroke-width': 0.8, 'stroke-dasharray': '1.8 1.4' }),
     ...ticks,
     shadow,
-    sun,
-    svg('circle', { cx: 20, cy: 21, r: 1.8, fill: '#2E2A22' }));
+    svg('path', { d: `M${cx} ${cy + 0.3}L${cx} ${cy - 10.5}L${cx + 5.2} ${cy + 0.3}Z`, fill: '#2E2A22' }),
+    sun);
   const set = (fraction: number): void => {
     const f = Math.min(1, Math.max(0, fraction));
-    // The sun climbs over the rim from the left; the gnomon's shadow swings the other way across the plate.
-    const sunA = Math.PI + f * Math.PI;
-    const shadowA = 2 * Math.PI - f * Math.PI;
-    const len = 13;
-    const sx = 20 + Math.cos(shadowA) * len;
-    const sy = 21 + Math.sin(shadowA) * len;
-    shadow.setAttribute('d', `M20 21L${sx.toFixed(2)} ${sy.toFixed(2)}`);
-    sun.setAttribute('cx', (20 + Math.cos(sunA) * 17.5).toFixed(2));
-    sun.setAttribute('cy', (21 + Math.sin(sunA) * 17.5).toFixed(2));
+    const a = Math.PI + f * Math.PI;
+    shadow.setAttribute('d', `M${cx} ${cy}L${at(a - 0.13, 0.9)}L${at(a + 0.13, 0.9)}Z`);
+    const s = 0.4 + f * (Math.PI - 0.8);
+    sun.setAttribute('cx', (cx + Math.cos(s) * 19.5).toFixed(2));
+    sun.setAttribute('cy', (cy - 1 - Math.sin(s) * 15.5).toFixed(2));
   };
   set(0);
   return { root, set };

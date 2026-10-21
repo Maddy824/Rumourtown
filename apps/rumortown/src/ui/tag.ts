@@ -157,16 +157,14 @@ export function createTag(ctx: TagContext): Tag {
     const items = shown.map((r) =>
       h('li', { class: 'rel' },
         h('button', { class: 'rel-who', type: 'button', 'aria-label': `${r.name}: open their tag`, onclick: () => ctx.onSelect(r.to) }, faceImg(r.to, lookOf(r.to), 28), h('span', null, r.name)),
-        h('div', { class: 'rel-bars' },
-          h('span', { class: 'bar-label' }, 'Trust'),
-          h('span', { class: 'bar bar-trust', role: 'img', 'aria-label': `Trust ${percent(r.trust)}`, style: `--v: ${clamp(r.trust, 0, 1).toFixed(3)}` }),
-          h('span', { class: 'bar-label' }, 'Liking'),
-          h('span', { class: 'bar bar-like', role: 'img', 'aria-label': `Liking: ${likingWord(r.affinity).toLowerCase()}`, style: `--v: ${clamp(r.affinity, -1, 1).toFixed(3)}` })),
+        h('span', { class: 'bar bar-trust', role: 'img', 'aria-label': `Trust ${percent(r.trust)}`, style: `--v: ${clamp(r.trust, 0, 1).toFixed(3)}` }),
+        h('span', { class: 'bar bar-like', role: 'img', 'aria-label': `Liking: ${likingWord(r.affinity).toLowerCase()}`, style: `--v: ${clamp(r.affinity, -1, 1).toFixed(3)}` }),
         r.why ? h('p', { class: 'rel-why' }, sentence(r.why)) : null));
+    const head = h('li', { class: 'rel rel-head', 'aria-hidden': 'true' }, h('span'), h('span', { class: 'bar-label' }, 'Trust'), h('span', { class: 'bar-label' }, 'Liking'));
     const more = ranked.length > SECTION_LIMIT
       ? h('button', { class: 'text-button', type: 'button', onclick: () => { showAll = !showAll; api.refresh(true); } }, showAll ? 'Show fewer' : `Show all ${ranked.length}`)
       : null;
-    return section('How I feel about people', items.length ? [h('ul', { class: 'rels' }, items), more] : empty('Nobody on my mind.'));
+    return section('How I feel about people', items.length ? [h('ul', { class: 'rels' }, head, items), more] : empty('Nobody on my mind.'));
   };
 
   const moodsEl = (ins: Inspection, now: number): HTMLElement => {
@@ -264,14 +262,17 @@ export function createTag(ctx: TagContext): Tag {
       }
       const w = el.offsetWidth;
       const hgt = el.offsetHeight;
-      if (p.anchor) {
-        const roomRight = p.width - (p.anchor.x + 36) - 12;
-        const wantSide: 'left' | 'right' = roomRight >= w ? 'right' : p.anchor.x - 36 - w >= 12 ? 'left' : roomRight >= p.anchor.x - 36 - w ? 'right' : 'left';
-        side = wantSide;
-        const x = side === 'right' ? p.anchor.x + 36 : p.anchor.x - 36 - w;
+      // Off-screen villagers keep the tag where it was; a first opening with nobody to hang from goes right.
+      const raw = p.anchor ?? (pos ? null : { x: p.width * 0.35, y: p.height / 2 });
+      if (raw) {
+        const a = { x: clamp(raw.x, 0, p.width), y: clamp(raw.y, p.top, p.bottom) };
+        const roomRight = p.width - (a.x + 36) - 12;
+        const roomLeft = a.x - 36 - w - 12;
+        side = roomRight >= w ? 'right' : roomLeft >= 0 ? 'left' : roomRight >= roomLeft ? 'right' : 'left';
+        const x = side === 'right' ? a.x + 36 : a.x - 36 - w;
         const target = {
           x: clamp(x, 12, p.width - 12 - w),
-          y: clamp(p.anchor.y - 40, p.top + 8, Math.max(p.top + 8, p.bottom - hgt - 8)),
+          y: clamp(a.y - 40, p.top + 8, Math.max(p.top + 8, p.bottom - hgt - 8)),
         };
         if (!pos || ctx.reducedMotion()) pos = target;
         else {

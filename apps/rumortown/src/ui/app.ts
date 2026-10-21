@@ -48,6 +48,8 @@ export interface AppDeps {
 
 export interface AppHandle {
   readonly sim: Simulation;
+  /** Where a villager (or 'stranger') stands on screen right now, in CSS pixels. For tests and tooling. */
+  locate(id: VillagerId | 'stranger'): { x: number; y: number } | null;
   destroy(): void;
 }
 
@@ -135,6 +137,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     role: 'application',
     'aria-label': 'The village. Arrow keys or W, A, S and D walk you one tile at a time. Enter opens the tag of the nearest villager. Space pauses.',
   });
+  const focusFrame = h('div', { class: 'rt-focus-frame', 'aria-hidden': 'true' });
   const stringPath = svg('path', { class: 'tag-string', d: '' });
   const strings = svg('svg', { class: 'rt-strings', 'aria-hidden': 'true', focusable: 'false' }, stringPath);
   const bubbleLayer = h('div', { class: 'rt-bubbles', 'aria-hidden': 'true' });
@@ -219,6 +222,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     };
   })();
 
+  /** A note is about the moment it was said; anything opening over the village retires it. */
+  const hideToast = (): void => {
+    toast.hidden = true;
+  };
+
   const notePaused = (): void => {
     const now = performance.now();
     if (now - lastPausedNote < 4000) return;
@@ -253,8 +261,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     whisper: (listener, claimId) => doWhisper(listener, claimId),
     walkTo: (id) => walkToVillager(id),
     onOpenChange: (open) => {
-      if (open) hold('whisper');
-      else release('whisper');
+      if (open) {
+        hold('whisper');
+        hideToast();
+      } else release('whisper');
       syncScrim();
     },
   });
@@ -265,7 +275,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     reducedMotion,
     isPhone,
     onSelect: (id) => openTag(id, true),
-    onOpenChange: (open) => storyBtn.setAttribute('aria-expanded', String(open)),
+    onOpenChange: (open) => {
+      storyBtn.setAttribute('aria-expanded', String(open));
+      if (open) hideToast();
+    },
   });
   story.el.id = 'rt-story';
 
@@ -284,7 +297,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       scrubFar = false;
       release('scrub');
     },
-    onDrawerChange: () => undefined,
+    onDrawerChange: (open) => {
+      if (open) hideToast();
+    },
   });
 
   const share = createShare({
@@ -296,8 +311,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     shareState,
     interventions: () => interventions,
     onOpenChange: (open) => {
-      if (open) hold('share');
-      else release('share');
+      if (open) {
+        hold('share');
+        hideToast();
+      } else release('share');
       syncScrim();
     },
   });
@@ -313,7 +330,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   });
 
   const bottom = h('div', { class: 'rt-bottom' }, postbox, prompt, time.bar, time.tab);
-  root.append(canvas, strings, bubbleLayer, marker, top, bottom, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, rewind, toast, live);
+  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, bottom, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, rewind, toast, live);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
@@ -334,6 +351,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function openTag(id: VillagerId, focus: boolean, opener?: Element | null): void {
     closeSheetsForPhone('tag');
+    if (phone) hideToast();
     tag.open(id, { focus, opener: opener ?? document.activeElement });
   }
 
@@ -506,6 +524,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function showDayEnd(ev: DayEndEvent): void {
     hold('dayend');
+    hideToast();
     closeSheetsForPhone('');
     whisper.close();
     const whispered = interventions.some((i) => i.tick <= sim.tick);
@@ -637,7 +656,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       stepKey(dir);
       return;
     }
-    if (target !== canvas) return;
     if (ev.key === 'Enter') {
       ev.preventDefault();
       inspectNearest();
@@ -785,7 +803,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       const foot = vp ? project(vp) : null;
       const head = foot ? { x: foot.x, y: foot.y - cam.zoom * 0.75 } : null;
       const visible = head !== null && head.x > -10 && head.x < cam.width + 10 && head.y > 0 && head.y < cam.height - (phone ? cover : 0) - 8;
-      const eyelet = tag.place({ anchor: visible ? head : null, width: cam.width, height: cam.height, top: insets.top, bottom: cam.height - insets.bottom, dt });
+      const near = head !== null && head.x > -120 && head.x < cam.width + 120 && head.y > -120 && head.y < cam.height + 120;
+      const eyelet = tag.place({ anchor: near ? head : null, width: cam.width, height: cam.height, top: insets.top, bottom: cam.height - insets.bottom, dt });
       if (visible && head && eyelet) {
         const midX = (head.x + eyelet.x) / 2;
         const sag = Math.min(40, Math.hypot(eyelet.x - head.x, eyelet.y - head.y) * 0.18);
@@ -822,6 +841,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   return {
     get sim() {
       return sim;
+    },
+    locate(id) {
+      const p = id === 'stranger' ? lerp(prev?.player.pos ?? cur.player.pos, cur.player.pos, clamp(acc, 0, 1)) : positions.get(id);
+      return p ? renderer.project(p, rig.camera) : null;
     },
     destroy() {
       window.cancelAnimationFrame(rafId);

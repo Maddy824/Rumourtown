@@ -104,13 +104,14 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
           h('div', { class: 'walk-list' },
             nearest.map((v) =>
               h('button', { class: 'button button-quiet walk-to', type: 'button', onclick: () => { api.close(); ctx.walkTo(v.id); } },
-                faceImg(v.id, v.look, 24), `Walk to ${v.name}`)))),
-        h('label', { class: 'own-claim' }, h('span', null, 'Type your own (coming later)'), h('input', { type: 'text', disabled: true })));
+                faceImg(v.id, v.look, 24), `Walk to ${v.name}`)))));
+      form.dataset.empty = 'true';
       claimId = null;
       update();
       return;
     }
 
+    form.dataset.empty = 'false';
     const who = h('fieldset', { class: 'whisper-who' },
       h('legend', null, 'To'),
       h('div', { class: 'who-list' },
@@ -179,7 +180,10 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         ctx.layers.open({ id: 'whisper', el, modal: true, close: () => api.close() }, opts.opener);
         ctx.onOpenChange(true);
       }
-      const target = el.querySelector<HTMLElement>('.claim input:checked, .who input:checked, .walk-to, .close');
+      // Start at the top of the form: who, then what. With nobody in reach, the first walk-to button.
+      const target = ['.who input:checked', '.claim input:checked', '.walk-to', '.close']
+        .map((sel) => el.querySelector<HTMLElement>(sel))
+        .find((x): x is HTMLElement => x !== null);
       target?.focus({ preventScroll: true });
       el.querySelector('.claim input:checked')?.closest('.claim')?.scrollIntoView({ block: 'nearest' });
     },

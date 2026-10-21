@@ -23,12 +23,40 @@ export interface BubbleFrame {
 interface Bubble {
   id: VillagerId;
   el: HTMLDivElement;
-  name: HTMLElement;
+  copy: HTMLElement;
   text: HTMLElement;
   current: string;
   w: number;
   h: number;
   shownAt: number;
+}
+
+/** Horizontal padding of `.bubble-body`, kept in step with app.css. */
+const BUBBLE_PAD_X = 20;
+
+/**
+ * A wrapped bubble keeps its maximum width, leaving a ragged gap at the right. Balance the lines in CSS,
+ * then shrink the bubble to its longest line so the paper fits the words.
+ */
+function fit(b: Bubble): void {
+  b.el.style.width = '';
+  const range = document.createRange();
+  range.selectNodeContents(b.copy);
+  let left = Infinity;
+  let right = -Infinity;
+  const tops = new Set<number>();
+  for (const r of Array.from(range.getClientRects())) {
+    if (r.width === 0) continue;
+    left = Math.min(left, r.left);
+    right = Math.max(right, r.right);
+    tops.add(Math.round(r.top));
+  }
+  // Client rects include the pop-in animation's scale; undo it so the width is the laid-out width.
+  const body = b.copy.parentElement ?? b.el;
+  const scale = body.getBoundingClientRect().width / Math.max(1, body.offsetWidth) || 1;
+  if (tops.size > 1 && right > left) b.el.style.width = `${Math.ceil((right - left) / scale) + BUBBLE_PAD_X + 1}px`;
+  b.w = b.el.offsetWidth;
+  b.h = b.el.offsetHeight;
 }
 
 const MAX_BUBBLES = 6;
@@ -54,10 +82,15 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
   const make = (id: VillagerId, speaker: string, text: string, now: number): Bubble => {
     const name = h('b', { class: 'bubble-name' }, speaker);
     const body = h('span', { class: 'bubble-text' }, text);
-    const el = h('div', { class: 'bubble' }, h('div', { class: 'bubble-body' }, name, ' ', body, h('i', { class: 'bubble-tail' })));
+    const el = h('div', { class: 'bubble' },
+      h('div', { class: 'bubble-body' }, h('span', { class: 'bubble-copy' }, name, ' ', body), h('i', { class: 'bubble-tail' })));
     layer.appendChild(el);
-    return { id, el, name, text: body, current: text, w: el.offsetWidth, h: el.offsetHeight, shownAt: now };
+    const copy = el.querySelector<HTMLElement>('.bubble-copy') ?? el;
+    const b: Bubble = { id, el, copy, text: body, current: text, w: 0, h: 0, shownAt: now };
+    fit(b);
+    return b;
   };
+  let lastFar: boolean | null = null;
 
   return {
     boost(id, ms) {
@@ -70,7 +103,11 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
     },
     update(f) {
       layer.dataset.far = f.far ? 'true' : 'false';
-      const candidates: { id: VillagerId; name: string; text: string; x: number; y: number; score: number }[] = [];
+      if (lastFar !== f.far) {
+        lastFar = f.far;
+        for (const b of shown.values()) fit(b);
+      }
+      const candidates: { id: VillagerId; name: string; text: string; x: number; y: number; foot: number; score: number }[] = [];
       for (const v of f.cur.villagers) {
         const existing = shown.get(v.id);
         let text = v.bubble?.text ?? null;
@@ -79,13 +116,14 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         const pos = f.positions.get(v.id) ?? v.pos;
         const p = f.project(pos);
         const headY = p.y - f.camera.zoom * (f.far ? 0.7 : 0.95) - 3;
-        if (p.x < -20 || p.x > f.camera.width + 20 || headY < f.topLimit + 24 || headY > f.bottomLimit) continue;
+        const foot = p.y + f.camera.zoom * (f.far ? 0.2 : 0.3) + 3;
+        if (p.x < -20 || p.x > f.camera.width + 20 || p.y < -6 || headY > f.bottomLimit) continue;
         let score = Math.hypot(pos.x - f.player.x, pos.y - f.player.y);
         score -= v.tier === 'core' ? 3 : v.tier === 'regular' ? 1 : 0;
         if (v.id === f.selected) score -= 50;
         if (v.id === boostId && f.now < boostUntil) score -= 100;
         if (existing) score -= 1.5;
-        candidates.push({ id: v.id, name: v.name, text, x: p.x, y: headY, score });
+        candidates.push({ id: v.id, name: v.name, text, x: p.x, y: headY, foot, score });
       }
       candidates.sort((a, b) => a.score - b.score);
       const cap = f.far ? (f.compact ? 2 : 4) : MAX_BUBBLES;
@@ -109,8 +147,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
           b.text.textContent = c.text;
           b.current = c.text;
           b.shownAt = f.now;
-          b.w = b.el.offsetWidth;
-          b.h = b.el.offsetHeight;
+          fit(b);
         }
         if (lastText.get(c.id) !== c.text) {
           lastText.set(c.id, c.text);
@@ -119,18 +156,31 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         const w = b.w;
         const hgt = b.h;
         let left = clamp(c.x - w / 2, 8, f.camera.width - 8 - w);
+        const overlaps = (t: number) => placed.find((r) => left < r.x + r.w + 4 && left + w + 4 > r.x && t < r.y + r.h + 4 && t + hgt + 4 > r.y);
         let top = c.y - hgt - 7;
         for (let tries = 0; tries < 4; tries++) {
-          const hit = placed.find((r) => left < r.x + r.w + 4 && left + w + 4 > r.x && top < r.y + r.h + 4 && top + hgt + 4 > r.y);
+          const hit = overlaps(top);
           if (!hit) break;
           top = hit.y - hgt - 6;
         }
+        // No room above (the top strip is in the way): hang the bubble under their feet instead.
+        let flip = false;
         if (top < f.topLimit) {
-          b.el.style.visibility = 'hidden';
-          continue;
+          flip = true;
+          top = Math.max(c.foot + 7, f.topLimit);
+          for (let tries = 0; tries < 4; tries++) {
+            const hit = overlaps(top);
+            if (!hit) break;
+            top = hit.y + hit.h + 6;
+          }
+          if (top + hgt > f.bottomLimit) {
+            b.el.style.visibility = 'hidden';
+            continue;
+          }
         }
         b.el.style.visibility = '';
-        const detached = top + hgt + 7 < c.y - 2;
+        b.el.dataset.flip = flip ? 'true' : 'false';
+        const detached = flip ? top > c.foot + 9 : top + hgt + 7 < c.y - 2;
         b.el.dataset.detached = detached ? 'true' : 'false';
         placed.push({ x: left, y: top, w, h: hgt });
         left = Math.round(left);
