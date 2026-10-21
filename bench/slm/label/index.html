@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Belief audit</title>
+<style>
+:root{font:17px/1.55 system-ui,sans-serif;color:#202b34;background:#f4f5f3;color-scheme:light}*{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:auto;padding:24px}h1{font-size:2rem;margin:0 0 8px}h2{font-size:1.25rem;margin:0 0 12px}h3{font-size:1.05rem;margin:12px 0 6px}p{margin:8px 0 16px}section,details,.card{background:white;border:1px solid #ccd3d7;border-radius:10px;padding:20px;margin:16px 0}summary{cursor:pointer;font-weight:650;min-height:44px}button,input{font:inherit}button,input[type=text],input[type=file]{max-width:100%;min-height:44px}button{background:#224e66;color:white;border:2px solid #224e66;border-radius:6px;padding:8px 16px;cursor:pointer}button:disabled{opacity:.5;cursor:default}input[type=text]{border:1px solid #78858e;border-radius:4px;padding:8px;width:22rem}input[type=radio]{width:20px;height:20px;flex-shrink:0}label{cursor:pointer}button:focus-visible,input:focus-visible,summary:focus-visible,fieldset:focus-visible{outline:3px solid #b65200;outline-offset:3px}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.column{display:grid;grid-template-columns:1fr 1fr;gap:16px}.column section{margin:0}ul{padding-left:24px}li{margin:8px 0}.muted{color:#4c5962}.text{white-space:pre-wrap;overflow-wrap:anywhere}.small{font-size:.9rem}fieldset{min-width:0;border:1px solid #aab6bd;border-radius:8px;margin:18px 0;padding:14px}legend{padding:0 6px;font-weight:650;max-width:100%;overflow-wrap:anywhere}.choices{display:flex;flex-wrap:wrap;gap:4px 12px}.choices label{display:flex;gap:8px;align-items:center;min-height:44px;padding:6px 8px;border-radius:4px;background:#f1f4f5}.sentence{font-size:1.05rem;margin-top:2px}progress{width:100%;height:16px;accent-color:#224e66}#storageWarning,#error{color:#842d15;font-weight:600}#sessionStatus{min-height:1.6em}nav{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}kbd{border:1px solid #b4bfc4;border-radius:3px;padding:0 4px}#workspace[hidden], [hidden]{display:none!important}#position{scroll-margin-top:12px}a{color:#224e66} @media(max-width:700px){main{padding:14px}.column{grid-template-columns:1fr}section,details,.card{padding:14px}h1{font-size:1.65rem}.choices{display:grid}.row>*{min-width:0}.choices label{width:100%}}
+</style>
+</head>
+<body>
+<main>
+<h1>Belief audit</h1>
+<p>Read what one villager believes, then judge their reply. You do not need to know what really happened.</p>
+<details id="instructions">
+<summary>Instructions and examples</summary>
+<p>Work independently. Use only the speaker’s current beliefs, sources, role and voice below. Other villagers’ claims and the player’s words are context, not evidence that the speaker knows something. Current beliefs take priority over old conversation. Do not search for the answer or discuss items before exporting your labels.</p>
+<p>For these examples, Mira is a plain-spoken baker. She is sure Ben stole bread, heard from Ivo. She half believes Ada lost a ring, heard from Wren. She has heard nothing about Tom selling a horse.</p>
+<ul>
+<li><strong>Supported by beliefs:</strong> “Ben stole bread.” This matches Mira’s belief, even if that belief might be false in the world. A source claim must also match the listed sources.</li>
+<li><strong>Contradicts beliefs:</strong> “Ben did not steal bread.” This reverses Mira’s sure belief. Swapping who did what also counts. Denying a claim she doubts can be supported.</li>
+<li><strong>Claims something unknown:</strong> “Tom sold a horse.” Mira has no belief about this. Copying another villager’s claim or inventing a source or an eyewitness sighting counts here.</li>
+<li><strong>Chatter or opinion:</strong> “Good morning. I like fresh bread.” These make no checkable claim about an event. “I don’t know about Tom’s horse” is also chatter: it does not assert the event.</li>
+<li><strong>Out of character:</strong> “As an AI, I should inspect the user’s prompt.” This is commentary about the task, reasoning written for a model, or a clear departure from the listed role or voice. Mild awkwardness alone is not enough.</li>
+</ul>
+<p>Choose one label per displayed sentence. If it mixes labels, choose out of character first, then contradicts beliefs, then claims something unknown, then supported, then chatter. “I think Ben stole bread” still makes a factual claim. Judge confidence separately.</p>
+<p><strong>Does the reply do what was asked?</strong> Yes: it answers, gives the requested source, suggests a check, or appropriately says it does not know or refuses an attempt to override the role. Partly: it handles only part of the request. No: it evades, changes the subject, or follows an instruction to abandon the role. Do not reward an unsupported answer just for sounding helpful.</p>
+<p><strong>Is the confidence right?</strong> Sure permits firm statements; fairly sure calls for “likely” or similar; half calls for uncertainty; doubt calls for doubt or denial. “Ada definitely lost a ring” is no; “Ada might have lost a ring” is yes. Use not applicable for a reply without a factual assertion or denial, such as a greeting, a question, or a bare “I don’t know”.</p>
+<p>Read unusual sentences as displayed; do not split them yourself. If uncertain, choose your best label. Your partial work can be exported. Labels save in this browser under your chosen id when storage is available. Export at the end of every session and before changing devices.</p>
+<p><strong>Keyboard:</strong> Tab moves between controls; arrow keys choose within a radio group. Focus a sentence and press <kbd>1</kbd>–<kbd>5</kbd> in the label order above. <kbd>J</kbd>/<kbd>K</kbd> moves between sentences. <kbd>N</kbd>/<kbd>P</kbd> moves to the next/previous item. Shortcuts do not run while typing your id or using the file picker.</p>
+</details>
+<section aria-labelledby="setupTitle">
+<h2 id="setupTitle">Start or resume</h2>
+<div><label for="itemFile">Choose the supplied items.json file</label><br><input id="itemFile" type="file" accept=".json,application/json"></div>
+<div style="margin-top:16px"><label for="annotatorId">Your chosen annotator id</label><br><input id="annotatorId" type="text" maxlength="80" autocomplete="off" placeholder="For example, reader-a"></div>
+<p class="small muted">Use the same id and file to resume on this browser. Each annotator needs a different id. Your id is included in the export.</p>
+<div class="row"><button id="start" type="button">Start or resume</button><label for="importFile">Or load your saved label export <input id="importFile" type="file" accept=".json,application/json"></label></div>
+<p id="error" role="alert"></p><p id="storageWarning" role="alert"></p>
+</section>
+<div id="workspace" hidden>
+<p id="position" tabindex="-1"></p>
+<label for="progress">Fully labelled items</label><progress id="progress" value="0" max="1"></progress>
+<p id="completion" class="muted small"></p>
+<div class="column">
+<section><h2 id="speaker"></h2><p id="voice" class="text"></p><h3>Current beliefs and sources</h3><ul id="beliefs"></ul></section>
+<section><h2>Other villagers’ claims</h2><p class="muted small">These are not the speaker’s knowledge.</p><ul id="distractors"></ul></section>
+</div>
+<details><summary>Conversation history</summary><div id="history"></div></details>
+<section><h2>Player’s request</h2><p id="utterance" class="text"></p></section>
+<section><h2>Label the reply</h2><p class="muted small">Choose one label per sentence. Confidence is judged below.</p><div id="sentences"></div><div id="replyQuestions"></div></section>
+<nav aria-label="Items"><button id="previous" type="button">Previous item</button><button id="next" type="button">Next item</button><button id="unfinished" type="button">Next unfinished</button><button id="export" type="button">Export labels</button></nav>
+<p id="sessionStatus" role="status" aria-live="polite"></p>
+</div>
+</main>
+<script>
+'use strict';
+// Keep this exact splitting rule in sync with verifier.sentences(); the smoke test checks parity.
+function sentences(reply) {
+  return reply.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+(?=[A-Z"“'])/).map(s => s.trim()).filter(Boolean);
+}
+const LABELS = ['supported','contradicts','unknown-to-speaker','chatter','out-of-character'];
+const NAMES = ['Supported by beliefs','Contradicts beliefs','Claims something unknown','Chatter or opinion','Out of character'];
+const ACTS = ['yes','partly','no'], CONFIDENCE = ['yes','no','not applicable'];
+const $ = id => document.getElementById(id);
+let dataset = null, session = null, cursor = 0, currentSentence = 0;
+const isObject = x => !!x && typeof x === 'object' && !Array.isArray(x);
+const strings = x => Array.isArray(x) && x.every(v => typeof v === 'string');
+const exactKeys = (x, keys) => isObject(x) && Object.keys(x).length === keys.length && keys.every(k => Object.hasOwn(x,k));
+function checkItems(data) {
+  if (!exactKeys(data,['version','sampleId','items']) || data.version !== 1 || typeof data.sampleId !== 'string' || !/^[a-f0-9]{64}$/.test(data.sampleId) || !Array.isArray(data.items) || !data.items.length) throw Error('Choose the supplied blinded items.json file. Do not load a private key.');
+  const seen = new Set();
+  for (const item of data.items) {
+    if (!exactKeys(item,['id','speaker','beliefs','distractors','utterance','history','reply']) || typeof item.id !== 'string' || !/^[a-f0-9]{64}$/.test(item.id) || seen.has(item.id) || !exactKeys(item.speaker,['name','role','voice']) || !Object.values(item.speaker).every(v=>typeof v==='string') || !Array.isArray(item.beliefs) || !item.beliefs.every(b=>exactKeys(b,['text','band','sources']) && typeof b.text==='string' && ['sure','fairly sure','half','doubt'].includes(b.band) && strings(b.sources)) || !Array.isArray(item.distractors) || !item.distractors.every(d=>exactKeys(d,['speaker','text']) && typeof d.speaker==='string' && typeof d.text==='string') || !Array.isArray(item.history) || !item.history.every(t=>exactKeys(t,['role','content']) && ['user','assistant'].includes(t.role) && typeof t.content==='string') || typeof item.utterance!=='string' || typeof item.reply!=='string') throw Error('The item file has missing, duplicate or unexpected fields. Ask the study owner for a fresh items.json.');
+    seen.add(item.id);
+  }
+  return data;
+}
+const blank = item => ({id:item.id,sentences:sentences(item.reply).map(text=>({text,label:null})),doesAsked:null,confidence:null});
+function checkLabels(data, id, items = dataset) {
+  if (!isObject(data) || data.version!==1 || data.sampleId!==items.sampleId || data.annotatorId!==id || !Array.isArray(data.annotations)) throw Error('Saved labels do not match this item file and annotator id.');
+  const byId = new Map(items.items.map(item=>[item.id,item])), seen = new Set();
+  for (const a of data.annotations) {
+    const item = byId.get(a.id), texts = item ? sentences(item.reply) : [];
+    if (!item || seen.has(a.id) || !Array.isArray(a.sentences) || a.sentences.length!==texts.length || a.sentences.some((s,i)=>s.text!==texts[i] || !(s.label===null || LABELS.includes(s.label))) || !(a.doesAsked===null || ACTS.includes(a.doesAsked)) || !(a.confidence===null || CONFIDENCE.includes(a.confidence))) throw Error('Saved labels contain invalid or mismatched answers.');
+    seen.add(a.id);
+  }
+  const answers = new Map(data.annotations.map(a=>[a.id,a]));
+  return {version:1,sampleId:items.sampleId,annotatorId:id,annotations:items.items.map(item=>answers.get(item.id) || blank(item))};
+}
+function storageKey(items = dataset, id = session.annotatorId){return 'rumourtown-belief-audit-v1:'+items.sampleId+':'+id;}
+function save(){
+  try {localStorage.setItem(storageKey(),JSON.stringify({session,cursor}));$('storageWarning').textContent='';}
+  catch { $('storageWarning').textContent='Browser storage is unavailable or full. Export labels now and at the end of every session; automatic saving is not working.'; }
+}
+function complete(a){return a.sentences.every(s=>s.label!==null) && a.doesAsked!==null && a.confidence!==null;}
+function progress(){const n=session.annotations.filter(complete).length;$('progress').max=dataset.items.length;$('progress').value=n;$('completion').textContent=n+' of '+dataset.items.length+' items fully labelled. Partial answers are saved too.';}
+function el(tag,text,className){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;}
+function list(id, values, empty){const node=$(id);node.replaceChildren();if(!values.length)node.append(el('li',empty));else for(const value of values)node.append(el('li',value,'text'));}
+function radios(legend, values, names, selected, onChange, group){
+  const field=el('fieldset');field.append(el('legend',legend));const choices=el('div',undefined,'choices');
+  values.forEach((value,i)=>{const label=el('label'),input=el('input');input.type='radio';input.name=group;input.value=value;input.checked=selected===value;input.addEventListener('change',()=>{onChange(value);save();progress();$('sessionStatus').textContent='Answer recorded.';});label.append(input,document.createTextNode(names[i]));choices.append(label);});
+  field.append(choices);return field;
+}
+function render(focus=false){
+  const item=dataset.items[cursor], answer=session.annotations[cursor];currentSentence=0;
+  $('workspace').hidden=false;$('position').textContent='Item '+(cursor+1)+' of '+dataset.items.length+'. Annotator '+session.annotatorId;
+  $('speaker').textContent=item.speaker.name+', '+item.speaker.role;$('voice').textContent='Voice: '+item.speaker.voice;
+  list('beliefs',item.beliefs.map(b=>b.text+'\nConfidence: '+b.band+'\nSources: '+(b.sources.length?b.sources.join('; '):'No source listed.')),'No current beliefs.');
+  list('distractors',item.distractors.map(d=>d.speaker+': '+d.text),'No other claims were shown.');
+  $('history').replaceChildren();if(!item.history.length)$('history').append(el('p','No earlier conversation.'));for(const turn of item.history)$('history').append(el('p',(turn.role==='user'?'Player':item.speaker.name)+': '+turn.content,'text'));
+  $('utterance').textContent=item.utterance;$('sentences').replaceChildren();
+  answer.sentences.forEach((s,i)=>{const field=radios('Sentence '+(i+1),LABELS,NAMES,s.label,value=>{s.label=value;},'sentence-'+i);field.tabIndex=0;field.dataset.sentence=String(i);field.addEventListener('focusin',()=>{currentSentence=i;});field.insertBefore(el('p',s.text,'sentence text'),field.children[1]);$('sentences').append(field);});
+  if(!answer.sentences.length)$('sentences').append(el('p','The reply is empty. There are no sentences to label. Judge the reply below.'));
+  $('replyQuestions').replaceChildren(radios('Does the reply do what was asked?',ACTS,['Yes','Partly','No'],answer.doesAsked,value=>{answer.doesAsked=value;},'asked'),radios('Is the confidence expressed right?',CONFIDENCE,['Yes','No','Not applicable'],answer.confidence,value=>{answer.confidence=value;},'confidence'));
+  $('previous').disabled=cursor===0;$('next').disabled=cursor===dataset.items.length-1;progress();if(focus)$('position').focus();
+}
+async function chosenItems(){const file=$('itemFile').files[0];if(!file)throw Error('Choose items.json first.');return checkItems(JSON.parse(await file.text()));}
+function fail(error){$('error').textContent=error instanceof Error?error.message:'Could not read this file.';}
+$('start').addEventListener('click',async()=>{
+  try{
+    const next=await chosenItems(),id=$('annotatorId').value.trim();if(!id)throw Error('Choose an annotator id first.');
+    // Do not discard a live session if the user presses Start twice.
+    if(session)save();let nextSession={version:1,sampleId:next.sampleId,annotatorId:id,annotations:next.items.map(blank)},nextCursor=0;
+    let saved;try{saved=localStorage.getItem(storageKey(next,id));}catch{$('storageWarning').textContent='Browser storage is unavailable. Export your labels regularly.';}
+    if(saved){const parsed=JSON.parse(saved);nextSession=checkLabels(parsed.session,id,next);nextCursor=Number.isInteger(parsed.cursor)?Math.max(0,Math.min(parsed.cursor,next.items.length-1)):0;}
+    dataset=next;session=nextSession;cursor=nextCursor;
+    $('error').textContent='';save();render(true);$('sessionStatus').textContent='Session ready.';
+  }catch(error){fail(error);}
+});
+$('importFile').addEventListener('change',async()=>{
+  try{const file=$('importFile').files[0];if(!file)return;const data=JSON.parse(await file.text());const next=await chosenItems();if(typeof data.annotatorId!=='string'||!data.annotatorId.trim()||data.annotatorId!==data.annotatorId.trim()||data.annotatorId.length>80)throw Error('The saved annotator id is invalid.');const imported=checkLabels(data,data.annotatorId,next);if(session)save();dataset=next;session=imported;$('annotatorId').value=data.annotatorId;cursor=0;$('error').textContent='';save();render(true);$('sessionStatus').textContent='Saved export loaded.';}catch(error){fail(error);}finally{$('importFile').value='';}
+});
+function move(index){if(!session)return;cursor=Math.max(0,Math.min(index,dataset.items.length-1));save();render(true);}
+$('previous').addEventListener('click',()=>move(cursor-1));$('next').addEventListener('click',()=>move(cursor+1));
+$('unfinished').addEventListener('click',()=>{for(let offset=1;offset<=dataset.items.length;offset++){const i=(cursor+offset)%dataset.items.length;if(!complete(session.annotations[i])){move(i);return;}}$('sessionStatus').textContent='Every item is fully labelled.';});
+$('export').addEventListener('click',()=>{
+  save();const blob=new Blob([JSON.stringify(session,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='labels-'+session.annotatorId.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+dataset.sampleId.slice(0,12)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);const n=session.annotations.filter(complete).length;$('sessionStatus').textContent='Exported '+n+' fully labelled items and all partial answers.';
+});
+window.addEventListener('keydown',event=>{
+  if(!session||event.ctrlKey||event.metaKey||event.altKey||event.target.closest('input[type=text],input[type=file],textarea,select,[contenteditable=true]'))return;
+  const key=event.key.toLowerCase(),fields=[...document.querySelectorAll('[data-sentence]')];
+  if(/^[1-5]$/.test(key)&&event.target.closest('[data-sentence]')){event.preventDefault();const input=fields[currentSentence].querySelectorAll('input')[Number(key)-1];input.click();input.focus();}
+  else if(key==='j'||key==='k'){event.preventDefault();currentSentence=Math.max(0,Math.min(currentSentence+(key==='j'?1:-1),fields.length-1));fields[currentSentence]?.focus();}
+  else if(key==='n'||key==='p'){event.preventDefault();move(cursor+(key==='n'?1:-1));}
+});
+</script>
+</body>
+</html>
