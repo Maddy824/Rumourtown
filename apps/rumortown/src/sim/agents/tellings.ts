@@ -3,7 +3,7 @@
  * tellScore against tellThreshold, with the speech act it calls for), and whether a believer has
  * grounds to confront. Shared by decisions and by conversation lines.
  */
-import { tellScore, tellThreshold } from 'rumormind';
+import { deterministicLog, tellScore, tellThreshold } from 'rumormind';
 import type { GameClaim, SpeechAct, VillagerId } from '../types.js';
 import { nameOf, type Agent, type Ctx } from './context.js';
 import { ACCUSATION_COOLDOWN, CLOSE, MAX_ACCUSATIONS_PER_DAY } from './params.js';
@@ -110,7 +110,7 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
     const terms: Term[] = [
       { text: `${percent(confidence)} sure ${claim.text}`, value: base + 0.4 * confidence * factor },
       { text: listenerTerm, value: 0.4 * (0.3 * closenessSL - (listenerKnows ? 0.6 : 0) - (claim.valence < 0 ? 0.3 * closenessLT : 0)) * factor },
-      { text: claim.valence < 0 ? 'a harmful story draws attention' : 'a story worth hearing', value: 0.4 * ((claim.valence < 0 ? Math.log(ctx.tuning.negativitySharingOdds) : 0) + 0.2 * claim.severity / 3) * factor },
+      { text: claim.valence < 0 ? 'a harmful story draws attention' : 'a story worth hearing', value: 0.4 * ((claim.valence < 0 ? deterministicLog(ctx.tuning.negativitySharingOdds) : 0) + 0.2 * claim.severity / 3) * factor },
     ];
     if (act === 'defend') terms.push({ text: 'the truth sets the record straight', value: 0.25 });
     const uncapped = terms.reduce((sum, term) => sum + term.value, 0);

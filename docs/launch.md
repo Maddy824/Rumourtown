@@ -5,7 +5,7 @@ Prepared 21 October 2026. Publish after owner playtests, deployment and the live
 ## Show HN titles
 
 1. Show HN: A village of 24 people who remember where a rumor came from
-2. Show HN: Simulating three days of village gossip in 0.51 seconds
+2. Show HN: Simulating three days of village gossip in 0.53 seconds
 3. Show HN: Rumormind, a TypeScript belief engine tested in a 24-person village
 
 ## Show HN body
@@ -28,7 +28,7 @@ Use cuts between recorded moments rather than implying the whole day lasts fifte
 
 1. I built a village of 24 people who gossip. Tell Mira that Tom stole bread, trace the story through the town, then ask each person why they believed it. RumorTown runs in your browser. https://github.com/Maddy824/Rumourtown
 2. Two tellers can still be one source. RumorTown tracks remembered origins, corrections and trust in a deterministic social simulation. The belief engine is a zero-dependency TypeScript library. https://github.com/Maddy824/Rumourtown
-3. Three days of gossip, 24 villagers, about 0.51 seconds of simulation on my M4 Max. Rendering has its own budget. I published the code, measured results and a small belief engine here: https://github.com/Maddy824/Rumourtown
+3. Three days of gossip, 24 villagers, about 0.53 seconds of simulation on my M4 Max. Rendering has its own budget. I published the code, measured results and a small belief engine here: https://github.com/Maddy824/Rumourtown
 
 ## README GIF plan
 

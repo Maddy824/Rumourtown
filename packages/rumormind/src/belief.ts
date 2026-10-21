@@ -1,6 +1,7 @@
 import { type Claim, type ClaimId, type CharacterId, logit, sigmoid, clamp } from './claims.js';
 import { DEFAULT_TUNING, type Tuning } from './tuning.js';
 import type { Rng } from './rng.js';
+import { deterministicSqrt } from './math.js';
 
 export type EvidenceKind = 'heard' | 'saw' | 'corrected';
 
@@ -164,7 +165,7 @@ export class BeliefLedger {
   /** Illusory-truth bonus: nothing on the first hearing, then a slow power-law climb to the cap. */
   private familiarity(exposures: number): number {
     if (exposures <= 1) return 0;
-    return Math.min(this.tuning.familiarityCap, this.tuning.familiarityScale * Math.pow(exposures - 1, 0.25));
+    return Math.min(this.tuning.familiarityCap, this.tuning.familiarityScale * deterministicSqrt(deterministicSqrt(exposures - 1)));
   }
 
   /**

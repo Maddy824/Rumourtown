@@ -1,4 +1,5 @@
 export { createRng, type Rng } from './rng.js';
+export { deterministicExp, deterministicLog, deterministicSqrt, deterministicHypot, deterministicPow } from './math.js';
 export { DEFAULT_TUNING, type Tuning } from './tuning.js';
 export { type Claim, type ClaimId, type CharacterId, logit, sigmoid, clamp } from './claims.js';
 export { BeliefLedger, type Belief, type Provenance, type HearOptions, type HearResult, type EvidenceKind, type Correction } from './belief.js';

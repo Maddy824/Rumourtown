@@ -2,7 +2,7 @@
  * A stand-in Simulation for building the renderer and UI before the real engine lands.
  * Twenty-four villagers wander a generated map and chat nonsense. Deterministic per seed.
  */
-import { createRng } from 'rumormind';
+import { createRng, deterministicHypot } from 'rumormind';
 import type { ClaimId } from 'rumormind';
 import { readRegisteredClaim } from './registered-claim.js';
 import {
@@ -130,7 +130,7 @@ export function createFakeSimulation(seed = 1, replay: Intervention[] = []): Sim
   const stepBody = (pos: Vec2, target: Vec2, speed: number): { moving: boolean; facing: VillagerView['facing'] } => {
     const dx = target.x + 0.5 - pos.x;
     const dy = target.y + 0.5 - pos.y;
-    const dist = Math.hypot(dx, dy);
+    const dist = deterministicHypot(dx, dy);
     if (dist < 0.05) return { moving: false, facing: 's' };
     const s = Math.min(speed, dist);
     pos.x += (dx / dist) * s;
@@ -142,7 +142,7 @@ export function createFakeSimulation(seed = 1, replay: Intervention[] = []): Sim
   let pendingIndex = 0;
   const applyWhisper = (listener: VillagerId, claimId: ClaimId, force = false): boolean => {
     const b = bodies.find((x) => x.view.id === listener);
-    if (!b || !claims.has(claimId) || (!force && Math.hypot(b.view.pos.x - player.pos.x, b.view.pos.y - player.pos.y) > 2)) return false;
+    if (!b || !claims.has(claimId) || (!force && deterministicHypot(b.view.pos.x - player.pos.x, b.view.pos.y - player.pos.y) > 2)) return false;
     interventions.push({ tick, listener, claimId });
     threads.push({ from: 'stranger', to: listener, claimId, tick });
     events.push({ kind: 'whisper', tick, listener, claimId, witnesses: [] });
@@ -178,7 +178,7 @@ export function createFakeSimulation(seed = 1, replay: Intervention[] = []): Sim
         if (b.view.bubble && b.view.bubble.untilTick <= tick) b.view.bubble = undefined;
         if (tick >= b.nextTalk) {
           b.nextTalk = tick + 15 + Math.floor(rng() * 40);
-          const near = bodies.find((o) => o !== b && Math.hypot(o.view.pos.x - b.view.pos.x, o.view.pos.y - b.view.pos.y) < 3);
+          const near = bodies.find((o) => o !== b && deterministicHypot(o.view.pos.x - b.view.pos.x, o.view.pos.y - b.view.pos.y) < 3);
           const text = PHRASES[Math.floor(rng() * PHRASES.length)] as string;
           b.view.bubble = { text, untilTick: tick + 6, to: near?.view.id };
           events.push({ kind: 'line', tick, speaker: b.view.id, listeners: near ? [near.view.id] : [], act: 'smalltalk', text, lineId: `fake-${tick}` });

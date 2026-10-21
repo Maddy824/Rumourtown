@@ -3,6 +3,7 @@ import type { BeliefLedger, HearResult } from './belief.js';
 import type { Relationships } from './relationships.js';
 import { DEFAULT_TUNING, type Tuning } from './tuning.js';
 import type { Rng } from './rng.js';
+import { deterministicLog } from './math.js';
 
 export interface TellScoreInput {
   /** The speaker's confidence in the claim. Belief is the strongest driver of passing a rumor on. */
@@ -20,7 +21,7 @@ export interface TellScoreInput {
 
 /** A utility score in roughly 0..2. Above `tellThreshold` means the speaker brings it up. Weights are tuned. */
 export function tellScore(input: TellScoreInput, tuning: Tuning = DEFAULT_TUNING): number {
-  const negativity = input.valence < 0 ? Math.log(tuning.negativitySharingOdds) : 0;
+  const negativity = input.valence < 0 ? deterministicLog(tuning.negativitySharingOdds) : 0;
   return (
     input.confidence +
     negativity +

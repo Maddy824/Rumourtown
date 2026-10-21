@@ -1,5 +1,6 @@
 // Run from the repository root: node agent-tradeoff/reports/01-smoke.mjs
 import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { createServer } from 'vite';
 
 const server = await createServer({ configFile: false, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
@@ -17,6 +18,7 @@ try {
   });
   for (let tick = 0; tick < 900; tick++) sim.step();
   const events = sim.events(0);
+  if (process.argv[2]) writeFileSync(process.argv[2], JSON.stringify(events));
   const counts = {};
   const acts = {};
   for (const event of events) {

@@ -1,4 +1,5 @@
 import type { Mover, Place, Vec2, VillageMap, WorldApi } from '../types.js';
+import { deterministicHypot } from 'rumormind';
 
 interface Entry {
   tile: number;
@@ -66,7 +67,7 @@ export function createWorld(map: VillageMap): WorldApi {
     map,
     isWalkable,
     place,
-    distance: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
+    distance: (a, b) => deterministicHypot(a.x - b.x, a.y - b.y),
     findPath(from, to) {
       if (!isWalkable(from.x, from.y) || !isWalkable(to.x, to.y)) return null;
       const sx = Math.floor(from.x), sy = Math.floor(from.y);
@@ -138,7 +139,7 @@ export function createWorld(map: VillageMap): WorldApi {
       if (!spots.length) throw new Error(`Place has no standing spots: ${placeId}`);
       // Spots are tile addresses; occupied positions are interpolated world coordinates.
       const free = spots.filter((spot) =>
-        occupied.every((pos) => Math.hypot(spot.x + 0.5 - pos.x, spot.y + 0.5 - pos.y) >= 0.5));
+        occupied.every((pos) => deterministicHypot(spot.x + 0.5 - pos.x, spot.y + 0.5 - pos.y) >= 0.5));
       // The contract cannot express "no free spot"; fall back to the first spot.
       if (!free.length) return { ...spots[0]! };
       const index = Math.min(free.length - 1, Math.max(0, Math.floor(rng() * free.length)));
@@ -163,7 +164,7 @@ export function createMover(start: Vec2): Mover {
       path = tiles.map((tile) => ({ x: tile.x + 0.5, y: tile.y + 0.5 }));
       route = { ...this.pos };
       next = 0;
-      while (next < path.length && Math.hypot(path[next]!.x - route.x, path[next]!.y - route.y) < 1e-9) next++;
+      while (next < path.length && deterministicHypot(path[next]!.x - route.x, path[next]!.y - route.y) < 1e-9) next++;
       reached = next === path.length;
       this.moving = !reached;
     },
@@ -175,7 +176,7 @@ export function createMover(start: Vec2): Mover {
       while (next < path.length && budget > 0) {
         const target = path[next]!;
         const dx = target.x - route.x, dy = target.y - route.y;
-        const distance = Math.hypot(dx, dy);
+        const distance = deterministicHypot(dx, dy);
         if (distance < 1e-9) { next++; continue; }
         directionX = dx / distance;
         directionY = dy / distance;
@@ -201,7 +202,7 @@ export function createMover(start: Vec2): Mover {
       let push = 0;
       for (const other of others) {
         const dx = route.x - other.x, dy = route.y - other.y;
-        const distance = Math.hypot(dx, dy);
+        const distance = deterministicHypot(dx, dy);
         if (distance >= 0.6) continue;
         const side = dx * sideX + dy * sideY;
         push += (side < 0 ? -1 : 1) * (1 - distance / 0.6) * 0.15;

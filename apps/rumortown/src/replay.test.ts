@@ -47,7 +47,7 @@ describe('integrated village replay', () => {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(sim.events(0))));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
     console.log(`Replay SHA-256: ${hash}`);
-    expect(hash).toBe('d5b44d1cc69d48f865963192513b83b0244dad204b3183d20ec7b69dad8619f9');
+    expect(hash).toBe('96b3b00e49f8703f5360d43dcda137466c42bbbdc45be8386ce9e8e2e234f983');
     const replay = make(state.interventions);
     runTo(replay, 900);
     expect(replay.events(0)).toEqual(sim.events(0));

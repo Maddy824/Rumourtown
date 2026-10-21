@@ -268,6 +268,14 @@ implementation. Rows describe implemented library rules, not every planned game 
 
 ## Checks
 
+Simulation maths uses fixed-order `deterministicExp`, `deterministicLog`,
+`deterministicSqrt`, `deterministicHypot` and `deterministicPow` helpers. Native
+transcendental implementations can differ in their final bits across engines.
+The game pins the same raw replay hash in Node 22, Node 25 and a browser check;
+its CI runs the Node versions separately. `deterministicPow` supports nonnegative
+bases, which covers the model's familiarity and memory-decay rules. Renderers
+can continue using native `Math` for visual work.
+
 From the repository root:
 
 ```sh

@@ -35,7 +35,7 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 
 | # | Task | Status |
 |---|---|---|
-| 01 | Integration: wire the real engine, cast, dialogue, renderer and UI | blocked on Git writes; implementation verified; see reports/01-report.md |
+| 01 | Integration: wire the real engine, cast, dialogue, renderer and UI | done; integration committed and browser flow verified |
 | 02 | Verify and commit any uncommitted fix rounds | done; residual engine findings carried to 04 |
 | 03 | Final whole-branch review (read-only) | done; 10 Important findings, see report |
 | 04 | Fix the final review's findings | done; independent rereview ready to merge |

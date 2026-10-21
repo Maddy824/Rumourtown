@@ -1,3 +1,4 @@
+import { deterministicExp, deterministicLog } from './math.js';
 export type CharacterId = string;
 export type ClaimId = string;
 
@@ -16,6 +17,6 @@ export interface Claim {
   basePrior?: number;
 }
 
-export const logit = (p: number): number => Math.log(p / (1 - p));
-export const sigmoid = (l: number): number => 1 / (1 + Math.exp(-l));
+export const logit = (p: number): number => deterministicLog(p / (1 - p));
+export const sigmoid = (l: number): number => 1 / (1 + deterministicExp(-l));
 export const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x));

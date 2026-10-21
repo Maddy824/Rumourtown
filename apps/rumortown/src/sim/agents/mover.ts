@@ -4,6 +4,7 @@
  * this otherwise. Start is a world position; paths are integer tile addresses.
  */
 import type { Mover, Vec2 } from '../types.js';
+import { deterministicHypot } from 'rumormind';
 
 export function createMover(start: Vec2): Mover {
   let path: Vec2[] = [];
@@ -16,7 +17,7 @@ export function createMover(start: Vec2): Mover {
     setPath(tiles) {
       path = tiles.map((t) => ({ x: t.x + 0.5, y: t.y + 0.5 }));
       next = 0;
-      while (next < path.length && Math.hypot(path[next]!.x - mover.pos.x, path[next]!.y - mover.pos.y) < 1e-9) next++;
+      while (next < path.length && deterministicHypot(path[next]!.x - mover.pos.x, path[next]!.y - mover.pos.y) < 1e-9) next++;
       reached = next >= path.length;
       mover.moving = !reached;
     },
@@ -29,7 +30,7 @@ export function createMover(start: Vec2): Mover {
         const target = path[next]!;
         const dx = target.x - mover.pos.x;
         const dy = target.y - mover.pos.y;
-        const distance = Math.hypot(dx, dy);
+        const distance = deterministicHypot(dx, dy);
         if (distance < 1e-9) {
           next++;
           continue;
@@ -60,7 +61,7 @@ export function createMover(start: Vec2): Mover {
       for (const o of others) {
         const dx = mover.pos.x - o.x;
         const dy = mover.pos.y - o.y;
-        const d = Math.hypot(dx, dy);
+        const d = deterministicHypot(dx, dy);
         if (d >= 0.6) continue;
         const side = dx * sideX + dy * sideY;
         push += (side < 0 ? -1 : 1) * (1 - d / 0.6) * 0.15;

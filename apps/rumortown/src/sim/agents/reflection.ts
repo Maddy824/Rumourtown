@@ -3,6 +3,7 @@
  * dusk reflection that turns the day's most important event into one standing opinion.
  */
 import type { VillagerId } from '../types.js';
+import { deterministicPow } from 'rumormind';
 import { emit, recordDecision, relKey, type Agent, type Ctx } from './context.js';
 
 export function remember(ctx: Ctx, agent: Agent, importance: number, text: string, opinion: string, about?: VillagerId): void {
@@ -15,7 +16,7 @@ export function reflect(ctx: Ctx, agent: Agent): string {
   let bestScore = -Infinity;
   for (const m of agent.memories) {
     const hours = Math.max(0, ctx.tick - m.tick) / 60;
-    const score = m.importance * Math.pow(0.995, hours);
+    const score = m.importance * deterministicPow(0.995, hours);
     if (score > bestScore) {
       best = m;
       bestScore = score;

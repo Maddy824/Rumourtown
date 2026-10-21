@@ -9,12 +9,16 @@ permissions:
 
 jobs:
   check:
+    name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['22', '25']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -24,7 +28,7 @@ jobs:
         run: node .github/workflows/check-bundle.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: rumortown-dist
+          name: rumortown-dist-node-${{ matrix.node }}
           path: apps/rumortown/dist
           if-no-files-found: error
           retention-days: 14
