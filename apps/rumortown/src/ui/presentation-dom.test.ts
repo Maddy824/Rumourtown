@@ -97,20 +97,29 @@ it('moves the same Now bar into the phone sheet and returns it on close', () => 
   story.open(); expect(bar.parent?.attrs.get('class')).toContain('drawer-paper');
   story.close(); expect(bar.parent).toBe(home);
 });
-it('ends the arrival in 2.8 seconds even when no renderer or font signals readiness', async () => {
+it('waits indefinitely for a click, then plays the bounded arrival', async () => {
   vi.useFakeTimers(); const root = paperDocument();
   const arrival = createArrival(root as unknown as HTMLElement), ended = vi.fn();
   void arrival.start().then(ended);
+  await vi.advanceTimersByTimeAsync(60_000); expect(ended).not.toHaveBeenCalled();
+  expect(root.querySelector('.arrival')!.hidden).toBe(false);
+  root.querySelector('.arrival')!.dispatchEvent(new Event('click'));
   await vi.advanceTimersByTimeAsync(2799); expect(ended).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1); expect(ended).toHaveBeenCalledOnce();
   expect(root.dataset.arriving).toBeUndefined(); arrival.destroy();
 });
-it('skips on a tap and uses a single short cross-fade under reduced motion', async () => {
+it('also waits for a key under reduced motion and waits again on replay', async () => {
   vi.useFakeTimers(); const root = paperDocument(true);
   const arrival = createArrival(root as unknown as HTMLElement), ended = vi.fn();
   void arrival.start().then(ended);
+  await vi.advanceTimersByTimeAsync(60_000); expect(ended).not.toHaveBeenCalled();
+  const key = new Event('keydown', { cancelable: true }); Object.assign(key, { key: 'Enter' });
+  root.querySelector('.arrival')!.dispatchEvent(key);
+  expect(key.defaultPrevented).toBe(true);
   await vi.advanceTimersByTimeAsync(350); expect(ended).toHaveBeenCalledOnce();
   const skipped = vi.fn(); void arrival.start().then(skipped);
+  await vi.advanceTimersByTimeAsync(60_000); expect(skipped).not.toHaveBeenCalled();
+  root.querySelector('.arrival')!.dispatchEvent(new Event('click'));
   root.querySelector('.arrival')!.dispatchEvent(new Event('click'));
   await Promise.resolve(); expect(skipped).toHaveBeenCalledOnce(); arrival.destroy();
 });

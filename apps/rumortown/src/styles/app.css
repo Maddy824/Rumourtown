@@ -2566,7 +2566,7 @@ button.chain-actor:hover span {
   .rt .opening .card-actions { margin: 8px 0 0; display: inline-flex; }
 }
 
-/* Only the arrival orchestrates motion on load. Its timer never waits for fonts or layers. */
+/* The welcome waits for input; only then does the arrival animation start. */
 .arrival { position: fixed; inset: 0; z-index: 120; overflow: hidden; color: var(--paper); font-family: var(--font); }
 .arrival[hidden] { display: none; }
 .arrival-sky { position: absolute; inset: 0; background: var(--grain), linear-gradient(var(--denim) 0%, var(--oat) 85%); }
@@ -2590,7 +2590,7 @@ button.chain-actor:hover span {
 .arrival-playing .cloud-1, .arrival-playing .cloud-3 { animation-name: clouds-part-right; }
 .arrival-playing .arrival-puff { animation: paper-puff 2.8s ease-out both; }
 .rt[data-arriving='true'] > :not(.rt-world) { visibility: hidden; }
-.rt[data-arriving='true'] .rt-world { animation: village-rises 2.8s var(--ease-out) both; }
+.rt[data-arrival-playing='true'] .rt-world { animation: village-rises 2.8s var(--ease-out) both; }
 @keyframes stranger-landing { 0% { transform: translateY(-100dvh) rotate(-24deg); } 55% { transform: translateY(-32dvh) rotate(15deg); } 85% { transform: translateY(0) rotate(-4deg); } 92%, 100% { transform: translateY(0) rotate(0); } }
 @keyframes sky-parts { 0%, 35% { opacity: 1; } 85%, 100% { opacity: 0; } }
 @keyframes title-leaves { 0%, 50% { opacity: 1; } 78%, 100% { opacity: 0; transform: translateY(-12px); } }
@@ -2602,7 +2602,7 @@ button.chain-actor:hover span {
   .arrival-playing .arrival-stranger, .arrival-playing .felt-cloud, .arrival-playing .arrival-title, .arrival-playing .arrival-puff, .rt[data-arriving='true'] .rt-world { animation: none; }
   .arrival-playing .arrival-sky { animation: sky-parts .35s linear both; }
   .arrival .felt-cloud, .arrival .arrival-stranger { display: none; }
-  .arrival-title { opacity: 0; }
+  .arrival-playing .arrival-title { opacity: 0; }
 }
 .story-dare { white-space: nowrap; overflow-x: auto; padding: 5px 12px; }
 .story .dayend .card-paper { translate: none; rotate: none; }
@@ -2685,3 +2685,8 @@ button.chain-actor:hover span {
 
 .rt[data-layout='desk'] > .now-bar { top: auto; bottom: calc(92px + var(--safe-b)); }
 .rt[data-layout='phone'] > .now-bar { top: auto; bottom: calc(92px + var(--safe-b)); }
+
+/* Manual entry keeps the landing title visible for as long as the visitor wants. */
+.arrival:not(.arrival-playing) .arrival-stranger { visibility: hidden; }
+.arrival-skip { top: auto; right: auto; left: 50%; bottom: max(12%, calc(60px + var(--safe-b))); translate: -50% 0; white-space: nowrap; }
+.arrival-hint { position: absolute; left: 16px; right: 16px; bottom: max(4%, var(--safe-b)); margin: 0; text-align: center; font-size: 14px; color: var(--ink); background: var(--paper); padding: 8px; border-radius: 3px; }
