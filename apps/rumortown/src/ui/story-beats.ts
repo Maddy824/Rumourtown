@@ -62,7 +62,7 @@ export function storyTarget(ids: readonly string[], snapshot: import('../sim/typ
   return { x: points.reduce((n, p) => n + p.x, 0) / points.length, y: points.reduce((n, p) => n + p.y, 0) / points.length };
 }
 
-/** Keep the phone's Now sentence short without clipping the full beat in the rail. */
+/** Compact social actions, while keeping the actual story identifiable in the Now strip. */
 export function nowSentence(beat: StoryBeat, sim: Pick<Simulation, 'cast' | 'claims'>): string {
   if (beat.text.length <= 58) return beat.text.replace(/[.!?]?$/, '.');
   const name = (id: string): string => id === 'stranger' ? 'You' : (sim.cast.get(id)?.name ?? id).split(' ')[0]!;
@@ -71,7 +71,9 @@ export function nowSentence(beat: StoryBeat, sim: Pick<Simulation, 'cast' | 'cla
   if (beat.kind === 'apology') return `${name(from)} apologised to ${name(to)}.`;
   if (beat.kind === 'defence') return `${name(from)} defended ${name(to)}.`;
   if (beat.kind === 'confrontation') return `${name(from)} confronted ${name(to)}.`;
-  return `${name(from)} told ${name(to)} a village rumor.`;
+  const claimId = beat.event.kind === 'line' || beat.event.kind === 'whisper' ? beat.event.claimId : undefined;
+  const claim = claimId ? sim.claims.get(claimId) : undefined;
+  return claim ? `${name(from)} told ${name(to)}: “${claim.text}”.` : beat.text.replace(/[.!?]?$/, '.');
 }
 
 /** Frame both people even when an old telling's participants have since walked apart. */
@@ -83,4 +85,19 @@ export function storyZoom(ids: readonly string[], snapshot: import('../sim/types
   const spanX = Math.max(...xs) - Math.min(...xs) + 4;
   const spanY = Math.max(...ys) - Math.min(...ys) + 4;
   return Math.max(2, Math.floor(Math.min(40, Math.max(64, width) / spanX, Math.max(64, height) / spanY) * 4) / 4);
+}
+
+/** Player stories start at their whisper, including later corrections and exposure. */
+export function playerStoryEvents(events: readonly SimEvent[], sim: Pick<Simulation, 'claims'>): ReadonlySet<SimEvent> {
+  const introduced = new Set<string>(), own = new Set<SimEvent>();
+  for (const e of events) {
+    if (e.kind === 'whisper') introduced.add(e.claimId);
+    const claimId = e.kind === 'line' || e.kind === 'whisper' ? e.claimId : undefined;
+    const claim = claimId ? sim.claims.get(claimId) : undefined;
+    if (e.kind === 'day-end' || (claimId && (introduced.has(claimId) ||
+        (claim?.alternativeOf && introduced.has(claim.alternativeOf)) || claim?.contradicts?.some(id => introduced.has(id)))) ||
+        (e.kind === 'relationship' && e.to === 'stranger' && introduced.size > 0) ||
+        (e.kind === 'witness' && [...introduced].some(id => sim.claims.get(id)?.about === e.subject))) own.add(e);
+  }
+  return own;
 }

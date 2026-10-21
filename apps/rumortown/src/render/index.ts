@@ -26,7 +26,7 @@ import { BOARD_PAD } from './board.js';
 import { windOffset } from './wind.js';
 import { glowStep, refreshRooms } from './room-cache.js';
 import { idleFacing, idlePose, walkFrame } from './poses.js';
-import { buildingIcons, signposts } from '../content/map/wayfinding.js';
+import { buildingSignText, signposts } from '../content/map/wayfinding.js';
 
 export { fitZoom } from './camera.js';
 /** The close camera: CSS pixels per tile. */
@@ -105,8 +105,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       cork = null;
       tags.clear();
       for (const place of map.places) {
-        const name = place.name.replace(' home', '');
-        const icon = buildingIcons[place.kind] ?? '▤';
+        const name = buildingSignText(place, 40);
+        const icon = buildingSignText(place, 10);
         tags.set(`12:${name}`, paperTag(name, 12, dpr, grainTile));
         tags.set(`10:${icon}`, paperTag(icon, 10, dpr, grainTile));
       }
@@ -486,7 +486,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       if (!['home', 'bakery', 'inn', 'smithy', 'shop', 'chapel', 'school', 'mill'].includes(place.kind)) continue;
       if (!signVisible(place.kind, Math.hypot(place.door.x - playerX, place.door.y - playerY), phone)) continue;
       if (place.kind === 'home' && zoom < 24) continue;
-      const text = zoom < 24 ? buildingIcons[place.kind] ?? '▤' : place.name.replace(' home', '');
+      const text = buildingSignText(place, zoom);
       const x = view.ox + (place.door.x + .5) * zoom, y = view.oy + (place.door.y - .5) * zoom;
       if (x < -80 || x > camera.width + 80 || y < 0 || y > camera.height) continue;
       const tag = tags.get(`${zoom < 24 ? 10 : 12}:${text}`);

@@ -143,7 +143,8 @@ it('evaluates all 200 offline whispers and prints the real routing and accuracy 
   expect(acceptedCorrect / accepted).toBeGreaterThanOrEqual(.75);
   expect(abstained).toBe(out);
   const lexiconBytes = gzipSync(readFileSync('apps/rumortown/src/net/local-lexicons.ts', 'utf8')).byteLength +
-    gzipSync(readFileSync('apps/rumortown/src/net/blocklist.ts', 'utf8')).byteLength;
+    gzipSync(readFileSync('apps/rumortown/src/net/blocklist.ts', 'utf8')).byteLength +
+    gzipSync(readFileSync('apps/shared/moderation.ts', 'utf8')).byteLength;
   console.log(`Lexicons and blocklists: ${lexiconBytes} bytes gzip (source files summed)`);
   expect(lexiconBytes).toBeLessThan(12_000);
 });

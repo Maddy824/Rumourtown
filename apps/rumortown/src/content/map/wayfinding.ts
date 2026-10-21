@@ -1,5 +1,5 @@
 /** Presentation metadata only. Never changes walkability, places or the replay map. */
-import type { Vec2, VillageMap } from '../../sim/types.js';
+import type { Place, Vec2, VillageMap } from '../../sim/types.js';
 
 export const districtViews = [
   { id: 'old-village', name: 'Old village', ground: '#6B8E4E', trim: '#E8DCC3', tag: { x: 19, y: 7 }, door: { x: 17, y: 15 } },
@@ -24,3 +24,9 @@ export const signposts = [
   { x: 43, y: 36, arms: ['Farmland', 'Eastbank'] },
 ] as const;
 export const buildingIcons: Readonly<Record<string, string>> = { bakery: '♨', inn: '☕', mill: '☸', chapel: '♰', school: '▱', smithy: '⚒', shop: '▤' };
+
+const buildingSignLabels: Readonly<Record<string, string>> = { bakery: 'Bakery', inn: 'Inn', mill: 'Mill', chapel: 'Chapel', school: 'School', smithy: 'Forge', shop: 'Shop', home: 'Home' };
+/** Far-view signs use words so missing symbol glyphs cannot leave blank paper. */
+export function buildingSignText(place: Pick<Place, 'kind' | 'name'>, zoom: number): string {
+  return zoom < 24 ? buildingSignLabels[place.kind] ?? place.name : place.name.replace(' home', '');
+}

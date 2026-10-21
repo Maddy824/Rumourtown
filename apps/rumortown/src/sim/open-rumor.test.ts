@@ -46,3 +46,15 @@ describe('open rumor simulation', { timeout: 30000 }, () => {
     expect(readRegisteredClaim(claim.id, castMap)).toEqual(claim);
   });
 });
+
+it.each(['Tom said f.u.c.k', 'Tom said F U C K', 'Tom said n i g g e r'])('rejects blocked canonical stories and malicious replay payloads: %s', text => {
+  expect(() => createOpenClaim(text, neutralMeaning(), castMap)).toThrow();
+  const data = [text, null, null, 0, 2, ''];
+  const id = 'story_' + btoa(JSON.stringify(data)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  expect(readRegisteredClaim(id, castMap)).toBeNull();
+  const sim = createSimulation({ seed: 731, cast, claims, world: { ...createWorld(villageMap), createMover }, talk: createTalk(cast),
+    interventions: [{ tick: 0, listener: 'mira', claimId: id }] });
+  expect(sim.interventions()).toEqual([]);
+  expect(sim.claims.has(id)).toBe(false);
+  expect(sim.events(0).some(e => 'claimId' in e && e.claimId === id)).toBe(false);
+});

@@ -49,9 +49,9 @@ it('warms a fresh widget on reopen and focuses the listener on phone without ope
   view.ui.open(); expect(vi.mocked(loadTurnstile).mock.calls.at(-1)?.[1]).toBe(view.root.querySelector('.whisper-challenge'));
   focus.mockRestore();
 });
-it('offers walking rather than whispering to a sleeping resident', () => {
+it('explains when everyone is asleep without offering an unreachable listener', () => {
   const view = sheet(true, true);
   expect(view.root.querySelector('textarea')).toBeNull();
-  expect(view.root.querySelector('.walk-to')!.textContent).toBe('Asleep');
-  expect(view.root.querySelector('.walk-to')!.disabled).toBe(true);
+  expect(view.root.querySelector('.walk-to')).toBeNull();
+  expect(view.root.textContent).toContain('The village is asleep. Try again in the morning.');
 });

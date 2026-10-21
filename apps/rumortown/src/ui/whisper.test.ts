@@ -1,3 +1,5 @@
+import { exportRun } from '../research/model.js';
+import { villageMap } from '../content/map/index.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { neutralMeaning } from '../../../shared/open-rumor.js';
 import { cast, castVersion } from '../content/cast/index.js';
@@ -36,6 +38,20 @@ it('orders nearby listeners by distance and excludes sleeping people', () => {
   const snap = { player: { pos: { x: 0, y: 0 } }, villagers: [person('far', 7), person('tom', 2), { ...person('mira', 1), activity: 'sleep' }] } as WorldSnapshot;
   expect(nearbyPeople(snap).map(v => v.id)).toEqual(['mira', 'tom']);
   expect(inReach(snap).map(v => v.id)).toEqual(['tom']);
+});
+it('lists awake people beyond nearby sleepers in the night empty state', () => {
+  vi.stubGlobal('document', sheetDocument());
+  const sim = createFakeSimulation(731), snapshot = sim.snapshot(), walkTo = vi.fn();
+  snapshot.minuteOfDay = 1380; snapshot.player.pos = { x: 0, y: 0 };
+  snapshot.villagers = [{ ...person('mira', 1), activity: 'sleep' }, person('rosa', 30)];
+  const ui = createWhisperSheet({ sim: () => sim, snapshot: () => snapshot, isPhone: () => true, reducedMotion: () => true,
+    flow: { start: vi.fn() }, layers: { open() {}, closed() {} } as unknown as Layers,
+    whisper: () => false, walkTo, onOpenChange() {} });
+  ui.open();
+  const root = ui.el as unknown as TestElement;
+  expect(root.textContent).toContain('Most of the village is asleep. The inn is still awake.');
+  const walks = root.querySelectorAll('.walk-to'); expect(walks).toHaveLength(1);
+  walks[0]!.dispatchEvent(new Event('click')); expect(walkTo).toHaveBeenCalledWith('rosa');
 });
 describe('open story confirmation', () => {
   it('preserves the exact claim, discloses sharing, and registers only after confirmation', async () => {
@@ -109,4 +125,20 @@ describe('open story confirmation', () => {
     view.root.querySelectorAll('button').find(b => b.textContent === 'Leave people unassigned')!.dispatchEvent(new Event('click'));
     await view.submit(); expect(view.whispered).toHaveLength(1);
   });
+});
+
+it.each(['Tom said f.u.c.k', 'Tom said F U C K', 'Tom said s.e.x', 'Tom said n i g g e r'])('keeps a blocked draft local, out of inference, links and research: %s', async text => {
+  const view = sheet(); view.write(text);
+  await view.submit(); await view.submit();
+  expect(view.start).not.toHaveBeenCalled();
+  expect(view.whispered).toHaveLength(0);
+  expect(view.root.querySelector('textarea')!.value).toBe(text);
+  expect(view.root.querySelector('.whisper-feedback')!.textContent).toContain('stays on this device');
+  expect([...view.sim.claims.values()].some(c => c.text === text)).toBe(false);
+  const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: castVersion, interventions: view.sim.interventions() }))!;
+  expect(shared.interventions).toEqual([]);
+  expect(JSON.stringify(exportRun(view.sim, 731, castVersion, villageMap))).not.toContain(text);
+  view.start.mockResolvedValue({ source: 'neutral', meaning: neutralMeaning(), note: 'No AI' });
+  view.write('The moon is made of cheese');
+  await view.submit(); await view.submit(); expect(view.whispered).toHaveLength(1);
 });

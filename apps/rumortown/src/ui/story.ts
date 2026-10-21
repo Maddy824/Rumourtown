@@ -1,7 +1,7 @@
 /** The paper story rail reads the same event stream as timeline pins. */
 import type { createExchanges } from './exchanges.js';
 import type { SimEvent, Simulation, ThreadLink } from '../sim/types.js';
-import { eventKey, newestStoryEntries, storyBeat } from './story-beats.js';
+import { eventKey, newestStoryEntries, playerStoryEvents, storyBeat } from './story-beats.js';
 import { h } from './dom.js';
 import { faceImg } from './faces.js';
 import { ENDING_TITLE, sentence, tickLabel } from './format.js';
@@ -23,20 +23,24 @@ export function createStory(ctx: StoryContext) {
   const choose = h('select', { 'aria-label': 'Rumor to follow', class: 'chain-choose', hidden: true });
   const endingSlot = h('div', { class: 'rail-ending' });
   const dare = ctx.dare ? h('p', { class: 'story-dare' }, `Your dare: ${ctx.dare}`) : null;
-  const scroller = h('div', { class: 'drawer-scroll' }, endingSlot, choose, chain, empty, list);
+  const villageToggle = h('button', { type: 'button', class: 'button button-quiet village-stories', 'aria-pressed': 'false', onclick: () => {
+    village = !village; villageToggle.setAttribute('aria-pressed', String(village)); render();
+  } }, 'Include village stories');
+  const scroller = h('div', { class: 'drawer-scroll' }, endingSlot, villageToggle, choose, chain, empty, list);
   const expand = h('button', { class: 'text-button rail-expand', type: 'button', 'aria-expanded': 'false', onclick: () => api.setFull(el.dataset.full !== 'true') }, 'Expand');
   const paper = h('div', { class: 'drawer-paper card-ruled' },
     h('header', { class: 'drawer-head' }, h('div', { class: 'rail-heading' }, h('h2', { id: 'rt-story-title', class: 'drawer-title', tabindex: '-1' }, 'What’s happening'), expand,
       h('button', { class: 'close', type: 'button', 'aria-label': 'Close the story', onclick: () => api.close() }, closeIcon())), dare),
     scroller);
   const el = h('section', { class: 'drawer story', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'rt-story-title', hidden: true }, paper);
+  let village = false;
   let events: SimEvent[] = [], open = false, selected = '', chainKey = '', optionsKey = '';
   const expanded = new Set<string>();
   let handle: HTMLElement | undefined, home: HTMLElement | undefined;
   const face = (id: string, size = 28): HTMLImageElement => faceImg(id, ctx.sim().cast.get(id)?.look ?? 'stranger', size);
   function row(e: SimEvent): HTMLElement {
     const exchange = ctx.exchanges?.().byEvent.get(eventKey(e));
-    const beat = exchange?.beat ?? storyBeat(e, ctx.sim());
+    const beat = storyBeat(e, ctx.sim()) ?? exchange?.beat;
     const script = exchange ? h('details', { class: 'beat-script' }, h('summary', null, 'Read the exchange'), ...exchange.lines.map(line => h('p', null, h('strong', null, `${line.speaker === 'stranger' ? 'You' : ctx.sim().cast.get(line.speaker)?.name ?? line.speaker}: `), line.text))) : null;
     if (script && exchange) {
       script.open = expanded.has(exchange.id);
@@ -56,7 +60,16 @@ export function createStory(ctx: StoryContext) {
     const before = oldTop?.getBoundingClientRect().top;
     const stick = scroller.scrollTop < 8;
     const history = ctx.exchanges?.();
-    const entries = history ? events.filter(e => e.kind === 'day-end' || history.byEvent.get(eventKey(e))?.beat.event === e).reverse() : newestStoryEntries(events, ctx.sim());
+    const own = playerStoryEvents(events, ctx.sim());
+    const seen = new Set<string>();
+    const candidates = history ? events.filter(e => e.kind === 'day-end' || storyBeat(e, ctx.sim()) ||
+      history.byEvent.get(eventKey(e))?.beat.event === e).reverse() : newestStoryEntries(events, ctx.sim());
+    const entries = candidates.filter(e => village || own.has(e)).filter(e => {
+      const exchange = history?.byEvent.get(eventKey(e));
+      if (!exchange) return true;
+      if (seen.has(exchange.id)) return false;
+      seen.add(exchange.id); return true;
+    });
     list.replaceChildren(...entries.map(row));
     empty.hidden = list.childElementCount > 0;
     api.updateChain();
@@ -73,6 +86,7 @@ export function createStory(ctx: StoryContext) {
   choose.addEventListener('change', () => { selected = choose.value; chainKey = ''; api.updateChain(); ctx.onFollow?.(); });
   const api = {
     el, endingSlot,
+    includesVillage: () => village,
     setFull(full: boolean) { el.dataset.full = String(full); expand.textContent = full ? 'Lower' : 'Expand'; expand.setAttribute('aria-expanded', String(full)); },
     showEnding() { scroller.scrollTop = 0; },
     selectedClaim: () => selected,

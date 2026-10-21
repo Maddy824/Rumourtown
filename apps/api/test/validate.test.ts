@@ -56,3 +56,7 @@ describe('validation and moderation', () => {
     expect(actualCost(provider(good, { model: 'unknown' }), models, 1)).toBe(1);
   });
 });
+
+it.each(['f.u.c.k', 'F U C K', 'f-u-c-k', 'f u ck', 's.e.x', 'n i g g e r', 'f.a.g.g.o.t', 'p.o.r.n', 'n u d e s', 'ＦＵＣＫ'])('blocks normalized obfuscated text in the Worker: %s', text => {
+  expect(isBlocked(normalise(`Tom said ${text}`))).toBe(true);
+});

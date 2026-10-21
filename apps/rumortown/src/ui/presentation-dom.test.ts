@@ -3,8 +3,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { TestElement } from './whisper-dom.fixture.js';
 import { createFakeSimulation } from '../sim/fake.js';
 import { createStory } from './story.js';
+import { createExchanges } from './exchanges.js';
 import { createTimeControls } from './timebar.js';
 import { createArrival } from './arrival.js';
+import { createPlay } from './play.js';
+import { villageMap } from '../content/map/index.js';
 import { createOpening } from './opening.js';
 import type { Layers } from './layers.js';
 import type { SimEvent } from '../sim/types.js';
@@ -133,4 +136,64 @@ it('the short welcome offers immediate exploration or a walk to Mira', () => {
   guide.show(true);
   root.querySelectorAll('button').find(button => button.textContent === 'Meet Mira')!.dispatchEvent(new Event('click'));
   expect(showMe).toHaveBeenCalledOnce(); expect(guide.el.hidden).toBe(true);
+});
+
+it('hides village beats until the accessible story toggle is selected', () => {
+  paperDocument();
+  const sim = createFakeSimulation(731);
+  const story = createStory({ sim: () => sim, layers: stack(), reducedMotion: () => true, isPhone: () => false, history: () => [], onShow() {}, onOpenChange() {} });
+  story.reset([{ kind: 'line', tick: 1, speaker: 'mira', listeners: ['ben'], act: 'gossip', text: 'Village news', lineId: 'test', claimId: 'bread' }]);
+  story.open(); const root = story.el as unknown as PaperElement;
+  expect(root.querySelectorAll('.beat-card')).toHaveLength(0);
+  const toggle = root.querySelector('.village-stories')!;
+  toggle.dispatchEvent(new Event('click'));
+  expect(root.querySelectorAll('.beat-card')).toHaveLength(1);
+  expect(toggle.attrs.get('aria-pressed')).toBe('true');
+  toggle.dispatchEvent(new Event('click'));
+  expect(root.querySelectorAll('.beat-card')).toHaveLength(0);
+});
+
+it('opens phone Talk without the keyboard, holds only for typing, and releases on idle, send and close', () => {
+  vi.useFakeTimers(); paperDocument();
+  const typing = vi.fn(), opened = vi.fn();
+  const sim = createFakeSimulation(731);
+  const play = createPlay({ sim: () => sim, snapshot: () => sim.snapshot(), map: villageMap, layers: stack(), isPhone: () => true,
+    onTypingChange: typing, onOpenChange: opened, act() {}, rumors() {} });
+  play.open();
+  const root = play.el as unknown as PaperElement, input = root.querySelector('textarea')!;
+  expect(document.activeElement).toBe(root.querySelector('.close'));
+  expect(opened).toHaveBeenLastCalledWith(true);
+  expect(typing).toHaveBeenLastCalledWith(false);
+  input.value = 'walk to the inn'; input.dispatchEvent(new Event('input'));
+  expect(typing).toHaveBeenLastCalledWith(true);
+  vi.advanceTimersByTime(1499); expect(typing).toHaveBeenLastCalledWith(true);
+  vi.advanceTimersByTime(1); expect(typing).toHaveBeenLastCalledWith(false);
+  input.dispatchEvent(new Event('input'));
+  root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  expect(typing).toHaveBeenLastCalledWith(false);
+  input.dispatchEvent(new Event('compositionstart'));
+  vi.advanceTimersByTime(3000); expect(typing).toHaveBeenLastCalledWith(true);
+  input.dispatchEvent(new Event('compositionend'));
+  input.dispatchEvent(new Event('blur')); expect(typing).toHaveBeenLastCalledWith(false);
+  input.dispatchEvent(new Event('input')); play.close();
+  expect(typing).toHaveBeenLastCalledWith(false);
+  expect(opened).toHaveBeenLastCalledWith(false);
+  const calls = typing.mock.calls.length; vi.runAllTimers(); expect(typing.mock.calls).toHaveLength(calls);
+});
+
+it('keeps eyewitness exchanges connected to the player rumor in the filtered story rail', () => {
+  paperDocument();
+  const sim = createFakeSimulation(731);
+  const events: SimEvent[] = [
+    { kind: 'whisper', tick: 1, listener: 'mira', claimId: 'tom-stole-bread', witnesses: [] },
+    { kind: 'witness', tick: 20, villager: 'ben', subject: 'tom', what: 'Tom return the bread', secretId: 'bread' },
+  ];
+  // The stand-in claim may use a shorter id; supply the same authored subject for this exchange.
+  const claims = new Map(sim.claims); claims.set('tom-stole-bread', { id: 'tom-stole-bread', about: 'tom', kind: 'theft', text: 'Tom stole bread', severity: 2, valence: -1 });
+  const view = { ...sim, claims }, history = createExchanges(view); history.push(events);
+  const story = createStory({ sim: () => view, layers: stack(), reducedMotion: () => true, isPhone: () => false, history: () => [], exchanges: () => history, onShow() {}, onOpenChange() {} });
+  story.reset(events); story.open();
+  const root = story.el as unknown as PaperElement;
+  expect(root.querySelectorAll('.beat-card')).toHaveLength(2);
+  expect(root.querySelectorAll('.beat-card')[0]!.textContent).toContain('return the bread');
 });

@@ -3,6 +3,8 @@
  * The simulation steps at 2 game-minutes a second at 1× (4 at 2×, 16 at 8×, with readable rumor beats); the
  * renderer draws every animation frame, blending the previous and current snapshots.
  */
+import { createStatusLine } from './status-line.js';
+import { meetingPerson } from './awake.js';
 import { headAnchor, headLift } from './anchors.js';
 import { localStartTick } from './local-clock.js';
 import { createExchanges, followsExchange, focusedScript, longestChain, type StoryStats } from './exchanges.js';
@@ -28,7 +30,7 @@ import {
 import { createTrailHistory } from './rumor-trail.js';
 import type { Arrival } from './arrival.js';
 import type { PresentationOptions } from '../render/presentation.js';
-import { createHint, createRumorFocus } from './focus.js';
+import { createRumorFocus } from './focus.js';
 import { createOpening, finishOpeningDay } from './opening.js';
 import { createNameLabels } from './name-labels.js';
 import { createDistrictTrigger } from './district-banner.js';
@@ -40,7 +42,7 @@ import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js'
 import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
 import { faceImg } from './faces.js';
-import { nowSentence, storyBeat, storyTarget, storyZoom, type StoryBeat } from './story-beats.js';
+import { nowSentence, playerStoryEvents, storyBeat, storyTarget, storyZoom, type StoryBeat } from './story-beats.js';
 import { dialArt, postboxArt } from './icons.js';
 import { createLayers } from './layers.js';
 import { advanceTicks } from './loop.js';
@@ -258,15 +260,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let lastPausedNote = 0;
   let lastMinute = -1;
   let lastTimeKey = '';
-  let beats: StoryBeat[] = [];
+  let beats: StoryBeat[] = [], visibleBeats: StoryBeat[] = [];
+  let visibleBeatsKey = '';
   let exchanges = createExchanges(sim);
   const playback = createBeatPlayback(exchange => focusedScript(exchange, story.selectedClaim(), sim.claims));
   let searchingBeat = false;
   const storyStats = (): StoryStats => ({ beats: exchanges.all.filter(e => followsExchange(e, '', exchanges.introduced)).length, longestChain: longestChain(trailHistory.links) });
   const focus = createRumorFocus();
-  const hint = createHint(performance.now());
-  const dismissHint = (): void => hint.dismiss();
-  root.addEventListener('pointerdown', dismissHint, { once: true });
   const rumorSpeech = new Map<string, { text: string; claimId?: string }>();
   let spotlight: { ids: readonly string[]; until: number } | null = null;
   let followedClaim = '';
@@ -274,6 +274,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let destroyed = false;
   let awaitingArrival = !!deps.arrivalDone;
   const stitching = h('p', { class: 'stitching', role: 'status' }, 'Stitching the village…');
+  const loadingStatus = createStatusLine(stitching);
   if (awaitingArrival) holds.add('arrival');
   const positions = new Map<VillagerId, Vec2>();
 
@@ -315,6 +316,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   /** A note is about the moment it was said; anything opening over the village retires it. */
   const hideToast = (): void => {
     toast.hidden = true;
+    movementStatus.clear(); loadingStatus.clear();
   };
 
   const notePaused = (): void => {
@@ -362,8 +364,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     },
   });
 
-  const play = createPlay({ sim: () => sim, snapshot: () => cur, map, layers,
-    onOpenChange: open => { heldKeys.clear(); if (open) { hold('play'); hideToast(); } else release('play'); syncScrim(); },
+  let speedBeforeTalk: Speed = speed;
+  const play = createPlay({ isPhone, sim: () => sim, snapshot: () => cur, map, layers,
+    onTypingChange: typing => { if (typing) hold('play-typing'); else release('play-typing'); },
+    onOpenChange: open => {
+      heldKeys.clear();
+      if (open) { speedBeforeTalk = speed; setSpeed(.5); hideToast(); }
+      else { release('play-typing'); setSpeed(speedBeforeTalk); }
+      syncScrim(); measureInsets();
+    },
     rumors: () => whisper.open({ opener: postbox }),
     act: reply => {
       if (rewinding || sim.tick >= runTicks) { say('Start a new visit to act in the village.'); return; }
@@ -494,13 +503,17 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   } });
   for (const button of [researchBtn, shareBtn]) button.className = 'button button-quiet';
   const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'Tap a path to walk. Gold is you. Explore shows the whole town.');
+  const movementStatus = createStatusLine(movementHint);
   const agentText = h('span');
   const agentNotice = h('div', { class: 'agent-notice', hidden: true },
     h('span', { role: 'status', 'aria-live': 'polite' }, agentText),
     h('button', { type: 'button', class: 'button button-quiet', onclick: () => stopAgent() }, 'Take over'));
-  const opening = createOpening(layers, () => walkToVillager('mira'), () => tools.showHelp(moreBtn), open => {
+  const opening = createOpening(layers, () => {
+    const person = meetingPerson(cur, map);
+    if (person) walkToVillager(person.id); else guide.show('explore', postbox);
+  }, () => tools.showHelp(moreBtn), open => {
     if (open) hold('opening'); else release('opening');
-  });
+  }, () => meetingPerson(cur, map)?.name);
   async function replayArrival(): Promise<void> {
     if (!deps.arrival) { opening.show(true); return; }
     opening.close(); story.close(); whisper.close(); play.close(); tag.close(); time.closeDrawer();
@@ -518,7 +531,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function syncScrim(): void {
     scrim.hidden = !(whisper.isOpen() || play.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen());
-    scrim.dataset.strong = dayEnd.isOpen() || play.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
+    scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
   }
   scrim.addEventListener('click', () => {
     if (tools.isOpen()) tools.close();
@@ -590,7 +603,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     agentTour = null; agentNotice.hidden = true; delete root.dataset.agent;
     sim.movePlayer(tileOf(cur.player.pos)); cur = sim.snapshot();
     destination = null;
-    movementHint.textContent = 'You are in control. Tap a path to walk.';
+    movementStatus.show('You are in control. Tap a path to walk.');
     say('Local agent stopped. AI credits used: $0.');
   }
 
@@ -615,7 +628,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function walkTo(point: Vec2, automated = false): void {
     if (rewinding) return;
-    if (!automated) { stopAgent(); focus.move(); playback.reset(); spotlight = null; hint.dismiss(); }
+    if (!automated) { stopAgent(); focus.move(); playback.reset(); spotlight = null; }
     const requested = tileOf(point);
     const kind = map.tiles[requested.y * map.width + requested.x];
     if (kind === 'water') { say('The river is deep. Cross at the bridge.'); return; }
@@ -626,7 +639,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     keyTarget = null;
     const place = map.places.find(p => p.door.x === tile.x && p.door.y === tile.y);
     destination = { pos: { x: tile.x + .5, y: tile.y + .5 }, label: place?.name ?? 'your chosen spot' };
-    movementHint.textContent = `Walking to ${destination.label}.`;
+    movementStatus.show(`Walking to ${destination.label}.`);
     sim.movePlayer(tile);
     cur = sim.snapshot();
     markerAt = { pos: { x: tile.x + 0.5, y: tile.y + 0.5 }, until: performance.now() + 1400 };
@@ -634,15 +647,16 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   }
 
   function walkToVillager(id: VillagerId, rumor = false): void {
-    focus.move(); playback.reset(); spotlight = null; hint.dismiss();
+    focus.move(); playback.reset(); spotlight = null;
     stopAgent();
 
     const v = cur.villagers.find((x) => x.id === id);
     if (!v || rewinding) return;
+    if (v.activity === 'sleep') { say(`${v.name} is asleep. Look for someone awake at the inn.`); return; }
     heldKeys.clear();
     destination = null;
     follow = { id, whisper: true, rumor };
-    movementHint.textContent = `Walking to ${v.name}.`;
+    movementStatus.show(`Walking to ${v.name}.`);
     keyTarget = null;
     sim.movePlayer(tileOf(v.pos));
     resumeForWalk();
@@ -651,12 +665,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function followStep(): void {
     if (!follow) return;
     const v = cur.villagers.find((x) => x.id === follow?.id);
-    if (!v) {
+    if (!v || v.activity === 'sleep') {
       follow = null;
+      sim.movePlayer(tileOf(cur.player.pos));
       return;
     }
     const p = cur.player.pos;
     if (Math.hypot(v.pos.x - p.x, v.pos.y - p.y) <= 2) {
+      movementStatus.clear();
       const done = follow;
       follow = null;
       sim.movePlayer(tileOf(p));
@@ -672,7 +688,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function stepKey(dir: Vec2): void {
     if (rewinding) return;
-    focus.move(); playback.reset(); spotlight = null; hint.dismiss();
+    movementStatus.clear();
+    focus.move(); playback.reset(); spotlight = null;
     stopAgent();
     const p = cur.player.pos;
     const now = performance.now();
@@ -790,7 +807,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       cursor = { tick: 0, seen: 0 };
     }
     playback.reset(); exchanges = createExchanges(sim); exchanges.push(all); exchanges.expire(sim.tick);
-    beats = []; rumorSpeech.clear(); followedClaim = ''; followedCount = 0; recordBeats(all);
+    beats = []; visibleBeatsKey = ''; rumorSpeech.clear(); followedClaim = ''; followedCount = 0; recordBeats(all);
     return all;
   }
 
@@ -941,7 +958,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   };
   canvas.addEventListener('pointerdown', (ev) => {
     if (awaitingArrival || layers.anyModal()) return;
-    hint.dismiss();
+
     down = { ...canvasPoint(ev), id: ev.pointerId };
   });
   canvas.addEventListener('pointerup', (ev) => {
@@ -1046,7 +1063,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function sheetCover(): number {
     if (!phone) return 0;
     const sideRail = window.matchMedia('(orientation: landscape)').matches;
-    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [story.el, story.isOpen() && !sideRail], [time.drawer, time.isDrawerOpen()]] as const;
+    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [play.el, play.isOpen()], [story.el, story.isOpen() && !sideRail], [time.drawer, time.isDrawerOpen()]] as const;
     return Math.max(0, ...panels.filter(([, open]) => open).map(([el]) => rig.camera.height - el.getBoundingClientRect().top));
   }
 
@@ -1112,7 +1129,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (heldKeys.size && !layers.anyModal() && effectiveRate() > 0) stepKey([...heldKeys.values()].at(-1)!);
     if (destination && !cur.player.moving) {
       const arrived = Math.hypot(cur.player.pos.x - destination.pos.x, cur.player.pos.y - destination.pos.y) < .7;
-      movementHint.textContent = arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.';
+      movementStatus.show(arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.');
       destination = null;
 
     }
@@ -1151,7 +1168,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       followedCount = links.length;
     }
     resumeFollow.hidden = !focus.paused || !threadsOn;
-    movementHint.hidden = !hint.visible(now);
+    movementStatus.update(now); loadingStatus.update(now);
     rig.far = scrubFar;
     const sideRail = story.isOpen() && (!phone || window.matchMedia('(orientation: landscape)').matches);
     rig.setInsets({ top: insets.top, bottom: insets.bottom, left: 0, right: sideRail ? 332 : 0, sheet: cover });
@@ -1227,7 +1244,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       markerAt = null;
     }
 
-    const nextBeat = beats.at(-1) ?? null;
+    const filterKey = `${beats.length}/${story.includesVillage()}`;
+    if (filterKey !== visibleBeatsKey) {
+      visibleBeatsKey = filterKey;
+      const own = playerStoryEvents(beats.map(b => b.event), sim);
+      visibleBeats = story.includesVillage() ? beats : beats.filter(b => own.has(b.event));
+    }
+    const nextBeat = visibleBeats.at(-1) ?? null;
     const night = nightNow(cur, nextBeat?.event);
     const nowSentenceText = night.quiet ? 'The village sleeps' : nextBeat ? nowSentence(nextBeat, sim) : 'Whisper something and watch the agents react.';
     const awakeText = night.awake.length ? `Still awake: ${night.awake.join(', ')}` : '';
@@ -1247,10 +1270,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     nearbyNote.textContent = nearby ? `${nearby} nearby` : 'Find someone';
     postbox.dataset.reach = String(nearby > 0);
     const held = holds.size > 0 || rewinding;
-    const key = `${cur.tick}|${maxTick}|${speed}|${held}|${interventions.length}|${beats.length}`;
+    const key = `${cur.tick}|${maxTick}|${speed}|${held}|${interventions.length}|${beats.length}|${story.includesVillage()}`;
     if (key !== lastTimeKey) {
       lastTimeKey = key;
-      time.update({ tick: cur.tick, maxTick, runTicks, marks: interventions, beats, speed, held });
+      time.update({ tick: cur.tick, maxTick, runTicks, marks: interventions, beats: visibleBeats, speed, held });
     }
   }
 
@@ -1287,7 +1310,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       whisper.destroy();
       play.destroy();
       window.cancelAnimationFrame(rafId);
-      root.removeEventListener('pointerdown', dismissHint);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', clearKeys);

@@ -33,6 +33,31 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     expect(walking.snapshot().player.pos).not.toEqual(idle.snapshot().player.pos);
     expect(walking.events(0)).toEqual(idle.events(0));
   });
+  it('stops outside every private home while public buildings remain reachable', () => {
+    for (const home of villageMap.places.filter(p => p.kind === 'home')) {
+      const sim = make();
+      sim.movePlayer(home.spots[0]!);
+      for (let i = 0; i < 200; i++) sim.step();
+      const pos = sim.snapshot().player.pos;
+      expect(pos.x, home.id).toBeCloseTo(home.door.x + 0.5);
+      expect(pos.y, home.id).toBeCloseTo(home.door.y + 0.5);
+    }
+    const sim = make(), inn = villageMap.places.find(p => p.id === 'inn')!;
+    sim.movePlayer(inn.spots[0]!);
+    for (let i = 0; i < 100; i++) sim.step();
+    expect(sim.snapshot().player.pos).toEqual({ x: inn.spots[0]!.x + 0.5, y: inn.spots[0]!.y + 0.5 });
+  });
+
+  it('lets a replay that starts beside an awake resident leave their home', () => {
+    const sim = make([{ tick: 0, listener: 'mira', claimId: 'tom-stole-bread' }]);
+    const world = createWorld(villageMap), start = sim.snapshot().player.pos;
+    expect(world.placeAt(start)?.kind).toBe('home');
+    const square = world.place('square'); sim.movePlayer(square.door);
+    for (let i = 0; i < 200; i++) sim.step();
+    expect(sim.snapshot().player.pos.x).toBeCloseTo(square.door.x + .5);
+    expect(sim.snapshot().player.pos.y).toBeCloseTo(square.door.y + .5);
+  });
+
   it('pins seed 731 with one whisper at tick 60 after 1440 ticks', async () => {
     const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v4',
       interventions: [{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }] }))!;

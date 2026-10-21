@@ -1,4 +1,5 @@
 /** Whisper exact stories, then let the village decide what to believe. */
+import { blockedSharedText } from '../../../shared/moderation.js';
 import type { ClaimId } from 'rumormind';
 import { MAX_RUMOR_TEXT, neutralMeaning } from '../../../shared/open-rumor.js';
 import { rumorLibrary } from '../content/rumor-packs/index.js';
@@ -7,7 +8,7 @@ import { loadTurnstile, type TurnstileClient } from '../net/turnstile.js';
 import { createOpenClaim } from '../sim/registered-claim.js';
 import type { GameClaim, Simulation, VillagerId, VillagerView, WorldSnapshot } from '../sim/types.js';
 import { conceal, h, reveal } from './dom.js';
-import { CORE_PEOPLE } from './name-labels.js';
+import { awakePeople, isNight } from './awake.js';
 import { faceImg } from './faces.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
@@ -105,6 +106,11 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   };
   const submit = async (): Promise<void> => {
     if (!listener || busy) return;
+    if (ownText.trim() && blockedSharedText(ownText)) {
+      confirmed = null; confirmation.hidden = true;
+      feedback.textContent = 'This draft stays on this device. Edit the language before whispering or sharing.';
+      update(); return;
+    }
     if (ownText.trim() && !confirmed) {
       const requestRevision = revision;
       activeRevision = requestRevision; busy = true; update();
@@ -141,10 +147,9 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     const sim = ctx.sim(), snap = ctx.snapshot(), near = inReach(snap);
     listener = near.find(v => v.id === preferred)?.id ?? near[0]?.id ?? null;
     if (!near.length) {
-      const nearby = nearbyPeople(snap);
-      const listed = nearby.length ? nearby : snap.villagers.filter(v => (CORE_PEOPLE as readonly string[]).includes(v.id));
+      const listed = awakePeople(snap).slice(0, 8);
       content.replaceChildren(h('div', { class: 'nearby-people' },
-        h('p', { class: 'sheet-note' }, 'Walk closer to someone to whisper.'), listed.map(v => h('div', { class: 'nearby-person' },
+        h('p', { class: 'sheet-note' }, isNight(snap) && listed.length ? 'Most of the village is asleep. The inn is still awake.' : listed.length ? 'Walk closer to someone to whisper.' : 'The village is asleep. Try again in the morning.'), listed.map(v => h('div', { class: 'nearby-person' },
           faceImg(v.id, v.look, 34), h('span', null, h('strong', null, v.name), h('small', null, sim.cast.get(v.id)?.role ?? 'Neighbour')),
           h('button', { class: 'button button-quiet walk-to', type: 'button', disabled: v.activity === 'sleep',
             'aria-label': v.activity === 'sleep' ? `${v.name}, asleep` : `Walk to ${v.name}`,

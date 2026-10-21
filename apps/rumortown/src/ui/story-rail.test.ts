@@ -34,7 +34,7 @@ it('gives a complete short sentence to the Now bar when a full beat is long', as
   const event = whisper(1, 'mira');
   const beat = storyBeat(event, sim)!;
   beat.text = 'You told Mira that a very long story about the village and the coming fair was going around today';
-  expect(nowSentence(beat, sim)).toBe('You told mira a village rumor.');
+  expect(nowSentence(beat, sim)).toBe(beat.text + '.');
   expect(beat.text).toContain('a very long story');
 });
 it('zooms out enough to show both participants after they have walked apart', async () => {
@@ -44,4 +44,16 @@ it('zooms out enough to show both participants after they have walked apart', as
   expect(zoom).toBeLessThan(32);
   expect((24 - 2 + 4) * zoom).toBeLessThanOrEqual(336);
   expect((14 - 4 + 4) * zoom).toBeLessThanOrEqual(260);
+});
+
+it('names every library rumor in long Now beats rather than replacing it with generic gossip', async () => {
+  const { nowSentence } = await import('./story-beats.js');
+  const { rumorLibrary } = await import('../content/rumor-packs/index.js');
+  for (const { claim } of rumorLibrary.flatMap(pack => pack.stories)) {
+    const village = { cast: new Map(), claims: new Map([[claim.id, claim]]) };
+    const event = { kind: 'line', tick: 1, speaker: 'mira', listeners: ['ben'], act: 'gossip', text: claim.text, lineId: 'test', claimId: claim.id } as SimEvent;
+    const sentence = nowSentence(storyBeat(event, village)!, village);
+    expect(sentence).toContain(claim.text);
+    expect(sentence).not.toContain('a village rumor');
+  }
 });

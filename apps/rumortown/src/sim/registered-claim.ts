@@ -1,3 +1,4 @@
+import { blockedSharedText } from '../../../shared/moderation.js';
 import { readRumorMeaning, rumorText, type RumorMeaning } from '../../../shared/open-rumor.js';
 /** Canonical typed claims: the id carries taxonomy fields so v1 links can replay them offline. */
 import type { Dossier, GameClaim, VillagerId } from './types.js';
@@ -75,7 +76,7 @@ export const MAX_WRITTEN_TEXT = 100;
 export function createWrittenClaim(text: string, about: VillagerId, kind: GameClaim['kind'],
   severity: GameClaim['severity'], cast: ReadonlyMap<VillagerId, Dossier>): GameClaim {
   const clean = text.trim().normalize('NFC');
-  if (!clean || clean.length > MAX_WRITTEN_TEXT || /[\u0000-\u001f\u007f]/.test(clean) ||
+  if (!clean || blockedSharedText(clean) || clean.length > MAX_WRITTEN_TEXT || /[\u0000-\u001f\u007f]/.test(clean) ||
       !cast.has(about) || !kinds.includes(kind) || ![1, 2, 3].includes(severity)) {
     throw new Error('Write a short sentence and choose who and what it is about.');
   }
@@ -104,7 +105,7 @@ function readWrittenClaim(id: string, cast: ReadonlyMap<VillagerId, Dossier>): G
 export function createOpenClaim(text: string, meaning: RumorMeaning, cast: ReadonlyMap<VillagerId, Dossier>): GameClaim {
   const clean = rumorText(text);
   const checked = clean && readRumorMeaning(meaning, clean, [...cast.values()]);
-  if (!clean || !checked) throw Error('This story needs a valid interpretation.');
+  if (!clean || blockedSharedText(clean) || !checked) throw Error('This story needs a valid interpretation.');
   const data = [clean, checked.actor, checked.affected, checked.valence, checked.severity, checked.question];
   const payload = btoa(Array.from(new TextEncoder().encode(JSON.stringify(data)), b => String.fromCharCode(b)).join(''))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

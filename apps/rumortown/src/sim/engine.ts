@@ -13,7 +13,7 @@ import { freshNeeds, resetNeeds, tickNeeds } from './agents/needs.js';
 import { DECISION_PERIOD, PLAYER_SPEED, TALK_RANGE, THREADS_KEPT, VILLAGER_SPEED } from './agents/params.js';
 import { reflect } from './agents/reflection.js';
 import { initRelationships } from './agents/relations.js';
-import { currentEntryIndex, entryOf, onArrived, pathFrom, placeOf, updateSchedule, walkToward } from './agents/schedule.js';
+import { currentEntryIndex, entryOf, insidePlace, onArrived, pathFrom, placeOf, updateSchedule, walkToward } from './agents/schedule.js';
 import { whisper } from './agents/stranger.js';
 import { decide } from './agents/utility.js';
 import { tickWitnessing } from './agents/witness.js';
@@ -273,13 +273,19 @@ export function createSimulation(opts: SimulationOptions): Simulation {
   };
 
   const movePlayer = (target: Vec2): void => {
-    const goal = { x: Math.floor(target.x), y: Math.floor(target.y) };
+    // Visits stop outside private homes, including requests from keyboard and agent tools.
+    const home = world.map.places.find(p => p.kind === 'home' && insidePlace(p, target));
+    // An older replay can place the stranger beside an awake resident at home. Allow the exit.
+    const originHome = world.map.places.find(p => p.kind === 'home' && insidePlace(p, ctx.player.mover.pos));
+    const goal = home ? { ...home.door } : { x: Math.floor(target.x), y: Math.floor(target.y) };
     const options: Vec2[] = [goal, { x: goal.x, y: goal.y - 1 }, { x: goal.x - 1, y: goal.y }, { x: goal.x + 1, y: goal.y }, { x: goal.x, y: goal.y + 1 }];
     for (const o of options) {
       if (!world.isWalkable(o.x, o.y)) continue;
       const path = pathFrom(ctx, ctx.player.mover.pos, o);
       if (path) {
-        ctx.player.mover.setPath(path);
+        const interior = path.findIndex(tile => world.map.places.some(p => p.kind === 'home' && p !== originHome &&
+          tile.x > p.rect.x && tile.x < p.rect.x + p.rect.w - 1 && tile.y > p.rect.y && tile.y < p.rect.y + p.rect.h - 1));
+        ctx.player.mover.setPath(interior < 0 ? path : path.slice(0, interior));
         return;
       }
     }

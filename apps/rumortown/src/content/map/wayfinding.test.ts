@@ -20,3 +20,11 @@ it('keeps at most eight signs at walkable junctions', () => {
     expect(sign.arms.length).toBeGreaterThanOrEqual(2);
   }
 });
+
+it('uses readable words for distant public signs without relying on symbol fonts', async () => {
+  const { buildingSignText } = await import('./wayfinding.js');
+  for (const kind of ['bakery', 'inn', 'mill', 'chapel', 'school', 'smithy', 'shop'] as const) {
+    expect(buildingSignText({ kind, name: 'A public building' }, 10)).toMatch(/^[A-Z][a-z]+$/);
+    expect(buildingSignText({ kind, name: 'A public building' }, 40)).toBe('A public building');
+  }
+});
