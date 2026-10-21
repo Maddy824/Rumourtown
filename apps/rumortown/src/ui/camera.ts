@@ -6,7 +6,7 @@
  * The centre is clamped the same way the renderer clamps it (map edge never shows when the map is larger
  * than the viewport; map centred when smaller), so DOM overlays and the canvas always agree.
  */
-import { CLOSE_ZOOM } from '../render/camera.js';
+import { CLOSE_ZOOM, PHONE_CLOSE_ZOOM } from '../render/camera.js';
 import { type Camera, type Vec2, type VillageMap } from '../sim/types.js';
 
 export interface Insets {
@@ -71,7 +71,7 @@ export function createCameraRig(map: VillageMap): CameraRig {
         return;
       }
       camera.offset = { x: 0, y: 0 };
-      camera.zoom = rig.focusZoom ?? CLOSE_ZOOM;
+      camera.zoom = rig.focusZoom ?? (camera.width < 520 ? PHONE_CLOSE_ZOOM : CLOSE_ZOOM);
       // Put the stranger in the middle of the band that the strip and any sheet leave uncovered.
       const bandTop = insets.top;
       const targetY = (bandTop + (camera.height - Math.max(sheetOffset, insets.bottom))) / 2;

@@ -8,6 +8,8 @@ import { TILE, type Camera, type Vec2, type VillageMap } from '../sim/types.js';
 
 /** The app's legacy 32 px close request is resolved here, without changing TILE or the UI. */
 export const CLOSE_ZOOM = 40;
+/** Phones show roughly four buildings across instead of two. */
+export const PHONE_CLOSE_ZOOM = 30;
 export const cameraZoom = (zoom: number): number => !Number.isFinite(zoom) || zoom <= 0 || zoom === TILE ? CLOSE_ZOOM : zoom;
 
 /** Where tile (0, 0) lands on screen, in CSS pixels, and the pixels per tile. */

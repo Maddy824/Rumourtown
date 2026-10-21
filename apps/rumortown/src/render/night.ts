@@ -30,23 +30,24 @@ function waterGlints(map: VillageMap) {
 }
 
 /** Called before the existing window painter. Updates its occupancy set without touching map caches. */
-export function drawNight(ctx: CanvasRenderingContext2D, map: VillageMap, snapshot: WorldSnapshot, camera: Camera, view: { ox: number; oy: number; zoom: number }, options: Pick<RenderOptions, 'reducedMotion' | 'alpha'>, occupied: Set<string>): void {
+export function drawNight(ctx: CanvasRenderingContext2D, map: VillageMap, snapshot: WorldSnapshot, camera: Camera, view: { ox: number; oy: number; zoom: number }, options: Pick<RenderOptions, 'reducedMotion' | 'alpha'>, occupied: Set<string>, part: 'sky' | 'lights' | 'all' = 'all'): void {
   const strength = nightStrength(snapshot.minuteOfDay);
   for (const p of map.places) if (!windowAwake(p, snapshot)) occupied.delete(p.id);
   if (strength <= 0) return;
   const z = view.zoom, minute = clockMinute(snapshot.minuteOfDay), time = snapshot.tick + (options.reducedMotion ? 0 : options.alpha);
   ctx.save();
-  if (!options.reducedMotion) for (const s of paperStars) {
+  if (part !== 'lights' && !options.reducedMotion) for (const s of paperStars) {
     ctx.fillStyle = `rgba(246,240,228,${strength * (.35 + .2 * Math.sin(time / 45 + s.phase))})`;
     const x = s.x * camera.width, y = s.y * camera.height;
     ctx.beginPath(); ctx.moveTo(x, y - s.size * 1.6); ctx.lineTo(x + s.size, y); ctx.lineTo(x, y + s.size * 1.6); ctx.lineTo(x - s.size, y); ctx.closePath(); ctx.fill();
   }
   const moonTime = (minute - 1260 + 1440) % 1440;
-  if (moonTime < 480) {
+  if (part !== 'lights' && moonTime < 480) {
     const t = moonTime / 480, x = camera.width * (.08 + .84 * t), y = camera.height * (.19 - .13 * Math.sin(t * Math.PI));
     ctx.fillStyle = `rgba(246,240,228,${strength * .85})`;
     ctx.beginPath(); ctx.moveTo(x + 4, y - 13); ctx.bezierCurveTo(x - 15, y - 8, x - 15, y + 13, x + 4, y + 13); ctx.bezierCurveTo(x - 5, y + 5, x - 5, y - 5, x + 4, y - 13); ctx.fill();
   }
+  if (part === 'sky') { ctx.restore(); return; }
   const lamps: { x: number; y: number }[] = [];
   for (const p of map.places) if (['inn', 'square', 'bridge'].includes(p.kind)) lamps.push({ x: p.door.x + .5, y: p.door.y + .5 });
   const watch = snapshot.villagers.find(v => v.id === 'dag' && v.activity !== 'sleep');
@@ -56,7 +57,7 @@ export function drawNight(ctx: CanvasRenderingContext2D, map: VillageMap, snapsh
     const x = view.ox + p.x * z, y = view.oy + p.y * z;
     if (x < -3 * z || y < -3 * z || x > camera.width + 3 * z || y > camera.height + 3 * z) continue;
     const g = ctx.createRadialGradient(x, y - z * .4, 0, x, y - z * .4, z * 2.6);
-    g.addColorStop(0, `rgba(255,191,89,${.32 * strength})`); g.addColorStop(.3, `rgba(255,176,74,${.12 * strength})`); g.addColorStop(1, 'rgba(255,176,74,0)');
+    g.addColorStop(0, `rgba(255,191,89,${.42 * strength})`); g.addColorStop(.3, `rgba(255,176,74,${.16 * strength})`); g.addColorStop(1, 'rgba(255,176,74,0)');
     ctx.fillStyle = g; ctx.fillRect(x - z * 2.6, y - z * 3, z * 5.2, z * 5.2);
     ctx.fillStyle = '#F7CF83'; ctx.fillRect(x - z * .07, y - z * .65, z * .14, z * .22);
   }

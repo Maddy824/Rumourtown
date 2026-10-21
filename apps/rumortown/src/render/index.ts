@@ -616,10 +616,12 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       }
     }
 
-    drawNight(ctx, map, cur, camera, view, options, occupied); // 22: night wiring, applied last.
+    // Sky and smoke sit under the time-of-day tint; lanterns and lit windows glow above it.
+    drawNight(ctx, map, cur, camera, view, options, occupied, 'sky');
     drawOccupiedSmoke(ctx, buildings, occupied, view, camera);
-    drawBuildingLight(ctx, buildings, map, occupied, view, light, camera);
     drawDaylight(lightCtx, camera.width, camera.height, { ...light, vignette: zoom >= CLOSE_ZOOM ? .06 : Math.max(.12, light.vignette) });
+    drawNight(ctx, map, cur, camera, view, options, occupied, 'lights');
+    drawBuildingLight(ctx, buildings, map, occupied, view, light, camera);
     drawSigns(camera, !!options.phone);
     if (!options.arriving) {
       const tag = tags.get('you');

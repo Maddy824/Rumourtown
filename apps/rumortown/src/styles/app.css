@@ -2769,3 +2769,17 @@ button.chain-actor:hover span {
 .opening-steps li p { margin: 4px 0 0; }
 
 .rt[data-layout='phone'] .play-form textarea { min-height: 64px; }
+
+/* Night: paper chrome turns warm and dim instead of glaring white over a dark village. */
+.rt[data-night='true'] { --paper: #d9cdb5; }
+.rt[data-night='true'] .villager-name, .rt[data-night='true'] .bubble, .rt[data-night='true'] .postbox-label { filter: brightness(0.92); }
+
+/* Phones: a finger-sized talk button that stands apart from the rooftops. */
+.rt[data-layout='phone'] .quick-whisper { width: 96px; height: 96px; min-height: 96px; isolation: isolate; }
+.rt[data-layout='phone'] .quick-whisper .postbox-art { width: 54px; height: 70px; left: 21px; bottom: 22px; }
+.rt[data-layout='phone'] .quick-whisper::before {
+  content: ''; position: absolute; inset: -6px -10px 12px; z-index: -1; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(246, 240, 228, 0.9), rgba(246, 240, 228, 0.55) 60%, rgba(246, 240, 228, 0));
+}
+.rt[data-layout='phone'][data-night='true'] .quick-whisper::before { background: radial-gradient(closest-side, rgba(255, 196, 110, 0.45), rgba(255, 196, 110, 0)); }
+.rt[data-layout='phone'] .postbox-label { font-size: var(--fs-s); padding: 6px 4px 7px; min-height: 30px; white-space: nowrap; box-shadow: 0 2px 0 rgba(46, 42, 34, 0.45); }

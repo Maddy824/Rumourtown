@@ -1149,6 +1149,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
     const entered = districtEntry(player, now);
     clockLook(districtBanner, cur.minuteOfDay);
+    root.dataset.night = districtBanner.dataset.night ?? 'false';
     if (entered) { districtBanner.textContent = entered; bannerUntil = now + 2500; districtBanner.hidden = false; }
     if (now >= bannerUntil) districtBanner.hidden = true;
     story.updateChain();
