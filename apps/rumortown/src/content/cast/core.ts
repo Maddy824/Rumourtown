@@ -180,7 +180,7 @@ export const core: DossierDraft[] = [
     ],
     schedule: day([
       [0, 'home-ada', 'rest'],
-      [90, 'home-ada', 'eat'],
+      [100, 'home-ada', 'eat'],
       [150, 'home-ada', 'work'],
       [300, 'home-ada', 'eat'],
       [360, 'home-ada', 'rest'],
