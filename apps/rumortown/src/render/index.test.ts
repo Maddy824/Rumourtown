@@ -141,10 +141,10 @@ describe('local roof transparency', () => {
       return canvas.blits.find((b) => b.image === roof)?.alpha;
     };
     // Refresh the last sighting even if the simulation has not emitted a new snapshot.
-    expect(opacityAt(500, speaking)).toBe(0.35);
-    expect(opacityAt(501, quiet)).toBe(0.35);
-    expect(opacityAt(2100, quiet)).toBe(0.35); // UI's 1.6 second tail.
-    expect(opacityAt(2499, quiet)).toBe(0.35);
+    expect(opacityAt(500, speaking)).toBe(0.55);
+    expect(opacityAt(501, quiet)).toBe(0.55);
+    expect(opacityAt(2100, quiet)).toBe(0.55); // UI's 1.6 second tail.
+    expect(opacityAt(2499, quiet)).toBe(0.55);
     expect(opacityAt(2500, quiet)).toBe(1);
   });
 
@@ -157,7 +157,7 @@ describe('local roof transparency', () => {
     clock.mockReturnValue(1600);
     canvas.blits.length = 0;
     renderer.render(null, quiet, camera(), options);
-    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.55);
     quiet.villagers[1]!.bubble = { text: 'Again', untilTick: 11 };
     clock.mockReturnValue(1700);
     renderer.render(null, quiet, camera(), options);
@@ -165,7 +165,7 @@ describe('local roof transparency', () => {
     clock.mockReturnValue(3600);
     canvas.blits.length = 0;
     renderer.render(null, quiet, camera(), options);
-    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.55);
     clock.mockReturnValue(3700);
     canvas.blits.length = 0;
     renderer.render(null, quiet, camera(), options);
@@ -181,7 +181,7 @@ describe('local roof transparency', () => {
     const { renderer, canvas } = setup(cur, camera(), opts);
     const roof = roofImage(canvas);
     expect(roof).toBeDefined();
-    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.55);
     expect(canvas.getContext('2d')?.globalAlpha).toBe(1);
 
     cur.player.pos = { x: 25, y: 20 };
@@ -208,7 +208,7 @@ describe('local roof transparency', () => {
     canvas.blits.length = 0;
     renderer.render(previous, cur, cam, opts);
     const roof = roofImage(canvas);
-    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.55);
   });
 });
 
