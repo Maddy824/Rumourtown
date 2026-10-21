@@ -6,12 +6,14 @@
  * The simulation stays the source of truth. The model is a voice, called only when needed.
  */
 import type { Inspection, Simulation, VillageMap, VillagerId, WorldSnapshot } from '../sim/types.js';
+import type { FactRef } from './verifier.js';
+import { factRefs, newsRefs } from './guard.js';
 
 export type Action = 'none' | 'move' | 'approach' | 'pause' | 'resume' | 'look';
 
 export type Route =
   | { kind: 'local'; reply: string; action: Action; target: string; reason: string }
-  | { kind: 'model'; facts: string[]; reason: string };
+  | { kind: 'model'; facts: string[]; refs: FactRef[]; reason: string };
 
 export interface OrchestratorInput {
   text: string;
@@ -152,6 +154,8 @@ export function orchestrate(input: OrchestratorInput): Route {
     return { kind: 'local', reply: clip(reply, 240), action: 'none', target: '', reason: 'news' };
   }
 
-  const facts = input.speaker ? villagerFacts(input.sim.inspect(input.speaker), input.snapshot.minuteOfDay) : villageFacts(input);
-  return { kind: 'model', facts, reason: name ? `voice of ${name}` : 'village narrator' };
+  const inspection = input.speaker ? input.sim.inspect(input.speaker) : null;
+  const facts = inspection ? villagerFacts(inspection, input.snapshot.minuteOfDay) : villageFacts(input);
+  const refs = inspection ? factRefs(inspection) : newsRefs(input.news);
+  return { kind: 'model', facts, refs, reason: name ? `voice of ${name}` : 'village narrator' };
 }
