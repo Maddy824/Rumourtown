@@ -13,6 +13,8 @@ export interface Env {
   WORKERS_AI_RUMOR_MODEL?: string;
   /** Model for conversation (/play). */
   WORKERS_AI_PLAY_MODEL?: string;
+  /** Optional fine-tune name, used only by /play with Llama 3.2 3B. */
+  WORKERS_AI_PLAY_LORA?: string;
   AI_ENABLED?: string;
   USAGE_ALERT_URL?: string;
   DAILY_ALLOWANCE_USD?: string;

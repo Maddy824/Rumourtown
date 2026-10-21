@@ -23,6 +23,30 @@ A missing binding, Workers AI error, quota response, six-second timeout or inval
 
 Workers AI costs $0 in this application's ledger under the owner's Cloudflare Free plan. Cloudflare currently provides 10,000 Neurons per UTC day; exhaustion on Free returns an error and the Worker falls back without retrying that tier. Keep the account on Free: a Workers Paid plan can charge overages that this OpenRouter ledger does not meter. See [Cloudflare pricing and quota behavior](https://developers.cloudflare.com/workers-ai/platform/pricing/). The legacy `/interpret` default is listed in the [Llama 3.2 3B model reference](https://developers.cloudflare.com/workers-ai/models/llama-3.2-3b-instruct/). The binding sends the schema directly as documented in [Workers AI JSON Mode](https://developers.cloudflare.com/workers-ai/features/json-mode/).
 
+### Optional villager LoRA (off by default)
+
+`WORKERS_AI_PLAY_LORA` is an optional uploaded fine-tune name or id. It is used only when the resolved `WORKERS_AI_PLAY_MODEL` is exactly `@cf/meta/llama-3.2-3b-instruct`. The default 70B play model ignores it, and `/rumor` and `/interpret` never receive it. Neither Wrangler environment sets this variable. Adapter errors and invalid replies use the existing OpenRouter fallback, with the same reservation, funding, settlement and budget caps.
+
+Prepare training chats from a filtered teacher set, preserving its train/validation assignment:
+
+```sh
+node --experimental-strip-types bench/slm/finetune/game-format.ts --set act
+# Writes bench/slm/data/finetune/act-game/{train,valid}.jsonl.
+# Use act-game as the set argument to bench/slm/finetune/train.sh.
+```
+
+The converter shares the API's system/user message builder and the game's `villagerFacts` renderer. It replays the original seeded snapshots for activity, mood, relationships, trust and authored voice, then applies the scenario/probe beliefs (including confidence interventions). Only the speaker's own sources enter those beliefs. The context lists the addressed villager, the game's places, and the last three complete exchanges. Teacher prose is preserved exactly inside compact `{"reply":…, "action":"none", "target":""}` JSON; conversion does not re-score, shorten or improve it. The game's four-belief limit still applies, so audit converted targets for faithfulness to the facts that remain visible and the 240-character reply limit before training.
+
+New filtered examples carry `probeId`. Older examples are matched against their full original prompt; stale or ambiguous matches stop with an instruction to regenerate the source set using `make-data.ts filter`. Held-out snapshots, train/validation snapshot overlap and context fields that exceed `/play` limits are rejected before writing output. Source data is unchanged. `--data <directory>` selects an alternate directory containing `scenarios.jsonl`, `probes.jsonl` and `finetune/<set>/`.
+
+After evaluating the tuned 3B student, upload its PEFT directory containing `adapter_config.json` (`model_type: "llama"`, rank at most 32) and `adapter_model.safetensors`:
+
+```sh
+npx --no-install wrangler ai finetune create @cf/meta/llama-3.2-3b-instruct villager-act-game path/to/peft
+```
+
+These file requirements, the upload command and the `lora` inference parameter follow [Cloudflare's LoRA guide](https://developers.cloudflare.com/workers-ai/features/fine-tunes/loras/). Activation is a separate configuration change: set `WORKERS_AI_PLAY_MODEL` to the 3B model and `WORKERS_AI_PLAY_LORA` to the uploaded name. Roll back the adapter by unsetting `WORKERS_AI_PLAY_LORA` and redeploying the API; restore the previous play model as well if reverting the model choice. This task uploads nothing and enables nothing in production.
+
 ## A $10 prepaid budget
 
 | Allowance | Default | Purpose |

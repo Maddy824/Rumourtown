@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createWorker } from '../src/index';
 import { playPrompt, readPlayContext, validatePlay, type PlayContext } from '../src/play';
-import { keys, makeEnv, memoryLedger, mockFetch, origin, provider } from './helpers';
+import { good, interpretRequest, keys, makeEnv, memoryLedger, mockFetch, origin, provider } from './helpers';
+import { DEFAULT_WORKERS_AI_MODEL } from '../src/workers-ai';
 const context: PlayContext = { speaker: 'mira', nearby: [{ id: 'mira', activity: 'work', mood: -.2 }],
   places: [{ id: 'square', name: 'Village square' }], voice: 'Mira counts her trays and worries about the bakery.', history: [] };
 const reply = { reply: 'What do you mean? Tell me what happened before you frighten the whole bakery.', action: 'none', target: '' };
@@ -16,6 +17,71 @@ async function setup(output: unknown = reply, limits = {}) {
   return { worker: createWorker({ fetch: mock.fetcher }), env, store, mock, run };
 }
 describe('creative conversation and bounded action proposals', () => {
+  it('passes the opt-in adapter only to the resolved 3B play model after reservation', async () => {
+    const { worker, env, store, run } = await setup(reply, {
+      WORKERS_AI_PLAY_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_PLAY_LORA: 'villager-act-game',
+    });
+    run.mockImplementation(async () => {
+      expect(store.calls.map(c => c.method)).toEqual(['reserve']);
+      return { response: reply };
+    });
+    expect(await (await worker.fetch(request(), env)).json()).toEqual(reply);
+    expect(run.mock.calls[0]![0]).toBe(DEFAULT_WORKERS_AI_MODEL);
+    expect(run.mock.calls[0]![1]).toHaveProperty('lora', 'villager-act-game');
+    expect(store.calls.map(c => c.method)).toEqual(['reserve', 'settle', 'usage']);
+    expect(store.calls[1]!.body.actualUsd).toBe(0);
+  });
+  it.each([
+    {}, { WORKERS_AI_PLAY_MODEL: DEFAULT_WORKERS_AI_MODEL },
+    { WORKERS_AI_PLAY_LORA: 'villager-act-game' },
+    { WORKERS_AI_PLAY_MODEL: '@cf/other/model', WORKERS_AI_PLAY_LORA: 'villager-act-game' },
+    { WORKERS_AI_PLAY_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_PLAY_LORA: '' },
+    { WORKERS_AI_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_PLAY_LORA: 'villager-act-game' },
+  ])('omits lora when unset or the resolved play model is not 3B (%#)', async config => {
+    const { worker, env, run } = await setup(reply, config);
+    expect(await (await worker.fetch(request(), env)).json()).toEqual(reply);
+    expect(run.mock.calls[0]![1]).not.toHaveProperty('lora');
+  });
+  it.each(['rumor', 'interpret'])('never passes a play adapter to /%s, even with the 3B model', async route => {
+    const output = route === 'interpret' ? good : { actor: 'mira', affected: 'tom', valence: -1, severity: 2, question: 'Who saw Mira take the bread?' };
+    const { worker, env, run } = await setup(output, {
+      WORKERS_AI_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_RUMOR_MODEL: DEFAULT_WORKERS_AI_MODEL,
+      WORKERS_AI_PLAY_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_PLAY_LORA: 'villager-act-game',
+    });
+    const req = route === 'interpret' ? interpretRequest() : new Request('https://api.test/rumor', {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1' },
+      body: JSON.stringify({ text: 'Mira stole bread from Tom.', turnstileToken: 'test-token' }),
+    });
+    expect((await worker.fetch(req, env)).status).toBe(200);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]![0]).toBe(DEFAULT_WORKERS_AI_MODEL);
+    expect(run.mock.calls[0]![1]).not.toHaveProperty('lora');
+  });
+  it.each(['throw', 'error', 'invalid', 'malformed'])('keeps the existing funded fallback and settlement on LoRA %s', async failure => {
+    const { worker, env, run, mock, store } = await setup(reply, {
+      WORKERS_AI_PLAY_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_PLAY_LORA: 'villager-act-game',
+    });
+    if (failure === 'throw') run.mockRejectedValue(new Error('adapter unavailable'));
+    else run.mockResolvedValue(failure === 'error' ? { error: 'adapter unavailable' } :
+      { response: failure === 'malformed' ? '{broken' : { ...reply, action: 'kill' } });
+    expect(await (await worker.fetch(request(), env)).json()).toEqual(reply);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]![1]).toHaveProperty('lora', 'villager-act-game');
+    expect(store.calls.map(c => c.method)).toEqual(['reserve', 'fund', 'settle', 'usage']);
+    const fallback = mock.calls.find(c => c.url.includes('completions'))!;
+    expect(fallback).toBeDefined();
+    expect(JSON.parse(fallback.init!.body as string)).not.toHaveProperty('lora');
+    expect(store.db.prepare('SELECT reserved FROM days').all()).toEqual([{ reserved: 0 }]);
+  });
+  it('cannot fund a failed LoRA fallback beyond the lifetime cap', async () => {
+    const { worker, env, run, mock, store } = await setup(reply, {
+      WORKERS_AI_PLAY_MODEL: DEFAULT_WORKERS_AI_MODEL, WORKERS_AI_PLAY_LORA: 'villager-act-game', LIFETIME_ALLOWANCE_USD: '0',
+    });
+    run.mockRejectedValue(new Error('adapter unavailable'));
+    expect(await (await worker.fetch(request(), env)).json()).toEqual({ reason: 'budget' });
+    expect(mock.calls.some(c => c.url.includes('completions'))).toBe(false);
+    expect(store.db.prepare('SELECT reserved, spent FROM days').all()).toEqual([{ reserved: 0, spent: 0 }]);
+  });
   it('sends the actual ambiguous words and context to AI without a rumor matcher or prose cache', async () => {
     const { worker, env, store, run, mock } = await setup();
     const response = await worker.fetch(request(), env);

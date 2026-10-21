@@ -90,7 +90,7 @@ async function filter(args: string[]): Promise<void> {
     const target = choice([...Array(10).keys()], p.scenarioId) === 0 ? valid : sets;
     const prompt = messagesFor(s, p);
     if (prompt.reduce((n, m) => n + m.content.length, 0) > MAX_CHARS) { stats.tooLong++; continue; }
-    const example = (reply: string) => ({ messages: [...prompt, { role: 'assistant', content: reply }] });
+    const example = (reply: string) => ({ probeId, messages: [...prompt, { role: 'assistant', content: reply }] });
     const first = list[0]!.text.trim();
     if (first) target.unfiltered.push(example(first));
     if (firstAccepted) target.verifier.push(example(firstAccepted));

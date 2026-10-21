@@ -10,7 +10,7 @@ import { publicKey, sign, verify } from './sign';
 import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
 import { schema, validate } from './validate';
 import { workersAi, modelFor, type Route } from './workers-ai';
-import { playPrompt, playSchema, readPlayContext, validatePlay, type PlayReply } from './play';
+import { playMessages, playSchema, readPlayContext, validatePlay, type PlayReply } from './play';
 export { BudgetLedger } from './ledger';
 
 interface Dependencies { fetch?: Fetcher; now?: () => number; cache?: EdgeCache }
@@ -149,7 +149,7 @@ async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () =>
     if (env.AI) {
       usage.dispatched = true;
       usage.workersAi = true;
-      const claim = await workersAi(env, messages, { schema: outputSchema, validate: validateOutput, temperature, model: modelFor(env, route) });
+      const claim = await workersAi(env, messages, { schema: outputSchema, validate: validateOutput, temperature, model: modelFor(env, route), route });
       if (claim) {
         settled = true;
         await defer(finish(env, 'settle', { reservationId, actualUsd: 0 }));
@@ -253,7 +253,7 @@ export function createWorker(deps: Dependencies = {}) {
           if (blockedReason(normalise(input.text))) return json({ reply: 'Let’s keep this conversation about life in the village.', action: 'none', target: '' } satisfies PlayReply);
           // No prose, context or generated reply enters either cache or the ledger.
           const result = await infer(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer,
-            [{ role: 'system', content: playPrompt }, { role: 'user', content: JSON.stringify({ text: input.text, context }) }],
+            playMessages(input.text, context),
             playSchema, value => validatePlay(value, context), .7, 'play');
           return json(result);
         }
