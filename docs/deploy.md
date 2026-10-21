@@ -25,12 +25,26 @@ Run commands from the repository root with Node 22, npm, Wrangler (installed by 
    npx --no-install wrangler secret put OPENROUTER_API_KEY --config apps/api/wrangler.toml
    ```
 
-4. Create a Turnstile widget for the game's hostname. Give the public site key to the whisper-client integration; it is public configuration, not a Worker secret. Store the widget's secret key in the API. Do not use test keys in production.
+4. Create a Turnstile widget for the game's hostname. The game reads `VITE_API_BASE_URL` and `VITE_TURNSTILE_SITE_KEY` at build time. Set these public settings as GitHub repository variables before the deployment build, and store the widget's secret key in the API. Replace the example URL and site key with your production values. Do not use test keys in production.
 
    ```sh
    open 'https://dash.cloudflare.com/?to=/:account/turnstile'
+   gh variable set VITE_API_BASE_URL --body 'https://api.your-domain.example'
+   gh variable set VITE_TURNSTILE_SITE_KEY --body '<your-public-turnstile-site-key>'
    npx --no-install wrangler secret put TURNSTILE_SECRET --config apps/api/wrangler.toml
    ```
+
+   `.github/workflows/deploy.yml` passes the repository variables to the build step as environment variables:
+
+   ```yaml
+   - name: Build the game with public client settings
+     run: npm run build
+     env:
+       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+       VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
+   ```
+
+   Vite embeds these public values in the built assets. Changing a repository variable requires a new build and deployment.
 
 5. Generate the ECDSA P-256 keys and pipe only the private JWK into the third API credential. The API exposes the public JWK at `/pubkey`. Keep a private backup according to your usual secret-storage process, then delete the temporary file.
 
@@ -49,7 +63,7 @@ Run commands from the repository root with Node 22, npm, Wrangler (installed by 
    open -e apps/api/wrangler.toml
    npm run typecheck
    npm test
-   npm run build
+   VITE_API_BASE_URL="$(gh variable get VITE_API_BASE_URL --json value --jq .value)" VITE_TURNSTILE_SITE_KEY="$(gh variable get VITE_TURNSTILE_SITE_KEY --json value --jq .value)" npm run build
    node .github/workflows/check-bundle.mjs
    npx --no-install wrangler deploy --config apps/rumortown/wrangler.toml
    npx --no-install wrangler deploy --config apps/api/wrangler.toml
