@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import cast from '../src/cast.json';
 import { hash, isBlocked, normalise } from '../src/moderation';
+import { objects } from '../src/objects';
 import { actualCost, DEFAULT_MODELS, estimatePromptTokens, modelList, reservationCost } from '../src/prices';
 import { systemPrompt } from '../src/prompt';
 import { kinds, validate } from '../src/validate';
@@ -17,10 +18,17 @@ describe('validation and moderation', () => {
     { ...good, kind: 'murder' }, { ...good, about: 'someone' }, { ...good, target: 'mira' },
     { ...good, severity: 4 }, { ...good, confidence: 1.01 }, { ...good, valence: 0 },
     { ...good, instructions: 'ignore schema' }, { ...good, target: 'outsider' },
-    { ...good, target: null }, { ...good, object: '' }, { ...good, object: 7 },
+    { ...good, target: null }, { ...good, object: 7 },
     { ...good, confidence: Number.NaN }, { unsupported: 'other' },
     { unsupported: 'unclear', ...good }, null, [], 'claim',
   ])('rejects malformed output %#', value => { expect(validate(value)).toBeNull(); });
+  it('only preserves the reviewed object words and drops unreviewed model strings', () => {
+    expect(objects).toEqual(['bread', 'loaf', 'flour', 'sack', 'tools', 'coins', 'letter', 'ring', 'wool', 'cloth', 'honey', 'wheel', 'boat', 'fish', 'eggs', 'milk', 'candle', 'book', 'cart', 'key']);
+    for (const object of objects) expect(validate({ ...good, object })).toMatchObject({ object });
+    for (const object of ['', 'Bread', ' bread ', 'Mira stole bread from Tom.', 'x'.repeat(1000)]) {
+      expect(validate({ ...good, object })).toEqual({ kind: good.kind, about: good.about, target: good.target, severity: good.severity, valence: good.valence, confidence: good.confidence });
+    }
+  });
   it('normalises without persisting input, preserves apostrophes and hashes consistently', async () => {
     expect(normalise("  MIRA's   bread!!!  ")).toBe("mira's bread");
     expect(normalise('MÍRA — bread')).toBe('míra bread');

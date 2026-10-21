@@ -1,8 +1,8 @@
-import { hash, isBlocked, normalise } from './moderation';
+import { blockedReason, hash, normalise } from './moderation';
 import { actualCost, estimatePromptTokens, MAX_TOKENS, modelList, reservationCost } from './prices';
 import { systemPrompt } from './prompt';
 import { publicKey, sign, verify } from './sign';
-import { record, type Env, type FailureReason, type Fetcher, type SignedPayload } from './types';
+import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
 import { schema, validate } from './validate';
 export { BudgetLedger } from './ledger';
 
@@ -43,7 +43,7 @@ async function turnstile(request: Request, token: string, env: Env, fetcher: Fet
   finally { clearTimeout(timer); }
 }
 
-async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number): Promise<SignedPayload> {
+async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number): Promise<SignedPayload | Refusal> {
   let input: unknown;
   try { input = await request.json(); } catch { throw new Failure('invalid'); }
   if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken', 'castVersion'].includes(key)) ||
@@ -52,7 +52,9 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   const text = input.text.trim();
   if (Array.from(text).length < 1 || Array.from(text).length > 140) throw new Failure('invalid');
   const normalised = normalise(text);
-  if (!normalised || isBlocked(normalised)) throw new Failure('invalid');
+  if (!normalised) throw new Failure('invalid');
+  const unsupported = blockedReason(normalised);
+  if (unsupported) return { unsupported, castVersion: input.castVersion, issuedAt: now() };
   await turnstile(request, input.turnstileToken, env, fetcher);
   const key = await hash(normalised);
   const cached = await ledger(env, 'cacheGet', { hash: key });
@@ -60,10 +62,11 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   if (cached.payload !== null) {
     const p = cached.payload;
     if (!record(p) || typeof p.sig !== 'string' || typeof p.castVersion !== 'string' || typeof p.issuedAt !== 'number') throw new Failure('ledger');
+    // Authenticate the complete stored envelope before projecting or normalising it.
+    if (!await verify(p, p.sig, publicKey(env.SIGNING_KEY_JWK))) throw new Failure('ledger');
     const claim = validate(p.claim);
     if (!claim || 'unsupported' in claim) throw new Failure('ledger');
     const payload = { claim, castVersion: p.castVersion, issuedAt: p.issuedAt };
-    if (!await verify(payload, p.sig, publicKey(env.SIGNING_KEY_JWK))) throw new Failure('ledger');
     if (p.castVersion === input.castVersion) return { ...payload, sig: p.sig };
     // Hash cache is independent of caller castVersion; re-sign without another model call.
     const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
@@ -108,7 +111,8 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     let output: unknown;
     try { output = JSON.parse(choice.message.content); } catch { throw new Failure('invalid'); }
     const claim = validate(output);
-    if (!claim || 'unsupported' in claim) throw new Failure('invalid');
+    if (!claim) throw new Failure('invalid');
+    if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
     const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
     await finish(env, 'cachePut', { hash: key, payload: signed });
     return signed;

@@ -91,13 +91,42 @@ describe('Worker routes', () => {
   it.each([
     { text: '' }, { text: ' '.repeat(5) }, { text: 'a'.repeat(141) }, { text: 123 },
     { text: '!!!' }, { castVersion: '' }, { turnstileToken: '' }, { extra: true },
-    { text: 'Mira has porn' },
-  ])('rejects malformed/moderated requests before fetch %#', async override => {
+  ])('rejects malformed requests before fetch %#', async override => {
     const { worker, env, mock } = setup();
     const response = await worker.fetch(interpretRequest(undefined, override), env);
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ reason: 'invalid' });
     expect(mock.calls).toHaveLength(0);
+  });
+  it.each([
+    ['Mira has PORN.', 'sexual'],
+    ['Mira said faggot.', 'protected-trait'],
+  ])('returns a structured refusal for blocklisted input before external work: %s', async (text, unsupported) => {
+    const { worker, env, mock, s } = setup();
+    const response = await worker.fetch(interpretRequest(text), env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ unsupported, castVersion: 'v1', issuedAt: now });
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+    expect(mock.calls).toHaveLength(0);
+    expect(s.calls).toHaveLength(0);
+    expect(s.db.prepare('SELECT * FROM reservations').all()).toHaveLength(0);
+    expect(s.db.prepare('SELECT * FROM cache').all()).toHaveLength(0);
+  });
+  it('drops narrative objects from the signed response and cache, including cache hits', async () => {
+    const narrative = 'Mira stole bread from Tom.';
+    const { worker, env, mock, s } = setup({}, provider({ ...good, object: narrative }));
+    const response = await worker.fetch(interpretRequest(narrative), env);
+    expect(response.status).toBe(200);
+    const payload = await response.json() as SignedPayload;
+    expect(payload.claim).not.toHaveProperty('object');
+    expect(await verify(payload, payload.sig, key.publicJwk)).toBe(true);
+    expect(JSON.stringify(payload)).not.toContain(narrative);
+    const cached = JSON.parse(String(s.db.prepare('SELECT payload FROM cache').all()[0]?.payload));
+    expect(cached).toEqual(payload);
+    expect(cached.claim).not.toHaveProperty('object');
+    expect(JSON.stringify(s.calls)).not.toContain(narrative);
+    expect(await (await worker.fetch(interpretRequest(narrative), env)).json()).toEqual(payload);
+    expect(mock.calls.filter(c => c.url.includes('completions'))).toHaveLength(1);
   });
   it('rejects invalid JSON without exposing exception details', async () => {
     const { worker, env } = setup();
@@ -145,12 +174,23 @@ describe('fail-closed execution and billing', () => {
     expect((await worker.fetch(interpretRequest(), env)).status).toBe(200);
     expect(s.calls.find(c => c.method === 'settle')?.body.actualUsd).toBe(s.calls.find(c => c.method === 'reserve')?.body.worstCaseUsd);
   });
-  it('settles billed invalid output and unsupported results rather than refunding', async () => {
-    const { worker, env, s } = setup({}, provider({ unsupported: 'real-person' }));
+  it.each(['not-about-cast', 'real-person', 'protected-trait', 'sexual', 'hateful', 'unclear'])(
+    'returns a structured model refusal and settles billed inference: %s', async unsupported => {
+      const { worker, env, mock, s } = setup({}, provider({ unsupported }));
+      const response = await worker.fetch(interpretRequest(), env);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ unsupported, castVersion: 'v1', issuedAt: now });
+      expect(mock.calls).toHaveLength(2);
+      expect(s.calls.find(c => c.method === 'settle')?.body.actualUsd).toBeCloseTo(0.00007, 10);
+      expect(s.calls.some(c => c.method === 'release')).toBe(false);
+      expect(s.calls.some(c => c.method === 'cachePut')).toBe(false);
+      expect(s.db.prepare('SELECT * FROM cache').all()).toHaveLength(0);
+    });
+  it('rejects an unrecognized refusal reason without echoing model text', async () => {
+    const { worker, env, s } = setup({}, provider({ unsupported: 'arbitrary narrative' }));
     const response = await worker.fetch(interpretRequest(), env);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ reason: 'invalid' });
-    expect(s.calls.some(c => c.method === 'settle')).toBe(true);
-    expect(s.calls.some(c => c.method === 'release')).toBe(false);
     expect(s.calls.some(c => c.method === 'cachePut')).toBe(false);
   });
   it('holds worst-case cost when fetch fails after dispatch; no retries', async () => {
@@ -232,6 +272,19 @@ describe('fail-closed execution and billing', () => {
     payload.claim.about = 'ben';
     s.db.prepare('UPDATE cache SET payload = ? WHERE hash = ?').all(JSON.stringify(payload), String(row?.hash));
     const response = await worker.fetch(interpretRequest(), env);
+    expect(await response.json()).toEqual({ reason: 'ledger' });
+    expect(mock.calls.filter(c => c.url.includes('completions'))).toHaveLength(1);
+  });
+  it.each(['payload', 'claim'])('rejects added %s fields in cached signed envelopes', async location => {
+    const { worker, env, mock, s } = setup();
+    await worker.fetch(interpretRequest(), env);
+    const row = s.db.prepare('SELECT hash, payload FROM cache').all()[0];
+    const payload = JSON.parse(String(row?.payload));
+    if (location === 'payload') payload.unsupported = 'real-person';
+    else payload.claim.extra = 'arbitrary narrative';
+    s.db.prepare('UPDATE cache SET payload = ? WHERE hash = ?').all(JSON.stringify(payload), String(row?.hash));
+    const response = await worker.fetch(interpretRequest(), env);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ reason: 'ledger' });
     expect(mock.calls.filter(c => c.url.includes('completions'))).toHaveLength(1);
   });

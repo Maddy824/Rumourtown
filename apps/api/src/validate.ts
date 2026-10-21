@@ -1,4 +1,5 @@
 import cast from './cast.json';
+import { isReviewedObject, objects } from './objects';
 
 export const kinds = ['theft', 'cheating', 'romance', 'lying', 'broken-promise', 'insult', 'hoarding', 'shirking', 'boasting', 'kindness', 'paid-debt', 'nursed'] as const;
 export const unsupportedReasons = ['not-about-cast', 'real-person', 'protected-trait', 'sexual', 'hateful', 'unclear'] as const;
@@ -31,11 +32,11 @@ export function validate(value: unknown): Claim | Unsupported | null {
       ![1, 2, 3].includes(v.severity as number) || ![-1, 1].includes(v.valence as number) ||
       typeof v.confidence !== 'number' || !Number.isFinite(v.confidence) || v.confidence < 0 || v.confidence > 1) return null;
   if (Object.hasOwn(v, 'target') && (typeof v.target !== 'string' || !ids.includes(v.target) || v.target === v.about)) return null;
-  if (Object.hasOwn(v, 'object') && (typeof v.object !== 'string' || v.object.trim().length === 0 || v.object.length > 140)) return null;
+  if (Object.hasOwn(v, 'object') && typeof v.object !== 'string') return null;
   return {
     kind: v.kind as Kind, about: v.about,
     ...(typeof v.target === 'string' ? { target: v.target } : {}),
-    ...(typeof v.object === 'string' ? { object: v.object } : {}),
+    ...(isReviewedObject(v.object) ? { object: v.object } : {}),
     severity: v.severity as Claim['severity'],
     valence: favourable.includes(v.kind) ? 1 : -1,
     confidence: v.confidence,
@@ -50,8 +51,8 @@ const base = {
 };
 export const schema = {
   anyOf: [
-    ...[{}, { target: { type: 'string', enum: ids } }, { object: { type: 'string', minLength: 1, maxLength: 140 } },
-      { target: { type: 'string', enum: ids }, object: { type: 'string', minLength: 1, maxLength: 140 } }]
+    ...[{}, { target: { type: 'string', enum: ids } }, { object: { type: 'string', enum: objects } },
+      { target: { type: 'string', enum: ids }, object: { type: 'string', enum: objects } }]
       .map(optional => ({ type: 'object', additionalProperties: false, properties: { ...base, ...optional }, required: [...Object.keys(base), ...Object.keys(optional)] })),
     { type: 'object', additionalProperties: false, properties: { unsupported: { type: 'string', enum: unsupportedReasons } }, required: ['unsupported'] },
   ],

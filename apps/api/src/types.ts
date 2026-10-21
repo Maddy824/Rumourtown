@@ -1,4 +1,4 @@
-import type { Claim } from './validate';
+import type { Claim, Unsupported } from './validate';
 
 export type FailureReason = 'turnstile' | 'limit-visitor' | 'limit-global' | 'budget' | 'model' | 'invalid' | 'ledger';
 export interface Env {
@@ -18,6 +18,10 @@ export interface Payload {
   issuedAt: number;
 }
 export interface SignedPayload extends Payload { sig: string }
+export interface Refusal extends Unsupported {
+  castVersion: string;
+  issuedAt: number;
+}
 export type Fetcher = typeof fetch;
 
 export function record(value: unknown): value is Record<string, unknown> {

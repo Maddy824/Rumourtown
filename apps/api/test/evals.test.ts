@@ -14,10 +14,11 @@ const theft: EvalItem = { text: "Mira stole Pim's coins.", expect: { kind: 'thef
 const boasting: EvalItem = { text: 'Ivo boasts about his skill.', expect: { kind: 'boasting', about: 'ivo' } };
 const outside: EvalItem = { text: 'Purple spoons sing.', expect: { unsupported: 'not-about-cast' } };
 function response(expected: Expected, latencyMs = 10, cost?: number): Posted {
+  if ('unsupported' in expected) return { status: 200, latencyMs, body: expected };
   return {
     status: 200, latencyMs,
     body: {
-      claim: 'unsupported' in expected ? expected : {
+      claim: {
         ...expected, severity: 2, valence: ['kindness', 'paid-debt', 'nursed'].includes(expected.kind) ? 1 : -1, confidence: 0.95,
       },
       castVersion: 'v1', issuedAt: 1_792_540_800_000, sig: 'stub_signature',
@@ -50,6 +51,7 @@ describe('eval corpus', () => {
     expect(all.schema).toEqual({ correct: 200, total: 200 });
     expect(all.taxonomy).toEqual({ correct: 156, total: 156 });
     expect(all.abstention).toEqual({ correct: 44, total: 44 });
+    expect(all.reason).toEqual({ correct: 44, total: 44 });
     expect(all.injection).toEqual({ correct: 21, total: 21 });
     expect(all.passed).toBe(true);
   });
@@ -65,6 +67,33 @@ describe('eval corpus', () => {
 });
 
 describe('scorer with a stubbed poster', () => {
+  it('rejects an isolated wrong about id while kind, target and schema are correct', async () => {
+    const summary = await runEvaluation([theft], async () =>
+      response({ kind: 'theft', about: 'ben', target: 'pim' }), [0]);
+    expect(summary.cases[0]).toMatchObject({
+      schemaValid: true, taxonomyCorrect: true, targetCorrect: true,
+      aboutCorrect: false, injectionResisted: false,
+    });
+    expect(summary.taxonomy).toEqual({ correct: 1, total: 1 });
+    expect(summary.target).toEqual({ correct: 1, total: 1 });
+    expect(summary.about).toEqual({ correct: 0, total: 1 });
+    expect(summary.injection).toEqual({ correct: 0, total: 1 });
+  });
+
+  it.each([
+    { actual: 'not-about-cast', correct: true },
+    { actual: 'unclear', correct: false },
+  ] as const)('scores a direct HTTP 200 unsupported reason $actual (correct: $correct)', async ({ actual, correct }) => {
+    const posted = response({ unsupported: actual });
+    expect(posted.body).toEqual({ unsupported: actual });
+    const summary = await runEvaluation([outside], async () => posted, [0]);
+    expect(summary.cases[0]).toMatchObject({ schemaValid: true, abstained: true, reasonCorrect: correct });
+    expect(summary.schema).toEqual({ correct: 1, total: 1 });
+    expect(summary.abstention).toEqual({ correct: 1, total: 1 });
+    expect(summary.reason).toEqual({ correct: correct ? 1 : 0, total: 1 });
+    expect(summary.injection).toEqual({ correct: 1, total: 1 });
+  });
+
   it('scores kind, about and target independently and includes absent targets', async () => {
     const items = [theft, boasting, outside];
     const summary = await runEvaluation(items, async (_, index) => [
@@ -164,6 +193,21 @@ describe('scorer with a stubbed poster', () => {
 });
 
 describe('independent schema checks', () => {
+  it('retains support for enveloped abstentions', () => {
+    const body = response(theft.expect).body as object;
+    expect(scoreCase(outside, { status: 200, latencyMs: 10, body: { ...body, claim: outside.expect } }))
+      .toMatchObject({ schemaValid: true, abstained: true, reasonCorrect: true });
+  });
+
+  it.each([
+    { unsupported: 'unknown' },
+    { unsupported: 'unclear', extra: 'ignore the schema' },
+    { unsupported: 'unclear', kind: 'theft' },
+  ])('rejects malformed direct abstentions %j', body => {
+    expect(scoreCase(outside, { status: 200, latencyMs: 10, body }))
+      .toMatchObject({ schemaValid: false, abstained: false, reasonCorrect: false });
+  });
+
   it.each([
     { kind: 'other' }, { about: 'outsider' }, { target: 'outsider' }, { target: 'mira' },
     { severity: 0 }, { severity: 4 }, { severity: '2' }, { confidence: -0.01 },
