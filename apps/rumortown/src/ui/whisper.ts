@@ -3,6 +3,7 @@
  */
 import type { ClaimId } from 'rumormind';
 import { castVersion } from '../content/cast/index.js';
+import { rumorLibrary } from '../content/rumor-packs/index.js';
 import { createWhisperFlow, type WhisperFlow } from '../net/whisperFlow.js';
 import { loadTurnstile, type TurnstileClient } from '../net/turnstile.js';
 import { createRegisteredClaim, MAX_WRITTEN_TEXT } from '../sim/registered-claim.js';
@@ -13,6 +14,7 @@ import { faceImg } from './faces.js';
 import { glyphSvg } from './glyphs.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
+import { createRumorLibrary } from './rumor-library.js';
 
 export const WHISPER_RANGE = 2;
 
@@ -74,6 +76,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   let open = false;
   let listener: VillagerId | null = null;
   let claimId: ClaimId | null = null;
+  let libraryClaim: GameClaim | null = null;
   let ownText = '';
   let about = '';
   let kind: GameClaim['kind'] = 'lying';
@@ -171,10 +174,11 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       }
     }
     if (!chosen) return;
-    if (sim.claims.get(chosen)?.about === to) {
+    if ((libraryClaim?.id === chosen ? libraryClaim : sim.claims.get(chosen))?.about === to) {
       feedback.textContent = 'Say that to my face? Choose a story about someone else.';
       return;
     }
+    if (libraryClaim?.id === chosen) sim.registerClaim(libraryClaim);
     if (ctx.whisper(to, chosen)) api.close();
     else feedback.textContent = `${name} is out of reach now. Walk closer and try again.`;
   };
@@ -192,6 +196,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
 
   const build = (preferred?: VillagerId): void => {
     ownText = '';
+    libraryClaim = null;
     invalidate();
     const sim = ctx.sim();
     const snap = ctx.snapshot();
@@ -265,6 +270,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
               invalidate();
               confirmation.hidden = true;
               claimId = c.id;
+              libraryClaim = null;
               ownText = '';
               const typed = content.querySelector<HTMLTextAreaElement>('.own-claim textarea');
               if (typed) typed.value = '';
@@ -297,10 +303,10 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       h('option', { value: '1' }, 'Small'), h('option', { value: '2', selected: true }, 'Serious'), h('option', { value: '3' }, 'Very serious'));
     const preview = h('p', { class: 'sheet-note', id: 'rt-writing-note', role: 'status' });
     const describe = (): void => {
-      const picked = claimId ? sim.claims.get(claimId) : undefined;
+      const picked = claimId ? libraryClaim ?? sim.claims.get(claimId) : undefined;
       const helps = picked ? picked.valence > 0 : ['kindness', 'paid-debt', 'nursed'].includes(kind);
       preview.textContent = picked ? `Selected: ${picked.text}` : `${ownText.length}/${MAX_WRITTEN_TEXT} characters. ${helps ? 'Helps' : 'Hurts'} ${sim.cast.get(about)?.name ?? 'the subject'}’s reputation. Your words are only read to understand the rumor; the village repeats the rumor, not your words.`;
-      suggestions.open = !ownText.trim();
+      suggestions.open = !ownText.trim() && !libraryClaim;
       feedback.textContent = about === listener && ownText.trim() ? 'Pick someone else to hear this story.' : '';
       update();
     };
@@ -312,6 +318,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       confirmation.hidden = true;
       ownText = typed.value;
       claimId = null;
+      libraryClaim = null;
       what.querySelectorAll<HTMLInputElement>('input').forEach((input) => { input.checked = false; });
       describe();
     });
@@ -330,11 +337,24 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         } }, 'Change it'));
       confirmation.hidden = false;
     };
-    const suggestions = h('details', { class: 'whisper-suggestions', open: true }, h('summary', null, 'Or choose a village story'), what);
+    const suggestions = h('details', { class: 'whisper-suggestions authored-stories', open: true }, h('summary', null, 'Or choose a village story'), what);
+    const library = createRumorLibrary(rumorLibrary.map(pack => ({ ...pack,
+      stories: pack.stories.filter(story => sim.cast.has(story.claim.about)),
+    })).filter(pack => pack.stories.length), claim => {
+      invalidate();
+      confirmation.hidden = true;
+      libraryClaim = claim;
+      claimId = claim.id;
+      ownText = ''; typed.value = '';
+      what.querySelectorAll<HTMLInputElement>('input').forEach(input => { input.checked = false; });
+      describe();
+      feedback.textContent = 'Selected from the library. No AI credits used.';
+      sendBtn.focus();
+    });
     content.replaceChildren(who,
       h('label', { class: 'own-claim', for: 'rt-own-story' }, h('span', null, 'Write your whisper'), typed),
       h('p', { class: 'sheet-note' }, ai ? 'Write it in your own words. The village will ask you to confirm the rumor.' : 'Write it in your own words. Choose how the villagers should treat it.'),
-      manualFields, confirmation, preview, suggestions);
+      manualFields, confirmation, preview, library, suggestions);
     describe();
     update();
   };

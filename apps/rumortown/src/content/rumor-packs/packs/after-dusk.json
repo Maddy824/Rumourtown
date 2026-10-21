@@ -1,0 +1,13 @@
+{
+  "schema": 1, "id": "after-dusk", "version": 1, "title": "Secrets after dusk",
+  "stories": [
+    { "id": "ribbon", "text": "Tom leaves a blue ribbon on Rosa’s doorstep every evening", "about": "tom", "kind": "romance", "severity": 1 },
+    { "id": "moonlit-garden", "text": "Nia meets a secret sweetheart by the garden gate after dusk", "about": "nia", "kind": "romance", "severity": 1 },
+    { "id": "sealed-letter", "text": "Arun opened a sealed letter and pretended the rain had loosened it", "about": "arun", "kind": "lying", "severity": 2 },
+    { "id": "midnight-bell", "text": "Wren rang the chapel bell at midnight and blamed the wind", "about": "wren", "kind": "lying", "severity": 1 },
+    { "id": "missing-key", "text": "Oren took the boathouse key so nobody could inspect his unfinished boat", "about": "oren", "kind": "theft", "severity": 2 },
+    { "id": "tale-credit", "text": "Cora claimed that an old traveller’s story was her own adventure", "about": "cora", "kind": "boasting", "severity": 1 },
+    { "id": "late-supper", "text": "Jonah slipped away from his shift to have a secret supper with Greta", "about": "jonah", "kind": "shirking", "severity": 1 },
+    { "id": "bridge-promise", "text": "Silas promised to check the bridge before dusk and never arrived", "about": "silas", "kind": "broken-promise", "severity": 2 }
+  ]
+}

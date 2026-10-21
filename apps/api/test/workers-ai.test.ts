@@ -71,7 +71,7 @@ describe('Workers AI first remote tier', () => {
     expect(s.calls.find(c => c.method === 'reserve')?.body.worstCaseUsd).toBe(0);
     expect(Number(s.calls.find(c => c.method === 'fund')?.body.worstCaseUsd)).toBeGreaterThan(0);
     const body = JSON.parse(String(mock.calls.find(c => c.url.includes('completions'))?.init?.body));
-    expect(body.models).toEqual(['meta-llama/llama-3.3-70b-instruct:free', 'google/gemini-2.5-flash-lite']);
+    expect(body.models).toEqual(['liquid/lfm-2.5-2.6b:free', 'google/gemini-2.5-flash-lite']);
     expect(body.response_format.json_schema.schema).toEqual(schema);
     expect(body).toMatchObject({ temperature: 0, max_tokens: 120, provider: { require_parameters: true, max_price: { prompt: .1, completion: .4, request: 0 } } });
     expect(s.db.prepare('SELECT count FROM usage_days').all()).toEqual([{ count: 1 }]);

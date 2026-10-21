@@ -1,0 +1,13 @@
+{
+  "schema": 1, "id": "quiet-kindness", "version": 1, "title": "Quiet kindness",
+  "stories": [
+    { "id": "winter-coat", "text": "Ada secretly mended Ben’s winter coat and left it folded by his door", "about": "ada", "kind": "kindness", "severity": 1 },
+    { "id": "reading-note", "text": "Leela reads letters aloud for neighbours who are too embarrassed to ask", "about": "leela", "kind": "kindness", "severity": 2 },
+    { "id": "last-crossing", "text": "Edda stayed late to give a tired neighbour a free crossing home", "about": "edda", "kind": "kindness", "severity": 1 },
+    { "id": "warm-soup", "text": "Vesa carried warm soup to Nell and stayed until her fever eased", "about": "vesa", "kind": "nursed", "severity": 2 },
+    { "id": "old-debt", "text": "Greta repaid an old debt to Pim even though he had forgotten it", "about": "greta", "kind": "paid-debt", "severity": 2 },
+    { "id": "lost-basket", "text": "Dara spent the afternoon finding Mab’s lost basket instead of taking a break", "about": "dara", "kind": "kindness", "severity": 1 },
+    { "id": "school-bowls", "text": "Suri replaced every chipped school bowl without putting her name on the gift", "about": "suri", "kind": "kindness", "severity": 2 },
+    { "id": "night-watch", "text": "Nell sat beside Sol all night so Greta could finally get some sleep", "about": "nell", "kind": "nursed", "severity": 2 }
+  ]
+}

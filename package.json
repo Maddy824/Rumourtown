@@ -19,6 +19,7 @@
     "agent:demo": "node examples/agent.mjs demo",
     "agent:serve": "node examples/agent.mjs serve",
     "agent:replay": "node examples/agent.mjs replay",
+    "addon:draft": "node scripts/draft-addon.mjs",
     "alerts:setup": "node scripts/setup-alerts.mjs",
     "load:check": "node scripts/load-check.mjs"
   },

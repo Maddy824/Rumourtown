@@ -56,7 +56,7 @@ describe('whisper sheet timing and writing', () => {
     expect(children[1]!.attrs.get('class')).toBe('own-claim');
     expect(view.root.querySelector('.nearby-people')).toBeNull();
     expect(focus.mock.instances.at(-1)).toBe(view.typed);
-    const disclosure = view.root.querySelector('details')! as TestElement & { open: boolean };
+    const disclosure = view.root.querySelector('.authored-stories')! as TestElement & { open: boolean };
     expect(disclosure.querySelector('summary')!.textContent).toBe('Or choose a village story');
     expect(disclosure.open).toBe(true);
     view.write('Tom took bread.'); expect(disclosure.open).toBe(false);
@@ -112,7 +112,7 @@ describe('whisper sheet timing and writing', () => {
     const style = feedback.attrs.get('style');
     confirmation.querySelector('button')!.dispatchEvent(new Event('click'));
     expect(view.root.querySelector('.story-meaning')!.hidden).toBe(false);
-    expect(view.root.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '2']);
+    expect(view.root.querySelector('.story-meaning')!.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '2']);
     expect(feedback.attrs.get('style')).toBe(style);
     expect(focus.mock.instances.at(-1)).toBe(view.root.querySelector('select'));
     view.ui.destroy();

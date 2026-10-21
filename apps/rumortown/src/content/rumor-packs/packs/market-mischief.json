@@ -1,0 +1,13 @@
+{
+  "schema": 1, "id": "market-mischief", "version": 1, "title": "Market mischief",
+  "stories": [
+    { "id": "prize-bowl", "text": "Tavi put their name on Suri’s finest bowl to win the fair prize", "about": "tavi", "kind": "cheating", "severity": 2 },
+    { "id": "borrowed-coat", "text": "Ben borrowed a fine coat and told everyone he had bought it in the city", "about": "ben", "kind": "boasting", "severity": 1 },
+    { "id": "honey-jars", "text": "Pim hid the last honey jars until his neighbours offered twice the price", "about": "pim", "kind": "hoarding", "severity": 2 },
+    { "id": "flour-mark", "text": "Mira moved the mark on her flour scoop to make each sale a little smaller", "about": "mira", "kind": "cheating", "severity": 2 },
+    { "id": "flower-basket", "text": "Bram took flowers from the shared garden to decorate only his own stall", "about": "bram", "kind": "theft", "severity": 1 },
+    { "id": "sour-tea", "text": "Rosa told a table of customers that Vesa’s tea tasted like ditch water", "about": "rosa", "kind": "insult", "severity": 1 },
+    { "id": "rain-excuse", "text": "Hal blamed the rain for a late delivery after spending the morning at the inn", "about": "hal", "kind": "lying", "severity": 1 },
+    { "id": "fair-song", "text": "Otto promised to introduce Wren’s song but used the whole hour for his own speech", "about": "otto", "kind": "broken-promise", "severity": 1 }
+  ]
+}

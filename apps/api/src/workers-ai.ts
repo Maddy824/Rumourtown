@@ -2,7 +2,7 @@ import { MAX_TOKENS } from './prices';
 import { record, type Env } from './types';
 import { schema, validate, type Claim, type Unsupported } from './validate';
 
-export const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+export const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.2-3b-instruct';
 
 /** The binding uses a bare JSON Schema; OpenRouter wraps this same schema. */
 export async function workersAi<T = Claim | Unsupported>(env: Env, messages: { role: string; content: string }[],

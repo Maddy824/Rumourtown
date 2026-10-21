@@ -77,7 +77,7 @@ describe('whisper confirmation and privacy', () => {
     const ui = sheet(verified); await ui.submit();
     ui.root.querySelector('.whisper-confirmation')!.querySelector('button')!.dispatchEvent(new Event('click'));
     expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(false);
-    expect(ui.root.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '3']);
+    expect(ui.root.querySelector('.story-meaning')!.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '3']);
     await ui.submit();
     expect(ui.start).toHaveBeenCalledTimes(1);
     expect(ui.whispered[0]).toBe('typed_theft_tom_none_none_3');
@@ -162,6 +162,41 @@ describe('whisper confirmation and privacy', () => {
       expect(await retry).toEqual({ ok: false, reason: 'turnstile' });
       expect(fetcher).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('reusable rumor library', () => {
+  it('only registers a selected library story on whisper, without interpreting stale typed input', async () => {
+    const ui = sheet(verified);
+    const count = ui.sim.claims.size;
+    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
+    expect(ui.root.querySelector('textarea')!.value).toBe('');
+    expect(ui.sim.claims.size).toBe(count);
+    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toContain('No AI credits used');
+    await ui.submit();
+    expect(ui.start).not.toHaveBeenCalled();
+    expect(ui.whispered).toHaveLength(1);
+    expect(ui.sim.claims.get(ui.whispered[0]!)?.text).toBe('Tom leaves a blue ribbon on Rosa’s doorstep every evening');
+    expect(ui.whispered[0]).toMatch(/^written_/);
+  });
+  it('clears a library selection when the player writes a different rumor', async () => {
+    const ui = sheet(verified);
+    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
+    const typed = ui.root.querySelector('textarea')!;
+    typed.value = privateText; typed.dispatchEvent(new Event('input'));
+    await ui.submit();
+    expect(ui.start).toHaveBeenCalledExactlyOnceWith(privateText);
+    expect(ui.whispered).toHaveLength(0);
+  });
+  it('prevents telling a library rumor to its own subject', async () => {
+    const ui = sheet(verified);
+    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
+    ui.root.querySelector('.whisper-who')!.querySelectorAll<TestElement>('input').find(input => input.value === 'tom')!
+      .dispatchEvent(new Event('change'));
+    await ui.submit();
+    expect(ui.whispered).toHaveLength(0);
+    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toContain('Choose a story about someone else');
+    expect(ui.start).not.toHaveBeenCalled();
   });
 });
 

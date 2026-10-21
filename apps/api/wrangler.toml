@@ -26,7 +26,8 @@ simple = { limit = 60, period = 60 }
 
 [vars]
 ALLOWED_ORIGIN = "https://rumortown.example"
-MODELS = "meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.5-flash-lite"
+WORKERS_AI_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+MODELS = "liquid/lfm-2.5-2.6b:free,google/gemini-2.5-flash-lite"
 AI_ENABLED = "false"
 DAILY_ALLOWANCE_USD = "0.019"
 LIFETIME_ALLOWANCE_USD = "7"
@@ -47,7 +48,8 @@ binding = "AI"
 
 [env.production.vars]
 ALLOWED_ORIGIN = "https://rumourtown.dev"
-MODELS = "meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.5-flash-lite"
+WORKERS_AI_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+MODELS = "liquid/lfm-2.5-2.6b:free,google/gemini-2.5-flash-lite"
 AI_ENABLED = "true"
 DAILY_ALLOWANCE_USD = "0.019"
 LIFETIME_ALLOWANCE_USD = "7"

@@ -76,3 +76,7 @@ Replay pins are regression checks, not evidence of psychological validity. Compa
 The game's **Talk or act** sheet now uses the existing budgeted Worker at `POST /play` for creative replies and short action proposals. It sends the nearby speaker's voice, mood and activity, up to three previous exchanges and the available places. The response is `{reply, action, target}`; allowed actions are `none`, `move`, `approach`, `pause`, `resume` and `look`. The browser validates every proposal and performs it only when the player clicks its action button. There are no combat or death tools.
 
 This path is separate from the deterministic developer adapter above: conversation text is not inserted into the simulation, research exports or shared links. It has no continuous model loop. Each Send uses one bounded inference attempt, with the existing provider fallback and shared visitor/spending caps. See [credit controls](credit-controls.md#conversation-and-actions). Local walking shortcuts and the autonomous tour still cost no AI credits.
+
+## Create reusable content and behaviors
+
+See [rumor and behavior add-ons](rumor-addons.md) for the versioned shared story library and `npm run addon:draft`. The development command previews a brief for free, or starts one explicitly requested coding-agent job in an isolated worktree with `--run`. Its generated code must pass tests and review before release. The published result runs locally for all visitors. Coding-agent usage belongs to the developer account and is separate from the live interpretation budget.

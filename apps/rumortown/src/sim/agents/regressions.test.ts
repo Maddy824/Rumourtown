@@ -2,6 +2,7 @@ import { BeliefLedger, DEFAULT_TUNING, Relationships, sigmoid } from 'rumormind'
 import { describe, expect, it } from 'vitest';
 import { cast as authoredCast, claims as authoredClaims } from '../../content/cast/index.js';
 import { createSimulation } from '../engine.js';
+import { createWrittenClaim } from '../registered-claim.js';
 import { createFakeCast, createFakeMap } from '../fake.js';
 import { MINUTES_PER_DAY, type Ending, type GameClaim, type TalkApi } from '../types.js';
 import { createWorld, createMover as worldMover } from '../world/index.js';
@@ -435,6 +436,38 @@ it('does not use an unrelated bread errand to disprove typed coin theft', () => 
   const before = mira.ledger.confidence(coins.id);
   tickWitnessing(ctx);
   expect(mira.ledger.confidence(coins.id)).toBe(before);
+});
+
+it.each(['kindness', 'theft'] as const)('does not confirm or disprove a written %s story by witnessing an unrelated act', kind => {
+  const story = createWrittenClaim(kind === 'kindness' ? 'Tom mended Ben’s coat' : 'Tom stole Ben’s coat', 'tom', kind, 2,
+    new Map(authoredCast.map(person => [person.id, person])));
+  const ctx = fixture(['mira', 'tom'], [harmful, truth, story]);
+  const tom = agent(ctx, 'tom'), mira = agent(ctx, 'mira');
+  const spot = ctx.world.place('bakery').spots[0]!;
+  tom.mover.pos = { x: spot.x + .5, y: spot.y + .5 }; mira.mover.pos = { ...tom.mover.pos };
+  tom.d.secrets = [{ id: 'bread', kind: 'delivery', description: 'delivers bread', place: 'bakery', window: [0, 10], confirms: ['kindness'], contradicts: ['theft'] }];
+  hear(ctx, mira, story);
+  const before = mira.ledger.confidence(story.id);
+  tickWitnessing(ctx);
+  expect(ctx.events.some(event => event.kind === 'witness' && event.villager === 'mira')).toBe(true);
+  expect(mira.ledger.confidence(truth.id)).toBeGreaterThan(.5);
+  expect(mira.ledger.confidence(story.id)).toBe(before);
+  expect(hasFirsthand(mira, story.id)).toBe(false);
+});
+
+it('does not let a written story supply an authored fact for a typed claim', () => {
+  const story = createWrittenClaim('Tom stole Ben’s coat', 'tom', 'theft', 2,
+    new Map(authoredCast.map(person => [person.id, person])));
+  const typed: GameClaim = { ...story, id: 'typed_theft_tom_none_none_2', text: 'Tom stole something' };
+  const ctx = fixture(['mira', 'tom'], [truth, story, typed]);
+  const tom = agent(ctx, 'tom'), mira = agent(ctx, 'mira');
+  const spot = ctx.world.place('bakery').spots[0]!;
+  tom.mover.pos = { x: spot.x + .5, y: spot.y + .5 }; mira.mover.pos = { ...tom.mover.pos };
+  tom.d.secrets = [{ id: 'bread', kind: 'delivery', description: 'delivers bread', place: 'bakery', window: [0, 10], confirms: ['kindness'], contradicts: ['theft'] }];
+  hear(ctx, mira, typed);
+  const before = mira.ledger.confidence(typed.id);
+  tickWitnessing(ctx);
+  expect(mira.ledger.confidence(typed.id)).toBe(before);
 });
 
 it('allows a new teller to corroborate a known rumor while stifling a repeated teller', () => {
