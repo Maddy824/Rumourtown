@@ -37,3 +37,23 @@ An explicit-file `git add` for the network directory failed: `Unable to create .
 1. Approve updating `src/ui/whisper.test.ts` to the new checking/status and separate-budget contract, then rerun the requested combined tests and root checks.
 2. Verify the configured live flow and desktop/360 px keyboard behavior in a browser outside this sandbox.
 3. Commit the scoped changes from a workspace with writable `.git`.
+
+## Fix round
+
+STATUS: DONE
+
+The owner authorized updating `src/ui/whisper.test.ts` for the Task 18 contract. Both failures were obsolete expectations; no production implementation changes were needed.
+
+- The close-during-request test now expects the initial “Checking you're human…” line. It still resolves the pending result after closing and asserts that nothing was whispered and the confirmation remains hidden. It additionally verifies that no claim was registered and the sheet remains closed.
+- Replaced the shared 5.8-second deadline expectation with exact boundary checks for the separate human-check budgets: still checking at 11,999 ms on first use and at 5,999 ms on retry; human-check failure at 12,000 ms and 6,000 ms respectively. It verifies the human-check failure line and that interpretation fetch is never called without a token.
+- Added `warm()` to the Turnstile mock to match the client contract.
+- Retained `src/net/whisper-sheet.test.ts`: it is intentional and passes all five tests for warming, writing order, desktop/phone focus targets, progress messages, and retries. It is already tracked in the branch at the start of this fix round. Existing network tests also retain the slow-human-check/fast-interpretation and request-timeout regressions.
+
+Verification:
+
+- `npx vitest run apps/rumortown/src/ui/whisper.test.ts apps/rumortown/src/net`: **95 passed**, three files.
+- Root `npm test`: **705 passed**, 57 files; no failures were ignored.
+- Root `npm run typecheck`: passed across all workspaces.
+- Scoped `git diff --check`: passed.
+
+Only `src/ui/whisper.test.ts` and this report were edited in the fix round. Other runs' changes, including renderer work and generated build-info files, were preserved. No staging or commits were performed, as requested. The original browser verification limits above remain; this fix round resolves the test blockers.

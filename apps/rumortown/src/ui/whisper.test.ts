@@ -26,7 +26,7 @@ import { decodeShare, encodeShare } from './share-link.js';
 import { sheetDocument, TestElement } from './whisper-dom.fixture.js';
 
 vi.mock('../net/turnstile.js', () => ({ loadTurnstile: vi.fn(() => ({
-  getToken: vi.fn(async () => 'test-token'), render: vi.fn(), destroy: vi.fn(),
+  getToken: vi.fn(async () => 'test-token'), warm: vi.fn(async () => {}), render: vi.fn(), destroy: vi.fn(),
 })) }));
 vi.mock('./faces.js', () => ({ faceImg: () => document.createElement('img') }));
 
@@ -112,10 +112,12 @@ describe('whisper confirmation and privacy', () => {
     const ui = sheet(verified);
     ui.start.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
     await ui.submit();
-    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toBe('Asking the village…');
+    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toBe("Checking you're human…");
     ui.sheet.close(); complete(verified);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(ui.whispered).toEqual([]);
+    expect(ui.sim.claims.has('typed_theft_tom_none_bread_3')).toBe(false);
+    expect(ui.sheet.isOpen()).toBe(false);
     expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
   });
   it('uses a fresh Turnstile container when a configured sheet is reopened', async () => {
@@ -140,15 +142,25 @@ describe('whisper confirmation and privacy', () => {
     }
     expect(loadTurnstile).toHaveBeenCalledTimes(2);
   });
-  it('bounds Turnstile plus interpretation to less than six seconds', async () => {
+  it('bounds the human check to twelve seconds first and six seconds afterward', async () => {
     vi.useFakeTimers();
     try {
+      const fetcher = vi.fn();
       const flow = createWhisperFlow({ baseUrl: 'https://api.test', castVersion,
-        turnstile: { getToken: () => new Promise(() => {}) }, fetch: vi.fn() });
+        turnstile: { getToken: () => new Promise(() => {}) }, fetch: fetcher });
       const pending = flow.start(privateText);
-      await vi.advanceTimersByTimeAsync(5800);
-      expect(await pending).toEqual({ ok: false, reason: 'timeout' });
-      expect(flow.state.status).toBe('resting');
+      await vi.advanceTimersByTimeAsync(11_999);
+      expect(flow.state.status).toBe('checking');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual({ ok: false, reason: 'turnstile' });
+      expect(flow.state).toMatchObject({ status: 'resting', line: "Couldn't check you're human. Try again." });
+
+      const retry = flow.start(privateText);
+      await vi.advanceTimersByTimeAsync(5_999);
+      expect(flow.state.status).toBe('checking');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await retry).toEqual({ ok: false, reason: 'turnstile' });
+      expect(fetcher).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
   });
 });
