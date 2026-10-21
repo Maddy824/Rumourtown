@@ -15,6 +15,11 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 - Secrets live outside the repo: `~/.config/rumourtown/cloudflare.env`, `~/.config/rumourtown/turnstile.env`, `~/.config/rumourtown/signing.json`, and the git-ignored `apps/api/.dev.vars`. Never print, copy or commit them.
 - Design authority: `docs/superpowers/specs/2026-10-21-rumortown-design.md`. Research: `/Users/maddy/B2B/reports/` (outside the repo). Rulings and history: `.superpowers/sdd/2026-10-21-village-build/progress.md`.
 
+## 1b. Latest state (2026-10-22, controller)
+- Live at 706fda2 plus deploys of 912b238: the conversation orchestrator (`apps/rumortown/src/agentic/orchestrator.ts`) answers moves, visits, provenance and news from simulation state with no model call; open conversation goes to `/play` with grounded `facts` and is voiced by `@cf/meta/llama-3.3-70b-instruct-fp8-fast`; `/rumor` also uses 70B; chat has its own allowance (`PLAY_PER_VISITOR_PER_HOUR=30`); the Talk sheet shows "<name> is thinking" immediately and warms Turnstile on open.
+- Human QA report: `reports/qa-2026-10-22.md`. Done from task 23: items 1, 2, 3, 4 (model, deterministic moves, grounding, separate allowance). Still open: items 5 (night guidance), 6 (first-screen copy), 7 (timeline noise, stale status lines, blank signs), 8 (phone talk sheet), 9 (shared-text moderation), plus: library-rumor beats read "X told Y a village rumor" and should name the rumor.
+- Research track: `24-slm-agent-study.md` (build list items 1–5).
+
 ## 2. The queue, in order
 
 | # | Task file | State at handoff | What to do |
