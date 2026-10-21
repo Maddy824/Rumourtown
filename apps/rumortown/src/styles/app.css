@@ -2783,3 +2783,5 @@ button.chain-actor:hover span {
 }
 .rt[data-layout='phone'][data-night='true'] .quick-whisper::before { background: radial-gradient(closest-side, rgba(255, 196, 110, 0.45), rgba(255, 196, 110, 0)); }
 .rt[data-layout='phone'] .postbox-label { font-size: var(--fs-s); padding: 6px 4px 7px; min-height: 30px; white-space: nowrap; box-shadow: 0 2px 0 rgba(46, 42, 34, 0.45); }
+/* The story line sits above the taller phone postbox, never over it. */
+.rt[data-layout='phone'] > .now-bar { bottom: calc(120px + var(--safe-b)); }

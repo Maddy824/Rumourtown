@@ -8,7 +8,7 @@ export function createAmbientMusic() {
   let muted = false, started = false, destroyed = false;
   try { muted = localStorage.getItem(preference) === 'true'; } catch { /* Private browsing still has a session control. */ }
   let context: AudioContext | undefined, master: GainNode | undefined;
-  let input: BiquadFilterNode | undefined;
+  let input: BiquadFilterNode | undefined, hall: GainNode | undefined;
   let interval = 0, suspendTimer = 0, next = 0, phrase = 0;
   const listeners = new Set<() => void>();
   const voices = new Set<OscillatorNode>();
@@ -29,13 +29,40 @@ export function createAmbientMusic() {
     oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); position.disconnect(); voices.delete(oscillator); };
     oscillator.start(time); oscillator.stop(time + duration);
   }
+  /** A slow, warm string swell under the chords: detuned saws, a breathing filter and a long hall. */
+  function pad(root: number, time: number, duration: number): void {
+    if (!context || !hall) return;
+    const tone = context.createBiquadFilter(), envelope = context.createGain(), breath = context.createOscillator(), depth = context.createGain();
+    tone.type = 'lowpass'; tone.frequency.value = 420; tone.Q.value = .7;
+    breath.frequency.value = 1 / 9; depth.gain.value = 160;
+    breath.connect(depth).connect(tone.frequency);
+    envelope.gain.setValueAtTime(0, time);
+    envelope.gain.linearRampToValueAtTime(.05, time + duration * .45);
+    envelope.gain.linearRampToValueAtTime(0, time + duration);
+    tone.connect(envelope).connect(hall);
+    const sources: OscillatorNode[] = [breath];
+    for (const [midi, cents] of [[root - 12, -7], [root - 12, 7], [root - 24, 0], [root - 5, 4]] as const) {
+      const oscillator = context.createOscillator();
+      oscillator.type = midi === root - 24 ? 'sine' : 'sawtooth';
+      oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
+      oscillator.detune.value = cents;
+      oscillator.connect(tone); sources.push(oscillator);
+    }
+    for (const source of sources) {
+      voices.add(source);
+      source.onended = () => { source.disconnect(); voices.delete(source); if (source === breath) { depth.disconnect(); tone.disconnect(); envelope.disconnect(); } };
+      source.start(time); source.stop(time + duration);
+    }
+  }
   function schedule(): void {
     if (!context || muted || document.hidden || destroyed) return;
     // A throttled/background tab starts a fresh phrase instead of catching up old notes.
     if (next < context.currentTime) next = context.currentTime + .08;
     while (next < context.currentTime + 1) {
       if (phrase % 2 === 0) {
-        chords[(phrase / 2) % chords.length]!.forEach((pitch, i) => note(pitch, next, 12, .11, (i - 1.5) * .3));
+        const chord = chords[(phrase / 2) % chords.length]!;
+        chord.forEach((pitch, i) => note(pitch, next, 12, .11, (i - 1.5) * .3));
+        pad(chord[0]!, next, 16);
       }
       const pitch = melody[phrase % melody.length]!;
       const pan = Math.sin(phrase * .7) * .65;
@@ -61,11 +88,22 @@ export function createAmbientMusic() {
         const echo = context.createDelay(2), feedback = context.createGain(), wet = context.createGain();
         echo.delayTime.value = .75; feedback.gain.value = .3; wet.gain.value = .22;
         input.connect(master); input.connect(echo); echo.connect(feedback).connect(echo); echo.connect(wet).connect(master);
+        // A long, dark hall: a decaying noise impulse, generated once.
+        const reverb = context.createConvolver(), length = Math.floor(context.sampleRate * 5);
+        const impulse = context.createBuffer(2, length, context.sampleRate);
+        for (let channel = 0; channel < 2; channel++) {
+          const data = impulse.getChannelData(channel);
+          for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 3;
+        }
+        reverb.buffer = impulse;
+        hall = context.createGain(); hall.gain.value = .9;
+        const reverbWet = context.createGain(); reverbWet.gain.value = .55;
+        hall.connect(master); hall.connect(reverb); input.connect(reverb); reverb.connect(reverbWet).connect(master);
         master.connect(context.destination);
       }
       await context.resume();
       if (destroyed || muted || document.hidden) { if (!destroyed) void context.suspend().catch(() => {}); return; }
-      fade(.025);
+      fade(.06);
       schedule();
       if (!interval) interval = window.setInterval(schedule, 500);
     } catch {
