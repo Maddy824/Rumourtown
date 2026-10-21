@@ -37,8 +37,8 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 |---|---|---|
 | 01 | Integration: wire the real engine, cast, dialogue, renderer and UI | blocked on Git writes; implementation verified; see reports/01-report.md |
 | 02 | Verify and commit any uncommitted fix rounds | done; residual engine findings carried to 04 |
-| 03 | Final whole-branch review (read-only) | in progress |
-| 04 | Fix the final review's findings | pending |
+| 03 | Final whole-branch review (read-only) | done; 10 Important findings, see report |
+| 04 | Fix the final review's findings | fixes verified; rereview in progress |
 | 05 | Benchmarks | pending |
 | 06 | Library publish preparation | pending |
 | 07 | Accessibility pass | pending |

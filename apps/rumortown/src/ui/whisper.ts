@@ -108,6 +108,10 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       chosen = claim.id;
     }
     if (!chosen) return;
+    if (sim.claims.get(chosen)?.about === to) {
+      feedback.textContent = 'Say that to my face? Choose a story about someone else.';
+      return;
+    }
     if (ctx.whisper(to, chosen)) {
       api.close();
     } else {
@@ -223,7 +227,8 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       update();
     });
     content.replaceChildren(who, what, h('label', { class: 'own-claim' },
-      h('span', null, ctx.client ? 'Type your own' : 'Type your own (coming later)'), typed));
+      h('span', null, ctx.client ? 'Type your own' : 'Type your own (coming later)'), typed),
+      ...(ctx.client ? [h('p', { class: 'sheet-note' }, 'Your typed words go to an AI service to be understood, then are discarded.')] : []));
     update();
   };
 
@@ -251,6 +256,9 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       turnstile = undefined;
       busy = false;
       open = false;
+      ownText = '';
+      const typed = content.querySelector<HTMLInputElement>('.own-claim input');
+      if (typed) typed.value = '';
       conceal(el, ctx.reducedMotion());
       ctx.layers.closed('whisper');
       ctx.onOpenChange(false);
