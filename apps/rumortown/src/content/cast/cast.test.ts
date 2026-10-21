@@ -108,7 +108,7 @@ describe('roster', () => {
 
   it('has unique ids and the cast version', () => {
     expect(new Set(cast.map((d) => d.id)).size).toBe(cast.length);
-    expect(castVersion).toBe('v3');
+    expect(castVersion).toBe('v4');
   });
 
   it('gives all 36 people distinct inner lives and bounded authored motives', () => {
@@ -210,10 +210,10 @@ describe('looks', () => {
 });
 
 describe('schedules', () => {
-  it('has six to nine sorted entries that start at 0, at home', () => {
+  it('has sorted daytime and night entries that start at 0, at home', () => {
     for (const d of cast) {
       expect(d.schedule.length, d.id).toBeGreaterThanOrEqual(6);
-      expect(d.schedule.length, d.id).toBeLessThanOrEqual(9);
+      expect(d.schedule.length, d.id).toBeLessThanOrEqual(18);
       expect(d.schedule[0], d.id).toMatchObject({ start: 0, place: d.home });
       d.schedule.forEach((e, i) => {
         expect(Number.isInteger(e.start), d.id).toBe(true);
@@ -223,11 +223,10 @@ describe('schedules', () => {
     }
   });
 
-  it('ends the day at home by 840', () => {
+  it('gives everyone a home sleep entry between 21:30 and 23:00, with authored night exceptions', () => {
     for (const d of cast) {
-      const last = d.schedule[d.schedule.length - 1];
-      expect(last?.place, d.id).toBe(d.home);
-      expect(last?.start, d.id).toBeLessThanOrEqual(840);
+      expect(d.schedule.some(e => e.place === d.home && e.activity === 'sleep'), d.id).toBe(true);
+      if (!['rosa', 'dag', 'fen', 'lio'].includes(d.id)) expect(d.schedule.some(e => e.activity === 'sleep' && e.start >= 930 && e.start <= 1020), d.id).toBe(true);
     }
   });
 
@@ -235,7 +234,7 @@ describe('schedules', () => {
     for (const d of cast) {
       expect(d.schedule.some((e) => e.activity === 'work' && e.place === d.workplace), `${d.id} works`).toBe(true);
       const meal = d.schedule.some(
-        (e) => e.activity === 'eat' && e.start >= 240 && e.start <= 400 && ['bakery', 'inn', d.home].includes(e.place),
+        (e) => e.activity === 'eat' && e.start >= 300 && e.start <= 460 && ['bakery', 'inn', d.home].includes(e.place),
       );
       expect(meal, `${d.id} eats at midday`).toBe(true);
       expect(d.schedule.some((e) => e.activity === 'errand' || e.activity === 'visit'), `${d.id} has an errand or visit`).toBe(true);
@@ -245,8 +244,8 @@ describe('schedules', () => {
   it('lets Ada receive Tom at home while she is ill', () => {
     const ada = villager('ada');
     expect(ada.schedule.every((entry) => entry.place === ada.home)).toBe(true);
-    expect(coveringEntry(ada, ada.home, [600, 660])?.activity).toBe('visit');
-    expect(coveringEntry(villager('tom'), ada.home, [600, 660])?.activity).toBe('visit');
+    expect(coveringEntry(ada, ada.home, [660, 720])?.activity).toBe('visit');
+    expect(coveringEntry(villager('tom'), ada.home, [660, 720])?.activity).toBe('visit');
   });
 
   it('sends sociable villagers to the inn, square or chapel in the evening', () => {
@@ -327,7 +326,7 @@ describe('secrets', () => {
 
   it('includes the acts the brief requires', () => {
     const find = (owner: string, kind: Secret['kind']) => villager(owner).secrets.find((s) => s.kind === kind);
-    expect(find('tom', 'delivery')).toMatchObject({ place: 'home-ada', window: [80, 100], confirms: ['kindness'], contradicts: ['theft'] });
+    expect(find('tom', 'delivery')).toMatchObject({ place: 'home-ada', window: [140, 160], confirms: ['kindness'], contradicts: ['theft'] });
     expect(find('mira', 'debt')).toMatchObject({ place: 'shop', with: 'pim', confirms: ['paid-debt'] });
     expect(find('jonah', 'meeting')).toMatchObject({ place: 'bridge', with: 'rosa', confirms: ['kindness'], contradicts: ['romance'] });
     expect(find('ben', 'borrow')).toMatchObject({ place: 'smithy', confirms: ['theft'], contradicts: [] });
