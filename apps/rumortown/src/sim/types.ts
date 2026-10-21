@@ -461,9 +461,8 @@ export interface Renderer {
 
 /* ---------------- Share links ---------------- */
 
-export interface ShareState {
-  v: 1;
+export type ShareState = {
   seed: number;
   cast: string;
   interventions: Intervention[];
-}
+} & ({ v: 1; start?: never } | { v: 2; start: number });

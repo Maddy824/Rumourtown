@@ -2,7 +2,7 @@
  * Share links: ShareState as JSON, then UTF-8, then base64url, carried in the URL hash.
  * Decoding is defensive: size-capped, shape-checked, and anything odd yields null.
  */
-import type { Intervention, ShareState } from '../sim/types.js';
+import { MINUTES_PER_DAY, type Intervention, type ShareState } from '../sim/types.js';
 
 /** Caps keep a hostile link from making the page do unbounded work. */
 const MAX_ENCODED = 16_000;
@@ -56,7 +56,8 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 function validate(raw: unknown): ShareState | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  if (r.v !== 1) return null;
+  if (r.v !== 1 && r.v !== 2) return null;
+  if (r.v === 2 && (typeof r.start !== 'number' || !Number.isInteger(r.start) || r.start < 0 || r.start >= MINUTES_PER_DAY)) return null;
   const seed = r.seed;
   if (typeof seed !== 'number' || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return null;
   if (typeof r.cast !== 'string' || r.cast.length > 32) return null;
@@ -72,7 +73,7 @@ function validate(raw: unknown): ShareState | null {
     interventions.push({ tick, listener, claimId });
   }
   interventions.sort((a, b) => a.tick - b.tick);
-  return { v: 1, seed, cast: r.cast, interventions };
+  return r.v === 2 ? { v: 2, start: r.start as number, seed, cast: r.cast, interventions } : { v: 1, seed, cast: r.cast, interventions };
 }
 
 export function readShareFromLocation(): { state: ShareState | null; present: boolean } {

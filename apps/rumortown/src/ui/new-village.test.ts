@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeShare, encodeShare } from './share-link.js';
+import { localStartTick } from './local-clock.js';
 import { newVillageUrl } from './new-village.js';
 
 describe('starting another village', () => {
@@ -10,7 +11,7 @@ describe('starting another village', () => {
     const url = new URL(newVillageUrl(`https://village.test/game/?t=2699#${previous}`, 42, 'v1'));
     expect(url.origin + url.pathname).toBe('https://village.test/game/');
     expect(url.searchParams.has('t')).toBe(false);
-    expect(decodeShare(url.hash.slice(1))).toEqual({ v: 1, seed: 42, cast: 'v1', interventions: [] });
+    expect(decodeShare(url.hash.slice(1))).toEqual({ v: 2, start: localStartTick(), seed: 42, cast: 'v1', interventions: [] });
     expect(decodeShare(previous)?.interventions).toHaveLength(1);
   });
 

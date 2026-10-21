@@ -18,9 +18,9 @@ const world = { ...createWorld(villageMap), createMover };
 export const deps: AppDeps = {
   map: fake ? createFakeMap() : villageMap,
   castVersion,
-  createSim: (seed, interventions, tuning) => fake
+  createSim: (seed, interventions, tuning, days) => fake
     ? createFakeSimulation(seed, interventions)
-    : createSimulation({ seed, world, cast, claims, talk: createTalk(cast), interventions, tuning }),
+    : createSimulation({ seed, world, cast, claims, talk: createTalk(cast), interventions, tuning, days }),
   createRenderer: createStubRenderer,
 
 };

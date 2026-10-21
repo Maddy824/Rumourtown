@@ -628,7 +628,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     }
     if (options.spotlight?.length) {
       // Leave the whole scene at 40%, then redraw the people and their paper rings.
-      ctx.save(); ctx.globalAlpha = .6; ctx.fillStyle = INK;
+      ctx.save(); ctx.globalAlpha = options.spotlightDim ?? .6; ctx.fillStyle = INK;
       ctx.fillRect(0, 0, camera.width, camera.height); ctx.restore();
       for (const id of options.spotlight) {
         if (id === 'stranger') {

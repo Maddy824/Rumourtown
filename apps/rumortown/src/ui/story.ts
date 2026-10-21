@@ -1,4 +1,5 @@
 /** The paper story rail reads the same event stream as timeline pins. */
+import type { createExchanges } from './exchanges.js';
 import type { SimEvent, Simulation, ThreadLink } from '../sim/types.js';
 import { eventKey, newestStoryEntries, storyBeat } from './story-beats.js';
 import { h } from './dom.js';
@@ -10,8 +11,10 @@ export interface StoryContext {
   sim: () => Simulation; dare?: string; layers: Layers;
   isPhone: () => boolean; reducedMotion: () => boolean;
   onShow: (ids: readonly string[]) => void;
+  onFollow?: () => void;
   onOpenChange: (open: boolean) => void;
   history: () => readonly ThreadLink[];
+  exchanges?: () => ReturnType<typeof createExchanges>;
 }
 export function createStory(ctx: StoryContext) {
   const list = h('ol', { class: 'log', 'aria-label': 'Story beats, newest first' });
@@ -28,16 +31,23 @@ export function createStory(ctx: StoryContext) {
     scroller);
   const el = h('section', { class: 'drawer story', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'rt-story-title', hidden: true }, paper);
   let events: SimEvent[] = [], open = false, selected = '', chainKey = '', optionsKey = '';
+  const expanded = new Set<string>();
   let handle: HTMLElement | undefined, home: HTMLElement | undefined;
   const face = (id: string, size = 28): HTMLImageElement => faceImg(id, ctx.sim().cast.get(id)?.look ?? 'stranger', size);
   function row(e: SimEvent): HTMLElement {
-    const beat = storyBeat(e, ctx.sim());
+    const exchange = ctx.exchanges?.().byEvent.get(eventKey(e));
+    const beat = exchange?.beat ?? storyBeat(e, ctx.sim());
+    const script = exchange ? h('details', { class: 'beat-script' }, h('summary', null, 'Read the exchange'), ...exchange.lines.map(line => h('p', null, h('strong', null, `${line.speaker === 'stranger' ? 'You' : ctx.sim().cast.get(line.speaker)?.name ?? line.speaker}: `), line.text))) : null;
+    if (script && exchange) {
+      script.open = expanded.has(exchange.id);
+      script.addEventListener('toggle', () => { if (script.open) expanded.add(exchange.id); else expanded.delete(exchange.id); });
+    }
     const content = beat?.text ?? (e.kind === 'day-end' ? `End of day ${e.dayIndex + 1}: ${ENDING_TITLE[e.ending]}. ${sentence(e.summary)}` : '');
     return h('li', { class: 'log-entry beat-card', 'data-event': eventKey(e), 'data-kind': e.kind },
       h('time', null, tickLabel(e.tick)),
       beat ? h('div', { class: 'beat-faces' }, beat.faces.map(id => face(id))) : null,
       h('p', null, sentence(content)),
-      beat ? h('button', { type: 'button', class: 'text-button', onclick: () => ctx.onShow(beat.faces) }, 'Show me') : null);
+      beat ? h('button', { type: 'button', class: 'text-button', onclick: () => ctx.onShow(beat.faces) }, 'Show me') : null, script);
   }
   function render(): void {
     const active = document.activeElement;
@@ -45,7 +55,9 @@ export function createStory(ctx: StoryContext) {
     const oldTop = list.firstElementChild;
     const before = oldTop?.getBoundingClientRect().top;
     const stick = scroller.scrollTop < 8;
-    list.replaceChildren(...newestStoryEntries(events, ctx.sim()).map(row));
+    const history = ctx.exchanges?.();
+    const entries = history ? events.filter(e => e.kind === 'day-end' || history.byEvent.get(eventKey(e))?.beat.event === e).reverse() : newestStoryEntries(events, ctx.sim());
+    list.replaceChildren(...entries.map(row));
     empty.hidden = list.childElementCount > 0;
     api.updateChain();
     if (focusedKey) {
@@ -58,7 +70,7 @@ export function createStory(ctx: StoryContext) {
       if (retained) scroller.scrollTop += retained.getBoundingClientRect().top - before;
     }
   }
-  choose.addEventListener('change', () => { selected = choose.value; chainKey = ''; api.updateChain(); });
+  choose.addEventListener('change', () => { selected = choose.value; chainKey = ''; api.updateChain(); ctx.onFollow?.(); });
   const api = {
     el, endingSlot,
     setFull(full: boolean) { el.dataset.full = String(full); expand.textContent = full ? 'Lower' : 'Expand'; expand.setAttribute('aria-expanded', String(full)); },
@@ -102,10 +114,10 @@ export function createStory(ctx: StoryContext) {
     layout() { if (!handle || !home) return; if (open && ctx.isPhone()) paper.prepend(handle); else home.append(handle); },
     push(fresh: readonly SimEvent[]) {
       events.push(...fresh);
-      if (open && fresh.some(e => e.kind === 'day-end' || storyBeat(e, ctx.sim()))) render();
+      if (open && fresh.some(e => e.kind === 'day-end' || storyBeat(e, ctx.sim()) || ctx.exchanges?.().byEvent.has(eventKey(e)))) render();
       else api.updateChain();
     },
-    reset(all: readonly SimEvent[]) { events = [...all]; chainKey = optionsKey = ''; if (open) render(); else api.updateChain(); },
+    reset(all: readonly SimEvent[]) { events = [...all]; expanded.clear(); chainKey = optionsKey = ''; if (open) render(); else api.updateChain(); },
     open(opener?: Element | null) {
       if (open) return;
       open = true; render(); el.hidden = false; el.dataset.open = 'true'; api.layout();

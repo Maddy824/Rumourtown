@@ -1,12 +1,13 @@
 /**
- * Two camera levels, per the spec: close (32 CSS px per tile, following the stranger) and far (the whole
+ * Two camera levels, per the spec: close (40 CSS px per tile, following the stranger) and far (the whole
  * village fitted clear of the top strip and the bottom controls). Levels switch at once: the renderer
  * caches its ground per zoom level, so the zoom never passes through in-between values.
  *
  * The centre is clamped the same way the renderer clamps it (map edge never shows when the map is larger
  * than the viewport; map centred when smaller), so DOM overlays and the canvas always agree.
  */
-import { TILE, type Camera, type Vec2, type VillageMap } from '../sim/types.js';
+import { CLOSE_ZOOM } from '../render/camera.js';
+import { type Camera, type Vec2, type VillageMap } from '../sim/types.js';
 
 export interface Insets {
   left?: number;
@@ -21,6 +22,7 @@ export interface CameraRig {
   readonly camera: Camera;
   far: boolean;
   focusZoom?: number;
+  glide(): void;
   resize(width: number, height: number): void;
   setInsets(insets: Insets): void;
   /** Move toward the focus point; `snap` jumps straight there. */
@@ -34,9 +36,10 @@ const clampAxis = (center: number, tiles: number, viewport: number, zoom: number
 };
 
 export function createCameraRig(map: VillageMap): CameraRig {
-  const camera: Camera = { center: { x: map.width / 2, y: map.height / 2 }, zoom: TILE, width: 1, height: 1 };
+  const camera: Camera = { center: { x: map.width / 2, y: map.height / 2 }, zoom: CLOSE_ZOOM, width: 1, height: 1 };
   let insets: Insets = { top: 0, bottom: 0, sheet: 0 };
   let sheetOffset = 0;
+  let glide: { from: Vec2; elapsed: number } | null = null;
 
   /** The map is centred in the viewport, so it must clear the larger of the two insets on both sides. */
   const farZoom = (): number => {
@@ -50,6 +53,7 @@ export function createCameraRig(map: VillageMap): CameraRig {
   const rig: CameraRig = {
     camera,
     far: false,
+    glide() { glide = { from: { ...camera.center }, elapsed: 0 }; },
     resize(width, height) {
       camera.width = Math.max(1, width);
       camera.height = Math.max(1, height);
@@ -67,15 +71,23 @@ export function createCameraRig(map: VillageMap): CameraRig {
         return;
       }
       camera.offset = { x: 0, y: 0 };
-      camera.zoom = rig.focusZoom ?? TILE;
+      camera.zoom = rig.focusZoom ?? CLOSE_ZOOM;
       // Put the stranger in the middle of the band that the strip and any sheet leave uncovered.
       const bandTop = insets.top;
-      const targetY = (bandTop + (camera.height - sheetOffset)) / 2;
+      const targetY = (bandTop + (camera.height - Math.max(sheetOffset, insets.bottom))) / 2;
       const want = { x: focus.x + ((insets.right ?? 0) - (insets.left ?? 0)) / 2 / camera.zoom, y: focus.y - (targetY - camera.height / 2) / camera.zoom };
       const next = {
         x: camera.center.x + (want.x - camera.center.x) * k,
         y: camera.center.y + (want.y - camera.center.y) * k,
       };
+      if (glide) {
+        glide.elapsed += dt;
+        const t = snap ? 1 : Math.min(1, glide.elapsed / .6);
+        const eased = t * t * (3 - 2 * t);
+        next.x = glide.from.x + (want.x - glide.from.x) * eased;
+        next.y = glide.from.y + (want.y - glide.from.y) * eased;
+        if (t >= 1) glide = null;
+      }
       camera.center = {
         x: clampAxis(next.x, map.width, camera.width, camera.zoom),
         y: clampAxis(next.y, map.height, camera.height, camera.zoom),

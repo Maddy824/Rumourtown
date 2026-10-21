@@ -2,6 +2,7 @@
  * "Pin to the board": copies a link that replays this village exactly and shows the share card, which can
  * be saved as a PNG.
  */
+import { statsText, type StoryStats } from './exchanges.js';
 import type { ClaimId } from 'rumormind';
 import type { Inspection, Intervention, ShareState, Simulation, VillageMap, VillagerId, WorldSnapshot } from '../sim/types.js';
 import { conceal, h, reveal } from './dom.js';
@@ -19,6 +20,7 @@ export interface ShareContext {
   reducedMotion: () => boolean;
   shareState: () => ShareState;
   interventions: () => readonly Intervention[];
+  stats?: () => StoryStats;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -113,6 +115,7 @@ function altText(d: ShareCardData): string {
   const parts = [d.claim ? `A rumor card about ${d.claim.about}: ${KIND_LABEL[d.claim.kind].toLowerCase()}.` : 'A card of a quiet village.'];
   for (const f of d.faces) parts.push(`${f.name}: ${f.verdict.toLowerCase()}.`);
   if (d.strangerTrust !== null) parts.push(`The stranger’s word: ${percent(d.strangerTrust)}.`);
+  if (d.stats) parts.push(statsText(d.stats));
   return parts.join(' ');
 }
 
@@ -175,6 +178,7 @@ export function createShare(ctx: ShareContext): SharePanel {
       /* The card falls back to the system face. */
     }
     const data = shareCardData(ctx.sim(), ctx.snapshot(), ctx.map, ctx.interventions());
+    data.stats = ctx.stats?.();
     drawShareCard(canvas, data);
     img.alt = altText(data);
     if (objectUrl) URL.revokeObjectURL(objectUrl);

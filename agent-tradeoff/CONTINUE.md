@@ -11,7 +11,7 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 
 - Branch `build/village`, pushed to `https://github.com/Maddy824/Rumourtown`. Commits use `Madhav Sunil <94164709+Maddy824@users.noreply.github.com>` and never carry assistant co-author lines (see `AGENTS.md`).
 - Live: the game at `https://rumourtown.dev` (assets-only Cloudflare Worker `rumortown`) and the API at `https://api.rumourtown.dev` (Worker `rumortown-api`, environment `production`, with secrets `TURNSTILE_SECRET`, `OPENROUTER_API_KEY`, `SIGNING_KEY_JWK`, `AI_ENABLED=true`, Workers AI binding `AI`). Deploys run from this Mac with wrangler, logged in by OAuth; CI deploys need a valid `CLOUDFLARE_API_TOKEN` secret the owner has not provided yet.
-- Interpretation tiers for typed whispers: browser rule interpreter (task 19A, in progress) → Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`, $0) → OpenRouter free models → `google/gemini-2.5-flash-lite`, all behind the ledger ($0.019 per UTC day, $7 lifetime) and the key's own $10 cap.
+- Interpretation tiers for typed whispers: browser rule interpreter (task 19A, committed) → Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`, $0) → OpenRouter free models → `google/gemini-2.5-flash-lite`, all behind the ledger ($0.019 per UTC day, $7 lifetime) and the key's own $10 cap.
 - Secrets live outside the repo: `~/.config/rumourtown/cloudflare.env`, `~/.config/rumourtown/turnstile.env`, `~/.config/rumourtown/signing.json`, and the git-ignored `apps/api/.dev.vars`. Never print, copy or commit them.
 - Design authority: `docs/superpowers/specs/2026-10-21-rumortown-design.md`. Research: `/Users/maddy/B2B/reports/` (outside the repo). Rulings and history: `.superpowers/sdd/2026-10-21-village-build/progress.md`.
 
@@ -21,7 +21,7 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 |---|---|---|---|
 | 22 | `22-night.md` | completed and verified; see `reports/22-report.md` | Full-day replay matches Node 22/25 and Chrome; desktop/phone and frame budget verified. Check `22:` commits and skip once clean. |
 | 19A | `19-local-first-interpretation.md` section A | committed in `863c47e` | Preserve the implemented local interpreter and recorded offline eval; do not rebuild it. |
-| 21 | `21-watch-a-rumor-grow.md` (sections A–E) | next | Run after confirming 22 is committed. Reconcile section D's old 07:00–22:00 language with task 22's 06:00-origin, 1,440-minute day; the full-day model takes precedence. |
+| 21 | `21-watch-a-rumor-grow.md` (sections A–E) | implemented and verified | See `reports/21-report.md`; full-day local arrival, readable exchanges and projected anchors are complete. Deployment underway. |
 | — | Redeploy and live check | after 21 | Section 5, then section 6. |
 | 23 | Final whole-branch review | after the redeploy | Run `03-final-review.md`'s command against the whole branch again, then `04-final-fixes.md`. |
 | — | Owner steps | any time | `owner-checklist.md` (CI token, key cap, domain email, launch). |

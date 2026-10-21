@@ -2,17 +2,18 @@
 import type { SimEvent, Simulation } from '../sim/types.js';
 export type BeatKind = 'whisper' | 'confrontation' | 'defence' | 'apology' | 'exposure';
 export interface StoryBeat { tick: number; kind: BeatKind; text: string; faces: [string, string]; event: SimEvent }
-export const eventKey = (e: SimEvent): string => `${e.tick}:${e.kind}:${e.kind === 'line' ? e.speaker + ':' + e.lineId : e.kind === 'whisper' ? e.listener : e.kind === 'relationship' ? e.from : ''}`;
+export const eventKey = (e: SimEvent): string => `${e.tick}:${e.kind}:${e.kind === 'line' ? e.speaker + ':' + e.lineId : e.kind === 'whisper' ? e.listener : e.kind === 'relationship' ? e.from + ':' + e.to : e.kind === 'witness' ? e.villager + ':' + (e.subject ?? '') + ':' + (e.secretId ?? e.what) : ''}`;
 export function storyBeat(e: SimEvent, sim: Pick<Simulation, 'cast' | 'claims'>): StoryBeat | null {
   const name = (id: string): string => id === 'stranger' ? 'You' : sim.cast.get(id)?.name ?? id;
   if (e.kind === 'whisper') return { tick: e.tick, kind: 'whisper', text: `You told ${name(e.listener)} that ${sim.claims.get(e.claimId)?.text ?? 'a story was going around'}`, faces: ['stranger', e.listener], event: e };
   if (e.kind === 'relationship' && e.to === 'stranger' && e.why.endsWith('came from the stranger and did not hold up')) return { tick: e.tick, kind: 'exposure', text: `${name(e.from)} found that your story did not hold up`, faces: [e.from, 'stranger'], event: e };
   if (e.kind !== 'line' || (!e.claimId && !['accuse', 'defend', 'apologize'].includes(e.act))) return null;
   const claim = e.claimId ? sim.claims.get(e.claimId) : undefined;
-  const listener = e.listeners[0] ?? claim?.about ?? e.speaker;
+  const listener = e.act === 'reactToWhisper' ? 'stranger' : e.listeners[0] ?? claim?.about ?? e.speaker;
   const subject = claim?.about ?? listener;
   const kind: BeatKind = e.act === 'accuse' ? 'confrontation' : e.act === 'defend' ? 'defence' : e.act === 'apologize' ? 'apology' : 'whisper';
-  const text = e.act === 'accuse' ? `${name(e.speaker)} confronted ${name(listener)}`
+  const text = e.act === 'reactToWhisper' ? `${name(e.speaker)} reacted to your whisper`
+    : e.act === 'accuse' ? `${name(e.speaker)} confronted ${name(listener)}`
     : e.act === 'defend' ? `${name(e.speaker)} defended ${name(subject)}`
     : e.act === 'apologize' ? `${name(e.speaker)} apologised to ${name(listener)}`
     : e.act === 'deny' ? `${name(e.speaker)} denied that ${claim?.text ?? e.text}`
@@ -81,5 +82,5 @@ export function storyZoom(ids: readonly string[], snapshot: import('../sim/types
   const xs = points.map(p => p.x), ys = points.map(p => p.y);
   const spanX = Math.max(...xs) - Math.min(...xs) + 4;
   const spanY = Math.max(...ys) - Math.min(...ys) + 4;
-  return Math.max(2, Math.floor(Math.min(32, Math.max(64, width) / spanX, Math.max(64, height) / spanY) * 4) / 4);
+  return Math.max(2, Math.floor(Math.min(40, Math.max(64, width) / spanX, Math.max(64, height) / spanY) * 4) / 4);
 }

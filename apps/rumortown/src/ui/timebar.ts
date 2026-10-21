@@ -9,14 +9,15 @@ import { tickClock, tickLabel } from './format.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
 
-export type Speed = 0 | 1 | 2 | 8;
-export const SPEEDS: readonly Speed[] = [0, 1, 2, 8];
-export const speedLabel = (s: Speed): string => (s === 0 ? 'Pause' : `${s}×`);
+export type Speed = 0 | 0.5 | 1 | 2 | 8;
+export const SPEEDS: readonly Speed[] = [0, 0.5, 1, 2, 8];
+export const speedLabel = (s: Speed): string => (s === 0 ? 'Pause' : s === .5 ? 'Slow' : `${s}×`);
 
 export interface TimeContext {
   layers: Layers;
   reducedMotion: () => boolean;
   onSpeed: (s: Speed) => void;
+  onNextBeat?: () => void;
   onScrubStart: () => void;
   onScrubPreview: (tick: number) => void;
   onScrub: (tick: number) => void;
@@ -54,7 +55,7 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
   const speed = h('fieldset', { class: 'speed' },
     h('legend', { class: 'sr-only' }, 'Speed'),
     SPEEDS.map((s) => {
-      const input = h('input', { type: 'radio', name: 'rt-speed', value: String(s), class: 'sr-only', 'aria-label': s === 0 ? 'Pause' : `Play at ${s}×` });
+      const input = h('input', { type: 'radio', name: 'rt-speed', value: String(s), class: 'sr-only', 'aria-label': s === 0 ? 'Pause' : s === .5 ? 'Play slowly' : `Play at ${s}×` });
       input.addEventListener('change', () => {
         if (input.checked) ctx.onSpeed(s);
       });
@@ -69,7 +70,8 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
   const input = h('input', { type: 'range', class: 'ribbon-input', min: '0', max: String(3 * MINUTES_PER_DAY), step: '1', value: '0', 'aria-label': 'Timeline, 24 hours per day, night from 21:30 to 06:00' });
   const ribbon = h('div', { class: 'ribbon' }, h('div', { class: 'ribbon-track', 'aria-hidden': 'true' }, reached, days), input, marks, readout);
   const clock = h('span', { class: 'strip-clock' });
-  const bar = h('div', { class: 'timebar' }, clock, speed, ribbon);
+  const nextBeat = h('button', { class: 'text-button next-beat', type: 'button', hidden: true, title: 'Next beat (period key)', onclick: () => ctx.onNextBeat?.() }, 'Next beat');
+  const bar = h('div', { class: 'timebar' }, clock, speed, nextBeat, ribbon);
 
   const tabSpeed = h('span', { class: 'time-tab-speed' }, '1×');
   const tab = h('button', { class: 'time-tab', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-time-drawer' },
@@ -90,7 +92,7 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
   let endTimer = 0;
   let drawerOpen = false;
   let lastValueText = '';
-  let lastDays = 0;
+  let lastSpan = 0;
   let lastMarksKey = '';
   let runTicks = 3 * MINUTES_PER_DAY;
 
@@ -156,6 +158,8 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
     drawer,
     drawerBody,
     update(s) {
+      nextBeat.hidden = s.speed !== 0;
+      nextBeat.disabled = s.held || s.tick >= s.runTicks;
       maxTick = Math.max(0, s.maxTick);
       runTicks = Math.max(MINUTES_PER_DAY, s.runTicks);
       input.max = String(runTicks);
@@ -165,11 +169,11 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
       tabSpeed.textContent = s.held ? 'Held' : s.speed === 0 ? 'Paused' : speedLabel(s.speed);
       tab.setAttribute('aria-label', `Time controls, ${s.held ? 'time is held' : s.speed === 0 ? 'paused' : `playing at ${s.speed}×`}`);
       reached.style.width = `${(maxTick / runTicks) * 100}%`;
-      const dayCount = Math.round(runTicks / MINUTES_PER_DAY);
-      if (dayCount !== lastDays) {
-        lastDays = dayCount;
+      const dayCount = Math.ceil(runTicks / MINUTES_PER_DAY);
+      if (runTicks !== lastSpan) {
+        lastSpan = runTicks;
         days.replaceChildren(...Array.from({ length: dayCount }, (_, i) =>
-          h('span', { class: 'ribbon-day', style: `left: ${(i / dayCount) * 100}%; width: ${100 / dayCount}%` }, h('span', { class: 'ribbon-night' }), h('span', { class: 'ribbon-day-label' }, `Day ${i + 1}`))));
+          h('span', { class: 'ribbon-day', style: `left: ${(i * MINUTES_PER_DAY / runTicks) * 100}%; width: ${MINUTES_PER_DAY / runTicks * 100}%` }, h('span', { class: 'ribbon-night' }), h('span', { class: 'ribbon-day-label' }, `Day ${i + 1}`))));
       }
       clock.textContent = tickLabel(s.tick);
       const pins = mergeBeatPins(s.beats ?? []);

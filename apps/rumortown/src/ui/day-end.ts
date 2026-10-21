@@ -2,6 +2,7 @@
  * The dawn card over the village: how the day ended, in one sentence, and what the stranger's word is
  * worth now. Time holds until "Keep going".
  */
+import { statsText, type StoryStats } from './exchanges.js';
 import type { SimEvent } from '../sim/types.js';
 import { debriefAgeNotice, type CheckItem } from '../content/debrief/index.js';
 import { conceal, h, reveal } from './dom.js';
@@ -20,7 +21,7 @@ export interface DayEndContext {
 
 export interface DayEndCard {
   readonly el: HTMLElement;
-  show(ev: DayEndEvent, trust: number | null, reflection?: { dare: string; paragraphs: string[]; checks: CheckItem[]; finished?: boolean }): void;
+  show(ev: DayEndEvent, trust: number | null, reflection?: { dare: string; paragraphs: string[]; checks: CheckItem[]; finished?: boolean; stats?: StoryStats }): void;
   hide(): void;
   isOpen(): boolean;
 }
@@ -48,14 +49,15 @@ export function createDayEnd(ctx: DayEndContext): DayEndCard {
       newVillage.hidden = !finished;
       keepGoing.textContent = finished ? 'Back to the village' : 'Keep going';
       keepGoing.className = `button ${finished ? 'button-quiet' : 'button-primary'}`;
-      title.textContent = `End of day ${ev.dayIndex + 1}`;
+      title.textContent = finished ? 'Your village visit' : `End of day ${ev.dayIndex + 1}`;
       ending.textContent = ENDING_TITLE[ev.ending] ?? 'The day is done';
       ending.dataset.ending = ev.ending;
-      summary.textContent = sentence(ev.summary);
+      summary.textContent = finished ? `At the last dawn: ${sentence(ev.summary)}` : sentence(ev.summary);
       reflection.replaceChildren();
       if (content) {
+        if (content.stats) reflection.appendChild(h('p', { class: 'story-stats' }, statsText(content.stats)));
         reflection.appendChild(h('p', null, content.dare));
-        if (ev.dayIndex === 2) {
+        if (finished) {
           reflection.appendChild(h('h3', null, 'What travelled through the village'));
           for (const paragraph of content.paragraphs) reflection.appendChild(h('p', null, paragraph));
           reflection.appendChild(h('h3', null, 'Check what you noticed'));

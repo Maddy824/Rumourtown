@@ -2,6 +2,7 @@
 import type { RenderOptions } from '../sim/types.js';
 export interface PresentationOptions extends RenderOptions {
   phone?: boolean;
+  spotlightDim?: number;
   spotlight?: readonly string[];
   onReady?: () => void;
   arriving?: boolean;

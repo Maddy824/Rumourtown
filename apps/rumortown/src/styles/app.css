@@ -2663,3 +2663,25 @@ button.chain-actor:hover span {
 .arrival-stars span { position: absolute; background: #f6f0e4; clip-path: polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%); }
 .district-banner[data-night='true'] { background: var(--grain), var(--clock-sky); color: #f6f0e4; border-color: #8fa6d3; }
 @media (prefers-reduced-motion: reduce) { .arrival[data-night='true'] .arrival-stars { display: none; } }
+
+/* Readable exchanges keep the speakers in the camera's uncovered band. */
+.dialogue { position: absolute; z-index: 43; left: 50%; translate: -50% 0; width: min(560px, calc(100% - 32px)); padding: 8px 14px; background: var(--grain), var(--paper); border: 1px dashed var(--stitch); border-radius: 5px; box-shadow: var(--lift-pinned); }
+.dialogue-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink); }
+.dialogue-script { display: flex; align-items: flex-start; gap: 10px; }
+.dialogue-script > div { min-width: 0; }
+.dialogue-face { flex: none; }
+.dialogue-line { margin: 4px 0; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
+.dialogue-next { display: block; margin-left: auto; }
+.beat-thread { fill: none; stroke: var(--berry); stroke-width: 3; stroke-dasharray: 5 3; }
+.beat-script summary { min-height: 44px; padding: 10px 0; cursor: pointer; color: var(--berry-deep); }
+.beat-script p { font-size: 16px; overflow-wrap: anywhere; }
+.rt[data-layout='desk'][data-rail='true'] .dialogue { left: calc((100% - 344px) / 2); width: min(560px, calc(100% - 380px)); }
+.rt[data-layout='phone'] .dialogue { width: calc(100% - 24px); padding: 6px 10px; }
+.rt[data-layout='phone'] .timedrawer .timebar { flex-wrap: wrap; }
+.rt[data-layout='phone'] .timedrawer .speed { flex-wrap: wrap; }
+.next-beat { flex: none; padding: 4px 8px; }
+.rt[data-beat='true'] .movement-hint, .rt[data-beat='true'] .district-banner { visibility: hidden; }
+@media (prefers-reduced-motion: no-preference) { .dialogue { animation: pin-in .2s ease-out; } }
+
+.rt[data-layout='desk'] > .now-bar { top: auto; bottom: calc(92px + var(--safe-b)); }
+.rt[data-layout='phone'] > .now-bar { top: auto; bottom: calc(92px + var(--safe-b)); }

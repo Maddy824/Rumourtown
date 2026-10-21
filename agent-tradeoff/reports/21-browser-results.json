@@ -1,0 +1,231 @@
+{
+  "interaction": [
+    {
+      "width": 1280,
+      "height": 800,
+      "initial": {
+        "tick": 61,
+        "tracing": "true",
+        "text": "Watching You tell Mira\nSkip\nYou\n\nTom stole bread from the bakery\n\nNext",
+        "overflow": false
+      },
+      "next": {
+        "tick": 78,
+        "text": "Watching Mira tell Rosa\nSkip\nMira\n\nGood. I wanted a word with someone I trust.\n\nNext",
+        "panel": {
+          "x": 360,
+          "y": 420.515625,
+          "width": 560,
+          "height": 173.484375,
+          "top": 420.515625,
+          "right": 920,
+          "bottom": 594,
+          "left": 360
+        },
+        "speakers": [
+          {
+            "id": "mira",
+            "x": 220,
+            "y": 220
+          },
+          {
+            "id": "rosa",
+            "x": 259.99767806758246,
+            "y": 220
+          }
+        ],
+        "overflow": false,
+        "paused": "0",
+        "postbox": {
+          "x": 16,
+          "y": 680,
+          "width": 136,
+          "height": 104,
+          "top": 680,
+          "right": 152,
+          "bottom": 784,
+          "left": 16
+        }
+      },
+      "script": "Read the exchange\n\nMira: Good. I wanted a word with someone I trust.\n\nMira: Only talk, maybe. Tom stole bread from the bakery, they say. Keep your eyes open.",
+      "errors": []
+    },
+    {
+      "width": 360,
+      "height": 800,
+      "initial": {
+        "tick": 61,
+        "tracing": "true",
+        "text": "Watching You tell Mira\nSkip\nYou\n\nTom stole bread from the bakery\n\nNext",
+        "overflow": false
+      },
+      "next": {
+        "tick": 78,
+        "text": "Watching Mira tell Rosa\nSkip\nMira\n\nGood. I wanted a word with someone I trust.\n\nNext",
+        "panel": {
+          "x": 12,
+          "y": 400.328125,
+          "width": 336,
+          "height": 192.671875,
+          "top": 400.328125,
+          "right": 348,
+          "bottom": 593,
+          "left": 12
+        },
+        "speakers": [
+          {
+            "id": "mira",
+            "x": 160.00116096620877,
+            "y": 220
+          },
+          {
+            "id": "rosa",
+            "x": 199.99883903379123,
+            "y": 220
+          }
+        ],
+        "overflow": false,
+        "paused": "0",
+        "postbox": {
+          "x": 148,
+          "y": 720,
+          "width": 64,
+          "height": 64,
+          "top": 720,
+          "right": 212,
+          "bottom": 784,
+          "left": 148
+        }
+      },
+      "script": "Read the exchange\n\nMira: Good. I wanted a word with someone I trust.\n\nMira: Only talk, maybe. Tom stole bread from the bakery, they say. Keep your eyes open.",
+      "errors": []
+    },
+    {
+      "width": 360,
+      "height": 640,
+      "initial": {
+        "tick": 61,
+        "tracing": "true",
+        "text": "Watching You tell Mira\nSkip\nYou\n\nTom stole bread from the bakery\n\nNext",
+        "overflow": false
+      },
+      "next": {
+        "tick": 78,
+        "text": "Watching Mira tell Rosa\nSkip\nMira\n\nGood. I wanted a word with someone I trust.\n\nNext",
+        "panel": {
+          "x": 12,
+          "y": 240.328125,
+          "width": 336,
+          "height": 192.671875,
+          "top": 240.328125,
+          "right": 348,
+          "bottom": 433,
+          "left": 12
+        },
+        "speakers": [
+          {
+            "id": "mira",
+            "x": 160.00116096620877,
+            "y": 149.51973295209706
+          },
+          {
+            "id": "rosa",
+            "x": 199.99883903379123,
+            "y": 149.51973295209706
+          }
+        ],
+        "overflow": false,
+        "paused": "0",
+        "postbox": {
+          "x": 148,
+          "y": 560,
+          "width": 64,
+          "height": 64,
+          "top": 560,
+          "right": 212,
+          "bottom": 624,
+          "left": 148
+        }
+      },
+      "script": "Read the exchange\n\nMira: Good. I wanted a word with someone I trust.\n\nMira: Only talk, maybe. Tom stole bread from the bakery, they say. Keep your eyes open.",
+      "errors": []
+    },
+    {
+      "live": {
+        "ivs": [
+          {
+            "tick": 61,
+            "listener": "mira",
+            "claimId": "tom-stole-bread"
+          },
+          {
+            "tick": 61,
+            "listener": "mira",
+            "claimId": "tom-stole-bread"
+          }
+        ],
+        "trace": "true"
+      },
+      "errors": []
+    },
+    {
+      "link": {
+        "v": 2,
+        "start": 900,
+        "seed": 731,
+        "cast": "v4",
+        "interventions": []
+      },
+      "replay": "6137d96970f7a28e05e2fb37b57b9495274d1c256208d084818a336332994184",
+      "errors": []
+    }
+  ],
+  "clockAndDuration": [
+    {
+      "hour": 19,
+      "tick": 780,
+      "minute": 1140,
+      "night": "false"
+    },
+    {
+      "hour": 0,
+      "tick": 1080,
+      "minute": 0,
+      "night": "true"
+    },
+    {
+      "stops": [
+        {
+          "tick": 1440,
+          "title": "End of day 1",
+          "stats": "0 beats. Longest chain: 0 tellings.",
+          "open": true,
+          "minute": 360
+        },
+        {
+          "tick": 2880,
+          "title": "End of day 2",
+          "stats": "0 beats. Longest chain: 0 tellings.",
+          "open": true,
+          "minute": 360
+        },
+        {
+          "tick": 4320,
+          "title": "End of day 3",
+          "stats": "0 beats. Longest chain: 0 tellings.",
+          "open": true,
+          "minute": 360
+        },
+        {
+          "tick": 4380,
+          "title": "Your village visit",
+          "stats": "0 beats. Longest chain: 0 tellings.",
+          "open": true,
+          "minute": 420
+        }
+      ],
+      "finalTick": 4380,
+      "errors": []
+    }
+  ]
+}

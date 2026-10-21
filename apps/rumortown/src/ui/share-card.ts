@@ -3,6 +3,7 @@
  * a mini-map of the threads, three faces with their verdicts, and the stranger's credibility.
  * Built only from glyphs, names and fixed words; typed text never appears on it.
  */
+import { statsText, type StoryStats } from './exchanges.js';
 import type { ClaimKind, ThreadLink, Vec2, VillageMap, VillagerId, WorldSnapshot } from '../sim/types.js';
 import { drawFace, type FaceLook } from './faces.js';
 import { KIND_LABEL } from './format.js';
@@ -25,6 +26,7 @@ export interface ShareCardData {
   faces: readonly ShareFace[];
   strangerTrust: number | null;
   day: number;
+  stats?: StoryStats;
 }
 
 const C = {
@@ -343,6 +345,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   ctx.fillStyle = C.paper;
   ctx.font = `800 60px ${FONT}`;
   ctx.fillText('Rumourtown', 64, 596);
+  if (data.stats) { ctx.font = `500 18px ${FONT}`; ctx.fillText(statsText(data.stats), 480, 592, 520); }
   ctx.font = `600 26px ${FONT}`;
   ctx.textAlign = 'right';
   ctx.fillText(`Day ${data.day}`, CARD_W - 64, 592);

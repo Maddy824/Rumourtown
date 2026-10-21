@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { TestElement } from './whisper-dom.fixture.js';
 import { createFakeSimulation } from '../sim/fake.js';
 import { createStory } from './story.js';
+import { createTimeControls } from './timebar.js';
 import { createArrival } from './arrival.js';
 import { createOpening } from './opening.js';
 import type { Layers } from './layers.js';
@@ -49,6 +50,23 @@ function paperDocument(reduced = false) {
 }
 const stack = () => ({ open: vi.fn(), closed: vi.fn() }) as unknown as Layers;
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it('places dawn and night on absolute ticks when the last timeline day is partial', () => {
+  paperDocument(); Object.assign(window, { addEventListener() {} });
+  const time = createTimeControls({ layers: stack(), reducedMotion: () => true, onSpeed() {}, onScrubStart() {}, onScrubPreview() {}, onScrub() {}, onScrubEnd() {}, onDrawerChange() {}, nameOf: id => id });
+  time.update({ tick: 780, maxTick: 780, runTicks: 5100, marks: [], speed: 1, held: false });
+  const days = (time.bar as unknown as PaperElement).querySelectorAll<PaperElement>('.ribbon-day');
+  expect(days).toHaveLength(4);
+  for (let i = 0; i < days.length; i++) {
+    const style = days[i]!.attrs.get('style')!;
+    const left = Number(style.match(/left: ([\d.]+)%/)![1]) / 100 * 5100;
+    const width = Number(style.match(/width: ([\d.]+)%/)![1]) / 100 * 5100;
+    expect(left).toBeCloseTo(i * 1440);
+    expect(width).toBeCloseTo(1440);
+    // The existing night band begins 930 minutes after the 06:00 origin.
+    expect(left + width * (930 / 1440)).toBeCloseTo(i * 1440 + 930);
+  }
+});
 
 it('renders newest cards and sends their exact participants to Show me', () => {
   paperDocument();

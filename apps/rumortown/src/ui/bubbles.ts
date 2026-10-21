@@ -1,3 +1,4 @@
+import { headAnchor, headLift, projectedTile } from './anchors.js';
 /**
  * Speech bubbles as DOM paper tags, positioned every frame from world coordinates. At most two are shown,
  * chosen by nearness to the stranger and by tier. New lines are mirrored, throttled, to a polite live region.
@@ -146,8 +147,8 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         if (!text) continue;
         const pos = f.positions.get(v.id) ?? v.pos;
         const p = f.project(pos);
-        const headY = p.y - f.camera.zoom * (f.far ? 0.7 : 0.95) - 3;
-        const foot = p.y + f.camera.zoom * (f.far ? 0.2 : 0.3) + 3;
+        const headY = headAnchor(pos, f.project, headLift(v.tier === 'core')).y - 3;
+        const foot = f.project({ x: pos.x, y: pos.y + (f.far ? .2 : .3) }).y + 3;
         if (p.x < 0 || p.x > f.camera.width || p.y < 0 || headY < 0 || p.y > f.camera.height) continue;
         let score = Math.hypot(pos.x - f.player.x, pos.y - f.player.y);
         score -= v.tier === 'core' ? 3 : v.tier === 'regular' ? 1 : 0;
@@ -190,7 +191,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         const placement = placeBubble(c, { w, h: hgt },
           { width: f.camera.width, top: f.topLimit, bottom: f.bottomLimit }, placed);
         const gap = placement ? placement.flip ? placement.y - c.y : c.y - placement.y - hgt : Infinity;
-        if (!placement || Math.hypot(gap, c.x - clamp(c.x, placement.x + 4, placement.x + w - 4)) > f.camera.zoom * 1.5) {
+        if (!placement || Math.hypot(gap, c.x - clamp(c.x, placement.x + 4, placement.x + w - 4)) > projectedTile(f.player, f.project) * 1.5) {
           b.el.style.visibility = 'hidden';
           continue;
         }
