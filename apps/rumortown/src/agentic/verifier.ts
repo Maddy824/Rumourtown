@@ -25,7 +25,7 @@ const CERTAIN = /\b(?:definitely|for sure|certainly|i know|i saw|no doubt|withou
 const NEGATE = /\b(?:not|never|no|didn'?t|doesn'?t|isn'?t|wasn'?t|nothing|nobody|innocent)\b/i;
 const ABSTAIN = /\b(?:haven'?t heard|have not heard|don'?t know|do not know|no idea|can'?t say|cannot say|nobody(?:'s| has) told me|not heard anything|wouldn'?t know)\b/i;
 // Talk about the conversation itself: the user, the prompt, the belief list, being an AI, or thinking aloud.
-const META = /\b(?:the user|the player(?! of)|as an ai|an ai\b|language model|current beliefs|my beliefs (?:list|say|above)|beliefs (?:above|below|list)|the (?:system )?prompt|instructions? (?:say|tell|above)|role-?play|in character|let me (?:think|recall|break this down|see)|okay, let'?s see|i need to be careful)\b/i;
+const META = /\b(?:the user|the player(?! of)|as an ai|an ai\b|language model|current beliefs|my beliefs (?:list|say|above)|beliefs (?:above|below|list)|the (?:system )?prompt|instructions? (?:say|tell|above)|role-?play|in character|let me break this down|i need to be careful here)\b/i;
 const SOURCE = /\b([A-Z][a-z]+)\s+(?:told me|said|says|mentioned|swears)\b|\b(?:heard (?:it )?from|according to)\s+([A-Z][a-z]+)\b/;
 
 /** Everyday synonyms folded to one word, so slang matches the believed fact ("pinched a loaf" = "stole bread"). */
