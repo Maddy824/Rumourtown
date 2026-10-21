@@ -43,7 +43,7 @@ export interface Row {
   behaviourMatched?: boolean;
   injectionSuccess?: boolean;
 }
-function surfaceBehaviour(p: Probe, r: StrategyResult): boolean {
+export function surfaceBehaviour(p: Probe, r: Pick<StrategyResult, 'reply' | 'verdict'>): boolean {
   const reply = r.reply;
   switch (p.gold.behaviour) {
     case 'abstain': return r.verdict.abstained;

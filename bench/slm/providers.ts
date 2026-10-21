@@ -73,7 +73,10 @@ export function ollama(options: TransportOptions & { baseUrl?: string } = {}): P
  * It has no schema-constrained decoding, so structured strategies are refused rather than run unfairly.
  */
 export function mlx(options: TransportOptions & { baseUrl?: string } = {}): Provider {
-  const base = (options.baseUrl ?? process.env.MLX_BASE_URL ?? 'http://127.0.0.1:8765').replace(/\/$/, '');
+  // A local engine: refuse any destination that is not loopback http(s), whatever the environment says.
+  const url = new URL(options.baseUrl ?? process.env.MLX_BASE_URL ?? 'http://127.0.0.1:8765');
+  if (!/^https?:$/.test(url.protocol) || !['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname)) throw new ProviderError('mlx base URL must be loopback http(s)');
+  const base = url.origin;
   return { name: 'mlx', async generate(request) {
     if (request.format) throw new ProviderError('mlx provider has no constrained decoding');
     const start = performance.now();
