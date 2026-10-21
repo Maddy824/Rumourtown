@@ -26,6 +26,22 @@ export async function loadSimulation(): Promise<typeof import('../entry.ts')> {
   return import(`data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`);
 }
 
+/**
+ * How this villager learnt a claim: the tellings that reached them ("Mira told Tom at 09:10") or their
+ * own sighting, newest three, one per teller. The simulation's chain is every path by which the claim
+ * reached them, hundreds of links for a busy rumor; a villager can honestly name only their own sources,
+ * and the game's prompt likewise gives the model only the last link.
+ */
+export function directSources(chain: readonly string[], name: string): string[] {
+  const own = new RegExp(`^(?:(.+) told ${name} at|${name} saw it at) `);
+  const byTeller = new Map<string, string>();
+  for (const link of chain) {
+    const m = own.exec(link);
+    if (m) { const teller = m[1] ?? name; byTeller.delete(teller); byTeller.set(teller, link); }
+  }
+  return [...byTeller.values()].slice(-3);
+}
+
 export async function generateScenarios(options: { seeds?: number[]; ticks?: number[] } = {}): Promise<Scenario[]> {
   const { cast, claims, villageMap, createSimulation, createWorld, createMover, createTalk } = await loadSimulation();
   const seeds = options.seeds ?? Array.from({ length: 200 }, (_, i) => i + 1);
@@ -52,7 +68,7 @@ export async function generateScenarios(options: { seeds?: number[]; ticks?: num
       const person = cast[(seed * 7 + tick) % cast.length]!;
       const inspected = sim.inspect(person.id);
       const facts: FactRef[] = inspected.beliefs.map(b => ({ id: b.claimId, text: b.text,
-        confidence: b.confidence, band: confidenceBand(b.confidence), chain: b.chain.slice(),
+        confidence: b.confidence, band: confidenceBand(b.confidence), chain: directSources(b.chain, person.name),
         trueInWorld: trueIds.has(b.claimId) }));
       const known = new Set(facts.map(f => f.id));
       const unknown = claims.filter(c => trueIds.has(c.id) && !known.has(c.id));
