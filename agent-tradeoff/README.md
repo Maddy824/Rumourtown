@@ -1,5 +1,7 @@
 # Agent handoff: tasks for Codex
 
+If the Claude session is gone, start with `CONTINUE.md`: it has the current state, the queue order, the verify and deploy commands and the rules.
+
 This folder is the work queue for Codex when the Claude session is unavailable. Each task file is self-contained: it says what exists, what to build, how to verify, and what to write in its report. Run them in number order unless a file says otherwise.
 
 ## How to run one task
@@ -48,8 +50,14 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 11 | Expand the world and cast | done; 36 residents, 42 places, four districts, two bridges and new replay verified |
 | 12 | Easier controls, local agents and credit controls | done; developer tools, $0 local planner, bounded replay API and yearly pacing verified; owner deferred phone activation |
 | 13 | Prepare delivery and optional API for larger audiences | done; CDN cache policy, independent deployment, early admission, bounded inputs, edge cache and retention verified locally; production capacity remains unmeasured |
-| 14 | A town you can read: legibility, wayfinding and flow | implemented A–E; local checks pass; directory commits blocked by read-only `.git`; browser review pending, see report |
-| 15 | AI whispers inside the website | implemented A–E; 609 tests, typecheck, build, bundle and setup rehearsal pass; commits blocked by read-only `.git`, live browser/local Worker checks pending, see report |
-| 16 | See what’s happening: story rail, focus, phone layout and arrival | implemented A–F; root typecheck, 636 tests and build pass; 592,783-byte bundle, browser verification and read-only `.git` block completion, see report |
+| 14 | done; legibility, wayfinding, flow |
+| 15 | done; AI whispers wired, domains, Rumourtown name, postbox fix |
+| 16 | done; story rail, focus mode, phone-first, arrival, guide on open |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.
+| 17 | done; SEO assets, About page, head tags, structured data |
+| 18 | done; writing-first sheet, Turnstile pre-warm, scoped deadlines |
+| 19 | B done and live (Workers AI first); A in progress (browser interpreter) |
+| 20 | done; light and time of day, shadows, figures, interiors, wind, paper board |
+| 21 | queued after 22; slow beats, local clock, 40 px anchors |
+| 22 | in progress; 24-hour village with night |
