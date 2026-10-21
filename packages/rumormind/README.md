@@ -11,16 +11,12 @@ ranges; their outputs are model utilities, not calibrated psychological probabil
 
 ## Usage
 
-After `npm install` at the repository root, save this as `example.ts` in a project
-that resolves the workspace package `rumormind`. Run it with a TypeScript runner
-or a bundler that resolves the source's `.js` imports to `.ts` files. For plain
-Node, compile the library to JavaScript first; its current package entry is source
-TypeScript, and Node type stripping alone does not resolve those `.js` imports.
-The exact 20-line example below was checked with `node --experimental-strip-types`
-against a scratch package compiled from this library; it prints `0.646`, `0.560`
-and `0.75`.
+For a published release, install `rumormind` and save this example as `example.mjs`.
+Run it with `node example.mjs`; the package ships ES modules and TypeScript declarations.
+In this repository, first run `npm install` and `npm run build -w packages/rumormind`.
+The example prints `0.646`, `0.560` and `0.75`.
 
-```ts
+```js
 import { BeliefLedger, ClaimRegistry, createRng, DEFAULT_TUNING, Relationships } from 'rumormind';
 const rng = createRng(42);
 const registry = new ClaimRegistry([
@@ -31,8 +27,8 @@ registry.validate();
 const ledger = new BeliefLedger('mira', rng);
 const relations = new Relationships();
 relations.setTrust('mira', 'rosa', 0.6);
-const theft = registry.get('theft')!;
-const delivery = registry.get('delivery')!;
+const theft = registry.get('theft');
+const delivery = registry.get('delivery');
 ledger.hear(theft, registry.claims, {
   source: 'rosa', strength: 1, trust: relations.trust('mira', 'rosa'), tick: 1,
 });
