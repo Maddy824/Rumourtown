@@ -9,7 +9,41 @@ custom `Rng` functions must return numbers in `[0, 1)`.
 Numeric inputs must be finite. Scoring functions clamp input factors to the documented
 ranges; their outputs are model utilities, not calibrated psychological probabilities.
 
-## Existing API
+## Usage
+
+After `npm install` at the repository root, save this as `example.ts` in a project
+that resolves the workspace package `rumormind`. Run it with a TypeScript runner
+or a bundler that resolves the source's `.js` imports to `.ts` files. For plain
+Node, compile the library to JavaScript first; its current package entry is source
+TypeScript, and Node type stripping alone does not resolve those `.js` imports.
+The exact 20-line example below was checked with `node --experimental-strip-types`
+against a scratch package compiled from this library; it prints `0.646`, `0.560`
+and `0.75`.
+
+```ts
+import { BeliefLedger, ClaimRegistry, createRng, DEFAULT_TUNING, Relationships } from 'rumormind';
+const rng = createRng(42);
+const registry = new ClaimRegistry([
+  { id: 'theft', kind: 'theft', about: 'tom', valence: -1, contradicts: ['delivery'] },
+  { id: 'delivery', kind: 'kindness', about: 'tom', valence: 1, contradicts: ['theft'] },
+]);
+registry.validate();
+const ledger = new BeliefLedger('mira', rng);
+const relations = new Relationships();
+relations.setTrust('mira', 'rosa', 0.6);
+const theft = registry.get('theft')!;
+const delivery = registry.get('delivery')!;
+ledger.hear(theft, registry.claims, {
+  source: 'rosa', strength: 1, trust: relations.trust('mira', 'rosa'), tick: 1,
+});
+console.log(ledger.confidence('theft').toFixed(3)); // 0.646
+ledger.see(delivery, registry.claims, 2);
+console.log(ledger.confidence('theft').toFixed(3)); // 0.560
+relations.setTrustCeiling('mira', 'stranger', DEFAULT_TUNING.exposedLiarTrustCeiling);
+console.log(relations.adjustTrust('mira', 'stranger', 1)); // 0.75
+```
+
+## Public interface
 
 - `BeliefLedger(owner, rng, tuning?)`: `hear`, `see`, `confidence`, `knows`,
   `rememberedOrigin`, `forget` and `toJSON`. Hearing and seeing accept a
@@ -20,6 +54,13 @@ ranges; their outputs are model utilities, not calibrated psychological probabil
   `tellScore(input, tuning?)` and `tellThreshold = 0.7` support gossip decisions.
 - `Claim`, `ClaimId`, `CharacterId`, `Tuning`, `DEFAULT_TUNING`, `Rng`, `createRng`,
   `clamp`, `logit` and `sigmoid` remain available.
+
+`relationships.setTrustCeiling(from, to, ceiling)` sets a directed ceiling in
+`0..1` and immediately lowers existing trust if necessary. Later `setTrust` and
+`adjustTrust` calls respect it. Call it with
+`DEFAULT_TUNING.exposedLiarTrustCeiling` (`0.75`) after exposure; the library does
+not detect lies itself. There is no expiry. Calling the setter again replaces the
+ceiling, so callers enforcing permanent exposure should never raise it.
 
 ## Claim registry
 
@@ -193,17 +234,18 @@ implementation. Rows describe implemented library rules, not every planned game 
 | Alternative explanation lookup | First registered reverse `alternativeOf` link | Tuned API convention | Task 2 and Task 3 build briefs |
 | Hearsay evidence | `hearsayWeight = 1.0`, scaled by trust and strength | Tuned; measured advice-taking direction | Bailey et al. 2023, 346 effects |
 | First-hand evidence | `firsthandWeight = 2.5` | Measured direction; tuned multiplier | Weizsäcker 2010 |
-| Repeated-origin evidence | `nonIndependentFactor = 0.25` | Measured direction; tuned factor | Weaver 2007; Yousif 2019 |
-| Familiarity | `min(0.4, 0.15 * ln(1 + exposures))` | Measured direction; tuned scale and cap | Ye et al. 2026; Hassan & Barber 2021 |
-| Motivated acceptance | `motivatedBias = 0.3` | Tuned extrapolation | Pfänder & Altay 2025 |
-| Correction with an alternative | Remove `0.4` of positive log-odds at full credibility | Measured direction; tuned fraction | Walter & Murphy 2018 |
-| Bare correction | Remove `0.25` at full credibility | Measured direction; tuned fraction | Walter & Murphy 2018 |
+| Repeated-origin evidence | `nonIndependentFactor = 0.5` | Measured direction; tuned factor | Weaver 2007; Yousif 2019 |
+| Familiarity | `min(1.0, 0.45 * (n - 1)^0.25)` for `n > 1`; zero on first hearing | Measured direction; tuned scale and cap | Ye et al. 2026; Hassan & Barber 2021 |
+| Motivated acceptance | First-hearing prior offset: `valence * 0.6 * affinityToTarget` log-odds | Tuned extrapolation | Pfänder & Altay 2025 |
+| Correction with an alternative | Remove `0.6` of positive log-odds at full credibility | Measured direction; tuned fraction | Walter & Murphy 2018 |
+| Bare correction | Remove `0.4` at full credibility | Measured direction; tuned fraction | Walter & Murphy 2018 |
 | Continued influence | Residual `0.2` of peak positive log-odds; never raise belief | Measured direction; tuned fraction | Ecker 2022 |
 | Passing source attribution | `attributionPassRate = 0.5` | Tuned | Transmission-chain work, as cited by the design |
 | Source memory loss | `sourceMemoryHalfLifeTicks = 240`; per-tick chance `ln(2) / 240` | Tuned | Source-monitoring literature, as cited by the design |
-| Trust loss asymmetry | Negative adjustments multiplied by `2.5` | Measured direction; tuned multiplier | Schweitzer 2006 |
+| Trust loss asymmetry | Negative adjustments multiplied by `2` | Measured direction; tuned multiplier | Schweitzer 2006 |
+| Exposed liar trust ceiling | `0.75` of full trust, applied explicitly with `setTrustCeiling` | Measured direction; tuned ceiling | Schweitzer 2006 |
 | Confidence drives telling | Confidence coefficient `1`; decision threshold `0.7` | Measured direction; tuned score | DiFonzo & Bordia; Pezzo & Beckstead 2006 |
-| Negative content sharing | Odds `1.85`, contributing `ln(1.85)` to tell score | Measured odds; tuned score mapping | Acerbi 2022 |
+| Negative content sharing | Odds `1.5`, contributing `ln(1.5)` to tell score | Measured odds; tuned score mapping | Acerbi 2022 |
 | Gossip recipient closeness | `+0.3` listener closeness; `-0.3` target closeness for harmful claims | Measured pattern; tuned weights | Dores Cruz et al. 2021 |
 | Stifling when listener knows | Tell score `-0.6` | Tuned model | Maki–Thompson rumor models |
 | Interesting-if-true | Tell score `+0.2 * interest` | Measured direction; tuned weight | Altay et al. 2021 |

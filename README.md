@@ -1,120 +1,73 @@
 # RumorTown
 
-A throwaway **go/no-go spike**, not a general social simulator: three villagers,
-one missing loaf, and a stranger who can change the story. The question is whether
-a rule-driven disagreement is understandable and enjoyable in about a minute
-without opening a log.
+RumorTown is a browser game about a village of 24 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
 
-## Run
+Launch GIF: placeholder for a 15-second recording of a rumor spreading through the village.
 
-Dependencies are already installed. No additional packages or services are needed.
+## Run locally
+
+From the repository root:
 
 ```sh
+npm install
 npm run dev
-```
-
-Open the local URL Vite prints. The day starts playing immediately. Click
-**Whisper to Mira: Tom stole the bread**, then watch the bubbles. Click a villager
-to inspect beliefs, remembered evidence, relationships, and their last three
-decisions. The story log is collapsed by default.
-
-- Pause, change speed, or scrub from 08:00 to 20:00. Scrubbing pauses and rebuilds
-  the world from the seed and recorded interventions.
-- Whisper either claim to any villager at the current tick. Replaying preserves
-  every whisper, including whispers later than the current scrub position.
-- Toggle **Ben saw Tom deliver the bread** to change Ben's morning schedule and
-  replay to the current time; use ↺ to watch the changed day from the beginning.
-- **Copy link** stores `{ v: 1, seed, witness, interventions: [{ t, to, claim }] }`
-  as URI-encoded JSON in the URL hash. Opening it starts the same day at 08:00.
-  If clipboard permission is unavailable, copy the updated address bar.
-- Refreshing a shared URL retains its interventions. Open the base URL without
-  a hash for a fresh day. There is no server-side storage.
-
-Everything runs locally in the browser: plain TypeScript, DOM, CSS, and SVG.
-There are no runtime network requests, external fonts, AI calls, or backend.
-The inspector stacks below the village at narrow widths, including 360px.
-Reduced-motion preferences disable movement transitions.
-
-## Validate
-
-```sh
-npm run typecheck
 npm test
 npm run build
 ```
 
-Tests cover deterministic replay (including prefixes), the confrontation and
-witness stories, location-limited perception, neutral advice calibration,
-source dependence and capped repetition, corrections with residual belief,
-bounded state, and share-state round trips and validation.
+Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. The ready-made rumor menu works without an interpretation service. The optional Worker requires separate Cloudflare and OpenRouter configuration.
 
-All three commands passed during implementation. A visual browser smoke test
-could not run in the execution sandbox: starting Vite's local listener returned
-`EPERM`, and the installed headless Chrome could not launch. Phone layout and
-playback therefore still need a human browser pass.
+The village build is being integrated. At the time of this documentation pass, `apps/rumortown/src/main.ts` still selects the fake simulation for the browser shell; the real engine is in `apps/rumortown/src/sim/engine.ts`.
 
-## How the story works
+## Repository map
 
-Without intervention the day is quiet. Tom takes bread while Mira is away,
-delivers it to sick Ada, and means to pay later. Mira's observation of a missing
-loaf does **not** identify a culprit or itself increase belief in theft.
+| Directory | Purpose |
+|---|---|
+| [packages/rumormind](packages/rumormind/README.md) | Dependency-free TypeScript for belief, provenance, trust, gossip, mood and repair. |
+| [apps/rumortown](apps/rumortown) | Vite browser game, simulation, authored content, canvas rendering and controls. |
+| [apps/api](apps/api) | Cloudflare Worker for optional typed-rumor interpretation, signing and a durable budget ledger. |
 
-An early stranger's whisper moves Mira above the confrontation threshold.
-Once she notices the missing loaf, her confidence, anger, and personal stake
-outscore her routine. She seeks Tom and accuses him. Tom explains the delivery.
-Ben is loyal enough to defend his friend; if he was at Ada's cottage, his own
-observation supplies an independent origin for the alternative explanation.
-Without that observation, passing on Tom's account is still the same remembered
-origin. Mira therefore ends with less suspicion when Ben witnessed the delivery.
-When suspicion falls below the reconciliation threshold, an apology wins.
+See [the architecture](docs/architecture.md) for module boundaries, replay and the request path.
 
-The engine advances fixed six-minute ticks, with 08:00 as tick 0 and 20:00 as
-tick 120. Playback inserts reading time for each line without altering simulated
-time. A seeded mulberry32 generator picks dialogue variants; a given seed and
-ordered intervention list produce the same event log, independent of UI speed.
+## How the villagers think
 
-## Files
+These eight rules describe the main belief and gossip mechanisms. “Measured direction” means the research supports the pattern; the numerical translation remains a modelling choice. This is not a validated psychological predictor. Defaults come from [the library tuning](packages/rumormind/src/tuning.ts); the evidence tags follow [the design's evidence table](docs/superpowers/specs/2026-10-21-rumortown-design.md#8-simulation-rules-and-defaults).
 
-- `src/sim/types.ts`: claims, beliefs, provenance, characters, decisions, events.
-- `src/sim/data.ts`: characters, places, structured claims, explicit contradiction pairs.
-- `src/sim/tuning.ts`: behavioral weights, thresholds, relationships, schedule timing.
-- `src/sim/beliefs.ts`: log-odds updates, motivated reasoning, remembered origins,
-  first-hand evidence, capped familiarity, and residual corrections.
-- `src/sim/lines.ts`: three variants per speaker for each of eight speech acts.
-- `src/sim/engine.ts`: seeded randomness, schedules, local perception, utility
-  scoring, conversations, replay, and end-of-day outcomes.
-- `src/sim/share.ts`: versioned URL encoding and defensive decoding.
-- `src/sim/sim.test.ts`: simulation and URL tests.
-- `src/ui/app.ts`: village, animated villagers, speech queue, rumor trails,
-  inspector, controls, sharing, and story log.
-- `src/ui/styles.css`: responsive layout and village styling.
-- `src/main.ts`: application entry point.
-- `src/vite-env.d.ts`: Vite asset-import types.
+| Rule in plain words | Default and evidence tag |
+|---|---|
+| A trusted teller is more persuasive. | Hearsay weight `1.0`, scaled by trust and expressed confidence. At trust `0.6` and full strength, a neutral belief moves from `0.5` to about `0.65`. Measured direction; tuned weight. Bailey et al. 2023. |
+| Seeing something counts more than hearing it. | First-hand weight `2.5`, scaled by clarity. Measured direction; tuned multiplier. Weizsäcker 2010. |
+| Repetition makes a story feel familiar. | The familiarity bonus is `0.45 * (n - 1)^0.25` log-odds, capped at `1.0`, with none on the first hearing. Measured effect and dose-response shape; tuned scale and cap. Ye et al. 2026; Hassan and Barber 2021. |
+| Two tellers may still be one source. | Remembering their shared origin halves the new evidence; forgotten origins can look independent. Measured direction; tuned factor `0.5`. Weaver 2007; Yousif 2019. |
+| Affection changes the starting assumption. | On first hearing, affinity shifts the prior by up to `0.6` log-odds: liking someone dampens harmful claims about them. Tuned extrapolation. Pfänder and Altay 2025. |
+| Corrections help but leave a trace. | At full credibility, an alternative explanation removes `60%` of positive log-odds, a bare denial `40%`; a floor of `20%` of the peak remains. Corrections never raise the original belief. Measured direction; tuned fractions. Walter and Murphy 2018; Ecker 2022. |
+| Bad news is more likely to be passed on. | Negative content gets sharing odds of `1.5`, represented by a `ln(1.5)` score bonus. Confidence, closeness and whether the listener already knows also affect telling. Measured sharing effect; tuned score mapping. Acerbi 2022; Dores Cruz et al. 2021. |
+| Trust falls faster than it recovers. | Negative trust adjustments count twice; exposure can impose a lasting ceiling of `0.75` of full trust. Measured direction; tuned multiplier and ceiling. Schweitzer 2006. |
 
-## Fragile or fudged
+Dialogue is authored and selected by rules. A language model only interprets typed text as a structured claim; it does not write live dialogue or choose villagers' actions. Inspection exposes remembered sources, moods and reasons for decisions.
 
-- This is research-inspired arithmetic using the brief's numerical targets,
-  **not a validated psychological model**. Neutral trust gives about 0.65
-  confidence after one telling; direct observation has three times the base
-  weight of neutral hearsay. Personality modifiers alter that weight.
-- Taking bread and delivering it are scripted world events. Schedules and
-  thresholds are tuned for this tiny scenario, not emergent general planning.
-  Movement is one simulation step; the UI interpolates it.
-- “Stole” and “gave to Ada” are declared narrative alternatives even though
-  real theft and generosity can coexist. Initial confidence is 0.5 for each
-  claim independently; these are not normalized probabilities of exclusive facts.
-- A listener retains only three source-chain hops. Retellings from a remembered
-  common origin contribute familiarity, not independent evidence. Forgetting
-  earlier hops can eventually create false independence. A correction removes
-  50–90% of the remaining unsupported contribution once per remembered origin;
-  it cannot increase the original claim. Some suspicion remains.
-- Dialogue and behavior are finite templates. Gossip is limited to one telling
-  per speaker/listener/claim; reconciliation happens once. Actor ordering is
-  fixed (Mira, Tom, Ben), and characters can respond within the same tick.
-  Trust stays fixed; affinity changes with harmful belief and defense.
-- Outcomes are simple threshold summaries. The seed changes wording, not the
-  village layout or the scripted morning. Both witness settings may end in an
-  apology; the tested difference is evidence provenance and final confidence.
-- The URL contains the entire scenario, not a short server-generated ID.
-  Decoding rejects more than 1,000 interventions; very long links may hit browser
-  or clipboard limits. There is no save migration beyond version 1.
+## The $10 guarantee
+
+The intended deployment uses four layers. The account and hosting settings must be configured by the operator; repository code cannot establish those settings by itself.
+
+1. Prepaid credit: load $10 on OpenRouter and leave automatic top-up off. Exhausted credit stops interpretation; the ready-made menu remains available.
+2. Capped keys: cap the live key at $7 and the development key at $2, leaving $1 unallocated. These are provider-side stops outside the application.
+3. The ledger: one SQLite Durable Object reserves the worst-case cost before any model call, then settles usage. Its defaults are $0.10 per UTC day, 20 calls per minute globally and 5 per hour per hashed visitor bucket. Cache hits avoid another model call. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
+4. Free hosting with no card: deploy the static game and optional Worker on Cloudflare's free offering, with no paid upgrade or card attached. Quota exhaustion should stop service rather than enable paid usage. An optional custom domain is a separate recurring cost outside the AI budget.
+
+These are deployment requirements, not a claim that a live account has been audited. See [the request and ledger order](docs/architecture.md#the-workers-request-path).
+
+## What we deliberately did not build on
+
+The design excludes the backfire effect, ego depletion, behavioural priming, the claim that negative stories are inherently believed more, disgust-driven sharing, the sleeper effect and bounded-confidence rejection. The research review treats these findings as failed replications or contested foundations. Negative content affects sharing here; corrections never increase the belief they correct.
+
+## Research background
+
+The two research reports live outside this repository, in the sibling `reports` directory. These relative links work in the original workspace and will not resolve in a standalone clone:
+
+- [Behavioural science for rumor agents](<../reports/Behavioral science for rumor agents.md>) covers the evidence behind the villagers' rules.
+- [Zero-cost developer project ideas](<../reports/Zero cost developer project ideas.md>) covers project scope and cost constraints.
+
+## Licence
+
+MIT.
