@@ -10,7 +10,8 @@
     "dev": "npm run dev -w apps/rumortown",
     "build": "npm run build -w apps/rumortown",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench": "node --experimental-strip-types bench/sim.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261021.1",

@@ -2,7 +2,9 @@
 
 RumorTown is a browser game about a village of 24 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
 
-Launch GIF: placeholder for a 15-second recording of a rumor spreading through the village.
+Whisper to Mira that Tom stole bread, turn on “Who told whom”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Rewind the timeline or share the run with a link.
+
+Built by [Madhav Sunil](https://github.com/Maddy824).
 
 ## Run locally
 
@@ -13,11 +15,12 @@ npm install
 npm run dev
 npm test
 npm run build
+npm run bench
 ```
 
 Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. The ready-made rumor menu works without an interpretation service. The optional Worker requires separate Cloudflare and OpenRouter configuration.
 
-The village build is being integrated. At the time of this documentation pass, `apps/rumortown/src/main.ts` still selects the fake simulation for the browser shell; the real engine is in `apps/rumortown/src/sim/engine.ts`.
+The default game runs the real village simulation. `?fake=1` opens the UI fixture; `?renderer=stub` selects the plain development renderer. No account or API key is needed to play with ready-made claims.
 
 ## Repository map
 
@@ -63,11 +66,21 @@ The design excludes the backfire effect, ego depletion, behavioural priming, the
 
 ## Research background
 
-The two research reports live outside this repository, in the sibling `reports` directory. These relative links work in the original workspace and will not resolve in a standalone clone:
-
-- [Behavioural science for rumor agents](<../reports/Behavioral science for rumor agents.md>) covers the evidence behind the villagers' rules.
-- [Zero-cost developer project ideas](<../reports/Zero cost developer project ideas.md>) covers project scope and cost constraints.
+The [design evidence table](docs/superpowers/specs/2026-10-21-rumortown-design.md#8-simulation-rules-and-defaults) and [library evidence notes](packages/rumormind/README.md#evidence) explain which rules follow measured directions and which numbers are tuned. This is a game model, not a predictor of real people.
 
 ## Licence
 
 MIT.
+
+## Benchmarks
+
+Measured 21 October 2026 on Apple M4 Max, macOS arm64, Node 25.8.2; seed 731. Each simulation runs three full days. These are desktop CPU measurements; phone rendering still needs device testing.
+
+| Workload | Median | p95 | Total | Game-minutes/second |
+|---|---:|---:|---:|---:|
+| 24 villagers, 2,700 ticks | 0.1445 ms | 0.4775 ms | 513.8 ms | 5,255 |
+| 60 villagers, 2,700 ticks | 0.8818 ms | 17.5565 ms | 10,102.6 ms | 267 |
+| A*, 1,000 reachable pairs | 0.0067 ms | 0.0322 ms | 10.5 ms | — |
+| Belief update, 100,000 calls | 0.0002 ms | 0.0004 ms | 20.3 ms | — |
+
+Run `npm run bench`. [Method and full results](bench/results.md). The synthetic 60-villager stress test has slower tail ticks; the shipped cast has 24 villagers.
