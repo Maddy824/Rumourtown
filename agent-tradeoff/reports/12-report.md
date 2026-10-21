@@ -25,6 +25,7 @@ STATUS: DONE for implementation. Phone subscription and optional paid-service ac
 - Chrome at 1440 × 900 and 360 × 740 verified visible primary controls, pause/resume, automatic walking resume, modal keyboard trapping/return, notebook/share access, developer panel, agent notices and manual takeover. The local agent made no external network requests. No browser errors remained. A browser-only module-namespace serialization issue in research export was caught and fixed by serializing the export to plain JSON.
 - Screenshots: [phone controls](12-phone-controls.png), [phone agent](12-phone-agent.png), [developer guide](12-developers.png).
 - `.env.alerts` is ignored and contains no AI credentials. Generated build-info files remain unstaged.
+- Initial GitHub CI passed every check on Node 22. Node 25 completed all assertions but exceeded Vitest's five-second default on a pre-existing two-run typed-replay case (6.4 seconds). Bounded replay and agent integration suites now allow 20 seconds per case; the longer seed-sample test retains its own limit. Event assertions, replay pins and separate performance thresholds are unchanged.
 
 ## Remaining setup
 

@@ -18,7 +18,9 @@ const runTo = (sim: ReturnType<typeof make>, tick: number): void => {
   while (sim.tick < tick) sim.step();
 };
 
-describe('integrated village replay', () => {
+// Several cases run two complete 36-person days. Shared CI runners can exceed
+// Vitest's five-second default; exact event assertions remain the acceptance test.
+describe('integrated village replay', { timeout: 20_000 }, () => {
   it('keeps NPC events identical when the player follows a different walking path', () => {
     const idle = make(), walking = make();
     for (let t = 0; t < 900; t++) {

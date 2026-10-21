@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { AGENT_LIMITS, createAgentEnvironment, replayAgentRun } from './environment.js';
 
-describe('local agent environment', () => {
+// Includes a complete three-day run; give shared CI CPUs room without dropping steps.
+describe('local agent environment', { timeout: 20_000 }, () => {
   it('replays movement, approach, written whispers and full hidden research state exactly', () => {
     const env = createAgentEnvironment(731);
     expect(env.call('move', { placeId: 'square' }).ok).toBe(true);
