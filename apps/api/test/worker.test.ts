@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createWorker } from '../src/index';
-import { verify } from '../src/sign';
+import { hash } from '../src/moderation';
+import { sign, verify } from '../src/sign';
 import type { Env, Fetcher, SignedPayload } from '../src/types';
 import { good, interpretRequest, keys, makeEnv, memoryLedger, mockFetch, now, origin, provider } from './helpers';
 
@@ -17,6 +18,30 @@ function setup(config: Partial<Env> = {}, output: unknown = provider()) {
 afterEach(() => { vi.useRealTimers(); for (const s of stores.splice(0)) s.db.close(); });
 
 describe('Worker routes', () => {
+  it('rejects the reported unknown-killer rumor before any model or cache lookup', async () => {
+    const { worker, env, mock, s } = setup({}, provider({ ...good, kind: 'kindness', about: 'rosa', target: 'ada', valence: 1 }));
+    const response = await worker.fetch(interpretRequest('someone killed tom'), env);
+    expect(await response.json()).toEqual({ unsupported: 'unsupported-story', castVersion: 'v1', issuedAt: now });
+    expect(mock.calls).toHaveLength(0);
+    expect(s.calls).toHaveLength(0);
+  });
+  it.each([
+    { ...good, kind: 'kindness', about: 'rosa', target: 'ada', valence: 1 },
+    { ...good, target: 'ada' },
+    { ...good, confidence: .2 },
+  ])('settles but never signs or caches an ungrounded model answer: %o', async output => {
+    const { worker, env, s } = setup({}, provider(output));
+    expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ unsupported: 'unclear', castVersion: 'v1', issuedAt: now });
+    expect(s.calls.some(c => c.method === 'settle')).toBe(true);
+    expect(s.calls.some(c => c.method === 'cachePut')).toBe(false);
+  });
+  it('does not serve an unrelated signed claim from an older cache entry', async () => {
+    const { worker, env, s, mock } = setup();
+    const payload = await sign({ claim: { ...good, about: 'rosa', target: 'ada' }, castVersion: 'v1', issuedAt: now }, key.secret);
+    await s.rpc('cachePut', { hash: await hash('mira stole bread from tom'), payload });
+    expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ unsupported: 'unclear', castVersion: 'v1', issuedAt: now });
+    expect(mock.calls.some(c => c.url.includes('completions'))).toBe(false);
+  });
   it('performs the full interpret path, settles usage, caches only the signed claim', async () => {
     const { worker, env, mock, s } = setup();
     const response = await worker.fetch(interpretRequest(), env);

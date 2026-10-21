@@ -1,3 +1,5 @@
+import { groundedPeople, unsupportedStory } from '../../shared/whisper-grounding';
+import cast from './cast.json';
 import { blockedReason, hash, normalise } from './moderation';
 import { actualCost, estimatePromptTokens, MAX_TOKENS, modelList, providerPriceCap, reservationCost } from './prices';
 import { admit, Failure, readInput } from './admission';
@@ -66,6 +68,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   const normalised = normalise(text);
   if (!normalised) throw new Failure('invalid');
   const unsupported = blockedReason(normalised);
+  if (unsupportedStory(text)) return { unsupported: 'unsupported-story', castVersion: input.castVersion, issuedAt: now() };
   if (unsupported) return { unsupported, castVersion: input.castVersion, issuedAt: now() };
   await turnstile(request, input.turnstileToken, env, fetcher);
   usage.track = true;
@@ -81,6 +84,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     if (!await verify(p, p.sig, publicKey(env.SIGNING_KEY_JWK))) throw new Failure('ledger');
     const claim = validate(p.claim);
     if (!claim || 'unsupported' in claim) throw new Failure('ledger');
+    if (!groundedPeople(text, claim, cast)) return { unsupported: 'unclear', castVersion: input.castVersion, issuedAt: now() };
     const payload = { claim, castVersion: p.castVersion, issuedAt: p.issuedAt };
     if (p.castVersion === input.castVersion) {
       const signed = { ...payload, sig: p.sig };
@@ -97,6 +101,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify({ whisper: text }) }];
   const claim = await infer(request, env, fetcher, now, usage, defer, messages, schema, validate);
   if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
+  if (!groundedPeople(text, claim, cast)) return { unsupported: 'unclear', castVersion: input.castVersion, issuedAt: now() };
   const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
   await finish(env, 'cachePut', { hash: key, payload: signed });
   await edge.put(signed);

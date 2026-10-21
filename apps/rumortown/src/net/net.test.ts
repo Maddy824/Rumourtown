@@ -352,11 +352,26 @@ describe('whisper flow', () => {
     return { flow, getToken, transitions };
   }
 
+  it('rejects even a validly signed answer that invents other people', async () => {
+    const signed = await signFixture({ ...payload, claim: { ...payload.claim, kind: 'kindness', about: 'rosa', target: 'ada', valence: 1 } });
+    const { flow, transitions } = makeFlow(server(signed));
+    expect(await flow.start('Tom took bread.')).toEqual({ ok: true, unsupported: 'unclear' });
+    expect(transitions).toEqual(['checking', 'asking', 'resting']);
+  });
+
+  it('does not spend inference on the reported unknown-killer rumor', async () => {
+    const fetcher = server({});
+    const { flow, getToken } = makeFlow(fetcher);
+    expect(await flow.start('someone killed tom')).toEqual({ ok: true, unsupported: 'unsupported-story' });
+    expect(getToken).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('moves through checking and asking to done only after signature verification', async () => {
     const signed = await signFixture();
     const { flow, transitions, getToken } = makeFlow(server(signed));
     expect(flow.state).toEqual({ status: 'idle' });
-    expect(await flow.start('A whisper.')).toEqual({ ok: true, ...signed });
+    expect(await flow.start('Tom took Ada’s bread.')).toEqual({ ok: true, ...signed });
     expect(transitions).toEqual(['checking', 'asking', 'done']);
     expect(flow.state).toEqual({ status: 'done', result: { ok: true, ...signed } });
     expect(getToken).toHaveBeenCalledTimes(1);
@@ -373,7 +388,7 @@ describe('whisper flow', () => {
       : reason === 'offline' ? vi.fn<typeof fetch>(async () => { throw new Error('offline'); })
         : server({ reason }, 503);
     const { flow } = makeFlow(fetcher);
-    const pending = flow.start('A whisper.');
+    const pending = flow.start('Tom took Ada’s bread.');
     if (reason === 'timeout') await vi.advanceTimersByTimeAsync(6_000);
     await pending;
     expect(flow.state).toMatchObject({ status: 'resting', line });
@@ -388,7 +403,7 @@ describe('whisper flow', () => {
       return Response.json(signed);
     });
     const { flow } = makeFlow(fetcher, vi.fn(() => new Promise(resolve => setTimeout(() => resolve('slow-token'), 8_000))));
-    const pending = flow.start('A whisper.');
+    const pending = flow.start('Tom took Ada’s bread.');
     await vi.advanceTimersByTimeAsync(7_999);
     expect(flow.state.status).toBe('checking');
     expect(fetcher).not.toHaveBeenCalled();
@@ -402,7 +417,7 @@ describe('whisper flow', () => {
     vi.useFakeTimers();
     const fetcher = vi.fn<typeof fetch>(() => new Promise(resolve => setTimeout(() => resolve(Response.json(refusal('unclear'))), 7_000)));
     const { flow } = makeFlow(fetcher, vi.fn(() => new Promise(resolve => setTimeout(() => resolve('token'), 8_000))));
-    const pending = flow.start('A whisper.');
+    const pending = flow.start('Tom took Ada’s bread.');
     await vi.advanceTimersByTimeAsync(13_999);
     expect(flow.state.status).toBe('asking');
     expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
@@ -441,7 +456,7 @@ describe('whisper flow', () => {
     flow.warm(); flow.warm();
     expect(warm).toHaveBeenCalledTimes(2);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const pending = flow.start('A whisper.');
+    const pending = flow.start('Tom took Ada’s bread.');
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
     complete(Response.json(jwk));
     expect(await pending).toEqual({ ok: true, ...signed });
@@ -451,7 +466,7 @@ describe('whisper flow', () => {
 
   it('uses the exact visitor limit line', async () => {
     const { flow } = makeFlow(server({ reason: 'limit-visitor' }, 503));
-    await flow.start('A whisper.');
+    await flow.start('Tom took Ada’s bread.');
     expect(flow.state).toMatchObject({ status: 'resting',
       line: "You've whispered a lot this hour. Try a ready-made rumor, or come back later." });
   });
@@ -459,7 +474,7 @@ describe('whisper flow', () => {
   it('handles a local Turnstile failure without calling the API', async () => {
     const fetcher = server({});
     const { flow, transitions } = makeFlow(fetcher, vi.fn(async () => { throw 'turnstile'; }));
-    expect(await flow.start('A whisper.')).toEqual({ ok: false, reason: 'turnstile' });
+    expect(await flow.start('Tom took Ada’s bread.')).toEqual({ ok: false, reason: 'turnstile' });
     expect(flow.state).toMatchObject({ status: 'resting', line: "Couldn't check you're human. Try again." });
     expect(transitions).toEqual(['checking', 'resting']);
     expect(fetcher).not.toHaveBeenCalled();
@@ -467,7 +482,7 @@ describe('whisper flow', () => {
 
   it('uses the same Turnstile line for Worker verification failure', async () => {
     const { flow } = makeFlow(server({ reason: 'turnstile' }, 503));
-    await flow.start('A whisper.');
+    await flow.start('Tom took Ada’s bread.');
     expect(flow.state).toMatchObject({ status: 'resting', line: "Couldn't check you're human. Try again." });
   });
 
@@ -477,17 +492,18 @@ describe('whisper flow', () => {
     ['protected-trait', 'Nobody here would repeat that.'],
     ['sexual', 'Nobody here would repeat that.'],
     ['hateful', 'Nobody here would repeat that.'],
-    ['unclear', 'Say it plainer.'],
+    ['unclear', "I couldn't match that rumor reliably. Nothing was sent. Edit it or choose a village story."],
+    ['unsupported-story', "This kind of rumor isn't supported yet. Nothing was sent. Edit it or choose a village story."],
   ])('uses the exact unsupported line for %s', async (unsupported, line) => {
     const { flow } = makeFlow(server(refusal(unsupported)));
-    await flow.start('A whisper.');
+    await flow.start('Tom took Ada’s bread.');
     expect(flow.state).toMatchObject({ status: 'resting', line, result: { ok: true, unsupported } });
   });
 
   it('never reaches done for a tampered claim', async () => {
     const signed = await signFixture();
     const { flow, transitions } = makeFlow(server({ ...signed, issuedAt: signed.issuedAt + 1 }));
-    expect(await flow.start('A whisper.')).toEqual({ ok: false, reason: 'bad-signature' });
+    expect(await flow.start('Tom took Ada’s bread.')).toEqual({ ok: false, reason: 'bad-signature' });
     expect(transitions).toEqual(['checking', 'asking', 'resting']);
   });
 

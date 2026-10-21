@@ -19,6 +19,7 @@
     "noEmit": true
   },
   "include": [
+    "../shared",
     "src",
     "test",
     "evals"

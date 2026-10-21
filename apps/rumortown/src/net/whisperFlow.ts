@@ -1,3 +1,4 @@
+import { groundedPeople } from '../../../shared/whisper-grounding.js';
 import { interpretWhisper, type InterpretOptions, type InterpretResult } from './interpret.js';
 import { cast } from '../content/cast/index.js';
 import { interpretLocally, type LocalPerson } from './local-interpreter.js';
@@ -31,7 +32,8 @@ function lineFor(result: RestingResult): string {
     switch (result.unsupported) {
       case 'not-about-cast': case 'real-person': return 'The villagers only gossip about each other.';
       case 'protected-trait': case 'sexual': case 'hateful': return 'Nobody here would repeat that.';
-      case 'unclear': return 'Say it plainer.';
+      case 'unclear': return "I couldn't match that rumor reliably. Nothing was sent. Edit it or choose a village story.";
+      case 'unsupported-story': return "This kind of rumor isn't supported yet. Nothing was sent. Edit it or choose a village story.";
     }
   }
   switch (result.reason) {
@@ -83,6 +85,9 @@ export function createWhisperFlow(deps: WhisperFlowDependencies): WhisperFlow {
       });
     } catch { result = { ok: false, reason: 'turnstile' }; }
     finally { clearTimeout(timer); }
+    if (result.ok && 'claim' in result && !groundedPeople(text, result.claim, deps.cast ?? cast)) {
+      result = { ok: true, unsupported: 'unclear' };
+    }
     if (result.ok && 'claim' in result) transition({ status: 'done', result });
     else transition({ status: 'resting', result, line: lineFor(result) });
     return result;

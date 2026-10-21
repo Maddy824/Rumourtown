@@ -1,3 +1,4 @@
+import { unsupportedStory } from '../../../shared/whisper-grounding.js';
 import { slurs, sexual } from './blocklist.js';
 import { favourable, lexicons, objects, roleAliases, spouses, takesTarget } from './local-lexicons.js';
 import type { Claim, UnsupportedReason } from './types.js';
@@ -32,6 +33,7 @@ interface Mention { start: number; end: number; ids: string[]; evidence: string;
 
 /** Conservative classification only: unsupported and ambiguous prose never becomes a local claim. */
 export function interpretLocally(text: string, cast: readonly LocalPerson[]): LocalResult {
+  if (unsupportedStory(text)) return { unsupported: 'unsupported-story', confidence: 1 };
   const lower = normalise(text);
   const words = lower.split(/[^\p{L}\p{N}]+/u);
   if (words.some(word => (slurs as readonly string[]).includes(word))) return { unsupported: 'protected-trait', confidence: .9 };

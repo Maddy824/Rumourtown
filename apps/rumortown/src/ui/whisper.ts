@@ -1,6 +1,7 @@
 /**
  * The whisper sheet, opened from the postbox: who is within two tiles, player-written stories and optional ready-made claims. Time holds while it is open.
  */
+import { unsupportedStory } from '../../../shared/whisper-grounding.js';
 import type { ClaimId } from 'rumormind';
 import { castVersion } from '../content/cast/index.js';
 import { rumorLibrary } from '../content/rumor-packs/index.js';
@@ -83,6 +84,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   let severity: GameClaim['severity'] = 2;
   let confirmed: GameClaim | null = null;
   let manual = false;
+  let rejected = false;
   let busy = false;
   let revision = 0;
   let activeRevision = 0;
@@ -93,11 +95,11 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const ai = Boolean(flow || (baseUrl && siteKey));
   let showConfirmation = (): void => {};
   let showManual = (): void => {};
-  const invalidate = (): void => { revision++; confirmed = null; manual = false; retryBtn.hidden = true; };
+  const invalidate = (): void => { revision++; confirmed = null; manual = false; rejected = false; retryBtn.hidden = true; };
 
   const update = (): void => {
     retryBtn.disabled = busy;
-    sendBtn.disabled = busy || !(listener && (claimId || (ownText.trim() && (ai && !manual || about && about !== listener))));
+    sendBtn.disabled = busy || rejected || !(listener && (claimId || (ownText.trim() && (ai && !manual || about && about !== listener))));
     sendBtn.textContent = confirmed ? 'Whisper it' : 'Whisper';
   };
 
@@ -106,12 +108,18 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     void submit();
   });
   const submit = async (): Promise<void> => {
-    if (!listener || busy) return;
+    if (!listener || busy || rejected) return;
     const to = listener;
     const sim = ctx.sim();
     const name = sim.cast.get(to)?.name ?? 'They';
     let chosen = claimId;
     if (ownText.trim()) {
+      if (unsupportedStory(ownText)) {
+        rejected = true;
+        feedback.textContent = "Death rumors aren't supported yet. Nothing was sent. Edit it or choose a village story.";
+        update();
+        return;
+      }
       if (ai && !manual && !confirmed) {
         const requestRevision = revision;
         activeRevision = revision;
@@ -138,6 +146,12 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
             }
           } else {
             feedback.textContent = flow.state.status === 'resting' ? flow.state.line : "Couldn't ask the village. Try again.";
+            if (result.ok) {
+              rejected = true;
+              manual = false;
+              update();
+              return;
+            }
             const retryable = !result.ok && !['budget', 'limit-global', 'limit-visitor'].includes(result.reason);
             retryBtn.hidden = !retryable;
             manual = !retryable;
@@ -166,6 +180,13 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         // Only taxonomy fields enter the simulation, story, exports and replay links.
         const claim = confirmed ?? createRegisteredClaim({ about, kind, severity,
           valence: ['kindness', 'paid-debt', 'nursed'].includes(kind) ? 1 : -1 }, sim.cast);
+        if (!confirmed) {
+          confirmed = claim;
+          showConfirmation();
+          update();
+          sendBtn.focus();
+          return;
+        }
         sim.registerClaim(claim);
         chosen = claim.id;
       } catch {
@@ -304,15 +325,15 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     const preview = h('p', { class: 'sheet-note', id: 'rt-writing-note', role: 'status' });
     const describe = (): void => {
       const picked = claimId ? libraryClaim ?? sim.claims.get(claimId) : undefined;
-      const helps = picked ? picked.valence > 0 : ['kindness', 'paid-debt', 'nursed'].includes(kind);
-      preview.textContent = picked ? `Selected: ${picked.text}` : `${ownText.length}/${MAX_WRITTEN_TEXT} characters. ${helps ? 'Helps' : 'Hurts'} ${sim.cast.get(about)?.name ?? 'the subject'}’s reputation. Your words are only read to understand the rumor; the village repeats the rumor, not your words.`;
+      preview.textContent = picked ? `Selected: ${picked.text}` : `${ownText.length}/${MAX_WRITTEN_TEXT} characters. Your words are only read to understand the rumor; the village repeats the rumor, not your words.`;
       suggestions.open = !ownText.trim() && !libraryClaim;
       feedback.textContent = about === listener && ownText.trim() ? 'Pick someone else to hear this story.' : '';
       update();
     };
-    aboutSelect.addEventListener('change', () => { about = aboutSelect.value; describe(); });
-    meaningSelect.addEventListener('change', () => { kind = meaningSelect.value as GameClaim['kind']; describe(); });
-    weightSelect.addEventListener('change', () => { severity = Number(weightSelect.value) as GameClaim['severity']; describe(); });
+    const changeMeaning = (): void => { revision++; confirmed = null; confirmation.hidden = true; describe(); };
+    aboutSelect.addEventListener('change', () => { about = aboutSelect.value; changeMeaning(); });
+    meaningSelect.addEventListener('change', () => { kind = meaningSelect.value as GameClaim['kind']; changeMeaning(); });
+    weightSelect.addEventListener('change', () => { severity = Number(weightSelect.value) as GameClaim['severity']; changeMeaning(); });
     typed.addEventListener('input', () => {
       invalidate();
       confirmation.hidden = true;

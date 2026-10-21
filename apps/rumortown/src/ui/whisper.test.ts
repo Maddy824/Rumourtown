@@ -59,6 +59,34 @@ function sheet(result?: InterpretResult) {
 const verified = { ok: true, claim: { kind: 'theft', about: 'tom', object: 'bread', severity: 3, valence: -1, confidence: .9 }, castVersion, issuedAt: 1, sig: 'already-verified-by-flow' } as const;
 
 describe('whisper confirmation and privacy', () => {
+  it.each([undefined, verified])('never replaces an unknown killer with a default story, online or offline', async result => {
+    const ui = sheet(result);
+    const typed = ui.root.querySelector('textarea')!;
+    typed.value = 'someone killed tom'; typed.dispatchEvent(new Event('input'));
+    await ui.submit(); await ui.submit();
+    expect(ui.whispered).toHaveLength(0);
+    expect(ui.start).not.toHaveBeenCalled();
+    expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
+    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toContain("Death rumors aren't supported yet");
+    expect(ui.root.querySelectorAll('button').find(b => b.attrs.get('type') === 'submit')!.disabled).toBe(true);
+    // Selecting an explicit library story recovers the form without reinterpreting rejected prose.
+    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
+    await ui.submit();
+    expect(ui.whispered).toHaveLength(1);
+  });
+  it('does not turn a refusal into a default manual rumor on repeated submission', async () => {
+    const ui = sheet({ ok: true, unsupported: 'unclear' });
+    await ui.submit(); await ui.submit();
+    expect(ui.whispered).toHaveLength(0);
+    expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(true);
+    expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
+    expect(ui.start).toHaveBeenCalledTimes(1);
+    const typed = ui.root.querySelector('textarea')!;
+    typed.value = 'Tom stole bread'; typed.dispatchEvent(new Event('input'));
+    await ui.submit();
+    expect(ui.start).toHaveBeenCalledTimes(2);
+  });
+
   it('confirms a verified claim before registering and whispering it', async () => {
     const ui = sheet(verified);
     await ui.submit();
@@ -80,16 +108,19 @@ describe('whisper confirmation and privacy', () => {
     expect(ui.root.querySelector('.story-meaning')!.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '3']);
     await ui.submit();
     expect(ui.start).toHaveBeenCalledTimes(1);
+    expect(ui.whispered).toHaveLength(0);
+    await ui.submit();
     expect(ui.whispered[0]).toBe('typed_theft_tom_none_none_3');
   });
   it.each([
-    [{ ok: true, unsupported: 'unclear' }, 'Say it plainer.'],
     [{ ok: false, reason: 'budget' }, "The town's gossip is resting. Try a ready-made rumor."],
   ] as const)('keeps manual choices available for %o', async (result, line) => {
     const ui = sheet(result); await ui.submit();
     expect(ui.root.querySelector('.whisper-feedback')!.textContent).toBe(line);
     expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(false);
     expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
+    await ui.submit();
+    expect(ui.whispered).toHaveLength(0);
     await ui.submit();
     expect(ui.whispered).toHaveLength(1);
     expect(ui.start).toHaveBeenCalledTimes(1);
@@ -98,6 +129,8 @@ describe('whisper confirmation and privacy', () => {
     const ui = sheet();
     expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(false);
     expect(ui.root.textContent).toContain('Your words are only read to understand the rumor; the village repeats the rumor, not your words.');
+    await ui.submit();
+    expect(ui.whispered).toHaveLength(0);
     await ui.submit();
     const encoded = encodeShare({ v: 1, seed: 731, cast: castVersion,
       interventions: [{ tick: 0, listener: 'mira', claimId: ui.whispered[0]! }] });

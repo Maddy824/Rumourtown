@@ -2,7 +2,7 @@ import cast from './cast.json';
 import { isReviewedObject, objects } from './objects';
 
 export const kinds = ['theft', 'cheating', 'romance', 'lying', 'broken-promise', 'insult', 'hoarding', 'shirking', 'boasting', 'kindness', 'paid-debt', 'nursed'] as const;
-export const unsupportedReasons = ['not-about-cast', 'real-person', 'protected-trait', 'sexual', 'hateful', 'unclear'] as const;
+export const unsupportedReasons = ['not-about-cast', 'real-person', 'protected-trait', 'sexual', 'hateful', 'unclear', 'unsupported-story'] as const;
 export type Kind = typeof kinds[number];
 export interface Claim {
   kind: Kind;

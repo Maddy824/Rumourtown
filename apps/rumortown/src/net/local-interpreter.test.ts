@@ -8,6 +8,9 @@ const { gzipSync } = await vi.importActual<{ gzipSync(data: string): Uint8Array 
 
 const interpret = (text: string) => interpretLocally(text, cast);
 describe('local interpretation', () => {
+  it.each(['someone killed tom', 'Someone killed Tom', 'Tom murdered Ada', 'Tom helped kill Ada', 'Tom is dead'])('does not force death into a reputation category: %s', text => {
+    expect(interpret(text)).toEqual({ unsupported: 'unsupported-story', confidence: 1 });
+  });
   it.each([
     ['MIRA stole Pim’s coins.', 'theft', 'mira', 'pim'],
     ['Mria stole bread.', 'theft', 'mira', undefined],

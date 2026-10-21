@@ -89,7 +89,7 @@ describe('whisper sheet timing and writing', () => {
     expect(view.root.querySelector('.whisper-feedback')).toBe(status);
     expect(status.attrs.get('style')).toBe(style);
     response(Response.json({ unsupported: 'unclear', castVersion, issuedAt: 1 }));
-    await pause(); expect(view.feedback()).toBe('Say it plainer.');
+    await pause(); expect(view.feedback()).toBe("I couldn't match that rumor reliably. Nothing was sent. Edit it or choose a village story.");
     view.ui.destroy();
   });
 
@@ -128,7 +128,7 @@ describe('whisper sheet timing and writing', () => {
     expect(vi.mocked(client.warm).mock.calls.length).toBeGreaterThan(warmedBeforeRetry);
     expect(client.getToken).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith('/interpret'))).toHaveLength(1);
-    expect(view.feedback()).toBe('Say it plainer.');
+    expect(view.feedback()).toBe("I couldn't match that rumor reliably. Nothing was sent. Edit it or choose a village story.");
     view.ui.destroy();
   });
 

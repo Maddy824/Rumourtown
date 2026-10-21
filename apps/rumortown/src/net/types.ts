@@ -4,7 +4,7 @@ export const claimKinds = [
   'hoarding', 'shirking', 'boasting', 'kindness', 'paid-debt', 'nursed',
 ] as const;
 export const unsupportedReasons = [
-  'not-about-cast', 'real-person', 'protected-trait', 'sexual', 'hateful', 'unclear',
+  'not-about-cast', 'real-person', 'protected-trait', 'sexual', 'hateful', 'unclear', 'unsupported-story',
 ] as const;
 export type UnsupportedReason = typeof unsupportedReasons[number];
 export interface Claim {

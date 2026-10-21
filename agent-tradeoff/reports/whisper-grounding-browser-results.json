@@ -1,0 +1,98 @@
+[
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 1280,
+    "height": 800,
+    "layout": {
+      "overflow": false,
+      "sheet": {
+        "x": 16,
+        "y": 76,
+        "width": 410,
+        "height": 590,
+        "top": 76,
+        "right": 426,
+        "bottom": 666,
+        "left": 16
+      },
+      "button": {
+        "x": 288,
+        "y": 599.734375,
+        "width": 120,
+        "height": 44,
+        "top": 599.734375,
+        "right": 408,
+        "bottom": 643.734375,
+        "left": 288
+      }
+    },
+    "inference": [],
+    "errors": [],
+    "rejectedInputNotShared": true,
+    "keyboardRecovery": true
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 360,
+    "height": 800,
+    "layout": {
+      "overflow": false,
+      "sheet": {
+        "x": 0,
+        "y": 70,
+        "width": 360,
+        "height": 640,
+        "top": 70,
+        "right": 360,
+        "bottom": 710,
+        "left": 0
+      },
+      "button": {
+        "x": 222,
+        "y": 643.734375,
+        "width": 120,
+        "height": 44,
+        "top": 643.734375,
+        "right": 342,
+        "bottom": 687.734375,
+        "left": 222
+      }
+    },
+    "inference": [],
+    "errors": [],
+    "rejectedInputNotShared": true,
+    "keyboardRecovery": true
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 360,
+    "height": 640,
+    "layout": {
+      "overflow": false,
+      "sheet": {
+        "x": 0,
+        "y": 70,
+        "width": 360,
+        "height": 480,
+        "top": 70,
+        "right": 360,
+        "bottom": 550,
+        "left": 0
+      },
+      "button": {
+        "x": 222,
+        "y": 483.734375,
+        "width": 120,
+        "height": 44,
+        "top": 483.734375,
+        "right": 342,
+        "bottom": 527.734375,
+        "left": 222
+      }
+    },
+    "inference": [],
+    "errors": [],
+    "rejectedInputNotShared": true,
+    "keyboardRecovery": true
+  }
+]
