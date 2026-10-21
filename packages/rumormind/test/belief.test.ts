@@ -64,6 +64,17 @@ describe('BeliefLedger', () => {
     expect(mira.confidence('gaveTo')).toBeGreaterThan(0.8);
   });
 
+  it('a direct correction lowers belief, keeps a residual, and reports whether it changed anything', () => {
+    const mira = fresh();
+    for (const s of ['a', 'b', 'c']) mira.hear(stole, claims, { source: s, strength: 1, trust: 0.6, tick: 1 });
+    const peak = mira.confidence('stole');
+    expect(mira.correct('stole', { credibility: 0.8, alternative: false, source: 'tom', tick: 5 })).toBe(true);
+    const after = mira.confidence('stole');
+    expect(after).toBeLessThan(peak);
+    expect(after).toBeGreaterThan(0.5);
+    expect(mira.correct('unknown', { credibility: 1, alternative: true, source: 'tom', tick: 6 })).toBe(false);
+  });
+
   it('liking the accused dampens a harmful claim; disliking amplifies it', () => {
     const likes = fresh().hear(stole, claims, { source: 'a', strength: 1, trust: 0.6, tick: 1, affinityToTarget: 1 });
     const dislikes = fresh().hear(stole, claims, { source: 'a', strength: 1, trust: 0.6, tick: 1, affinityToTarget: -1 });

@@ -38,6 +38,14 @@ export interface HearOptions {
   alternativeExplanation?: boolean;
 }
 
+/** How strongly a correction counts: the listener's trust in its source times its clarity, and whether it explains the facts another way. */
+export interface Correction {
+  credibility: number;
+  alternative: boolean;
+  source: CharacterId | 'self';
+  tick: number;
+}
+
 export interface HearResult {
   before: number;
   after: number;
@@ -160,27 +168,36 @@ export class BeliefLedger {
   }
 
   /**
-   * Evidence for a claim is a correction of every claim it contradicts.
-   * A correction reduces belief but leaves a residual (continued influence), and never raises it.
+   * A direct correction of one claim, for example a bare denial heard from the accused.
+   * Reduces belief by the tuned fraction (less without an alternative explanation), leaves the
+   * continued-influence residual, and never raises belief. Returns true when anything changed.
    */
-  private applyContradictions(
-    claim: Claim,
-    claims: ReadonlyMap<ClaimId, Claim>,
-    c: { credibility: number; alternative: boolean; source: CharacterId | 'self'; tick: number },
-  ): ClaimId[] {
+  correct(claimId: ClaimId, c: Correction): boolean {
+    const b = this.beliefs.get(claimId);
+    if (!b) return false;
+    return this.correctOne(b, c);
+  }
+
+  private correctOne(other: Belief, c: Correction): boolean {
+    if (other.logOdds <= 0) return false;
+    const removal =
+      (c.alternative ? this.tuning.correctionRemoval : this.tuning.correctionRemovalBare) * clamp(c.credibility, 0, 1);
+    const floor = this.tuning.residualFraction * Math.max(other.peakLogOdds, 0);
+    const next = Math.max(other.logOdds * (1 - removal), floor);
+    const delta = Math.min(0, next - other.logOdds);
+    if (delta === 0) return false;
+    other.logOdds += delta;
+    other.provenance.push({ kind: 'corrected', source: c.source, origin: c.source, tick: c.tick, delta });
+    return true;
+  }
+
+  /** Evidence for a claim is a correction of every claim it contradicts. */
+  private applyContradictions(claim: Claim, claims: ReadonlyMap<ClaimId, Claim>, c: Correction): ClaimId[] {
     const corrected: ClaimId[] = [];
     for (const otherId of claim.contradicts ?? []) {
       if (!claims.has(otherId)) continue;
       const other = this.beliefs.get(otherId);
-      if (!other || other.logOdds <= 0) continue;
-      const removal = (c.alternative ? this.tuning.correctionRemoval : this.tuning.correctionRemovalBare) * c.credibility;
-      const floor = this.tuning.residualFraction * Math.max(other.peakLogOdds, 0);
-      const next = Math.max(other.logOdds * (1 - removal), floor);
-      const delta = Math.min(0, next - other.logOdds);
-      if (delta === 0) continue;
-      other.logOdds += delta;
-      other.provenance.push({ kind: 'corrected', source: c.source, origin: c.source, tick: c.tick, delta });
-      corrected.push(otherId);
+      if (other && this.correctOne(other, c)) corrected.push(otherId);
     }
     return corrected;
   }
