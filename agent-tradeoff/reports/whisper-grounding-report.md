@@ -21,4 +21,12 @@ Raw player text remains excluded from simulation claims, links, exports, bubbles
 - The full-day replay pin remains `6137d96970f7a28e05e2fb37b57b9495274d1c256208d084818a336332994184`; no simulation code changed.
 - Chrome production-preview checks passed at 1280×800, 360×800 and 360×640. The exact reported input shows the explanation, stays out of replay, and makes no inference request. Editing to a supported story restores confirmation and keyboard submission. No overflow or page errors; button remains visible. See `whisper-grounding-browser.mjs`, JSON evidence and screenshots.
 - New tests cover unknown-killer input online/offline, refusal repeat-submit, old unrelated signed cache entries, billing settlement without caching an ungrounded output, low confidence, and signed client output containing invented people.
-- Independent read-only review cleared the change with no Critical/Important findings and 198 additional focused test passes. See `whisper-grounding-review.md`. Deployment pending.
+- Independent read-only review cleared the change with no Critical/Important findings and 198 additional focused test passes. See `whisper-grounding-review.md`.
+
+## Release
+
+- Code commit: `fa276db0e7ed5ad7143227de53cea4c42108250a`.
+- API version: `93015a05-3359-43e2-8d64-4becec294988`.
+- Site version: `f3887484-dc36-41dc-b45a-669d48cdc946`; main asset `/assets/main-B26oeCYE.js`.
+- API health returned `{"ok":true}`. The same three-viewport browser checks passed against https://rumourtown.dev with no inference calls, page errors, overflow or rejected-input replay leakage; see `whisper-grounding-live-browser-results.json` and screenshots.
+- No live model request was needed for this reproduction. Local preview stopped after verification. GitHub CI status can be checked on the final release commit.
