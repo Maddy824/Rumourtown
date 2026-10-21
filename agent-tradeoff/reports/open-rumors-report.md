@@ -21,4 +21,14 @@ The design notes connect source monitoring and social diffusion research to the 
 
 Final full check: root typecheck, 867 tests / 74 files, production build and bundle gate passed (349,647 / 400,000 gzip bytes). Local count includes 12 pre-existing untracked SEO tests. The unchanged authored replay SHA-256 remains `6137d96970f7a28e05e2fb37b57b9495274d1c256208d084818a336332994184`; changes are restricted to newly introduced open claims. Open-story twin simulations match exactly, propagate hearsay and do not blame/kill Tom or invent eyewitness evidence. API tests cover unknown perpetrators, discoveries, impossible events, victim blame, malformed model answers, shared quotas and cap exhaustion. UI tests cover consent, editing, late responses, neutral correction, local mode and library selection.
 
-Production-preview Chrome checks passed for unknown-killer and moon stories at 1280×800, 360×800 and 360×640, with mocked inference: exact wording, unknown actor, explicit disclosure before registration, keyboard confirmation, correct replay payload, no overflow/page errors. See `open-rumors-browser.mjs`, JSON evidence and screenshots. Independent review approved after fixing reversed passive roles in the legacy local shortcut (removed from this flow) and exposing reputation/importance at confirmation. 42 independent scoped tests passed; see `open-rumors-review.md`. Release pending. Live model quality has not been measured by these mocked provider tests.
+Production-preview Chrome checks passed for unknown-killer and moon stories at 1280×800, 360×800 and 360×640, with mocked inference: exact wording, unknown actor, explicit disclosure before registration, keyboard confirmation, correct replay payload, no overflow/page errors. See `open-rumors-browser.mjs`, JSON evidence and screenshots. Independent review approved after fixing reversed passive roles in the legacy local shortcut (removed from this flow) and exposing reputation/importance at confirmation. 42 independent scoped tests passed; see `open-rumors-review.md`. Deployed in code commit `506ea5d344873cb8c95b2aa42be4d32b0f2e2b2d`; live browser verification passed. Live model quality has not been measured by these mocked provider tests.
+
+## Release
+
+- Code: `506ea5d344873cb8c95b2aa42be4d32b0f2e2b2d`.
+- API: `ff4c92d3-9fcb-4844-9f86-52cb63c780c9`.
+- Site: `b09694c0-beef-4a79-9c30-78bac170a2e7`.
+- Live asset: `/assets/main-DbOSUlxP.js`.
+- Live API health returned `{"ok":true}`. No production secrets, provider configuration or spending limits changed.
+- Live desktop/360×800/360×640 checks passed for both stories: exact wording, disclosed sharing, no premature registration, visible interpretation, keyboard confirmation, neutral replay payload, no overflow or page errors. External requests were deliberately blocked to exercise free fallback; these checks did not spend inference credits or measure live model quality. See `open-rumors-live-browser-results.json` and six live screenshots.
+- GitHub CI pending push. Local total includes 12 pre-existing untracked SEO tests; the committed suite contains 855 tests across 73 files.
