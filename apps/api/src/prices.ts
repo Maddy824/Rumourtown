@@ -35,5 +35,13 @@ export function actualCost(result: unknown, models: string[], reserved: number):
   const p = price(result.model);
   const cost = input * p.input + output * p.output;
   // The ledger rejects an exceeded reservation and leaves the entire hold in place.
+  const billed = result.usage.cost;
+  if (typeof billed === 'number' && Number.isFinite(billed) && billed >= 0) return Math.max(cost, billed);
   return cost;
+}
+
+/** OpenRouter caps are dollars per million tokens; decline higher-priced routes. */
+export function providerPriceCap(models: string[]): { prompt: number; completion: number; request: number } {
+  return { prompt: Math.max(...models.map(m => price(m).input * 1_000_000)),
+    completion: Math.max(...models.map(m => price(m).output * 1_000_000)), request: 0 };
 }

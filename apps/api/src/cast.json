@@ -22,5 +22,17 @@
   { "id": "mab", "name": "Mab", "role": "seamstress" },
   { "id": "rook", "name": "Rook", "role": "gravedigger" },
   { "id": "tess", "name": "Tess", "role": "barmaid" },
-  { "id": "yan", "name": "Yan", "role": "tinker" }
+  { "id": "yan", "name": "Yan", "role": "tinker" },
+  { "id": "suri", "name": "Suri", "role": "potter" },
+  { "id": "oren", "name": "Oren", "role": "boatwright" },
+  { "id": "leela", "name": "Leela", "role": "bookseller" },
+  { "id": "tavi", "name": "Tavi", "role": "kiln apprentice" },
+  { "id": "edda", "name": "Edda", "role": "river guide" },
+  { "id": "arun", "name": "Arun", "role": "courier" },
+  { "id": "bram", "name": "Bram", "role": "gardener" },
+  { "id": "nia", "name": "Nia", "role": "seedkeeper" },
+  { "id": "vesa", "name": "Vesa", "role": "teahouse keeper" },
+  { "id": "cora", "name": "Cora", "role": "storyteller" },
+  { "id": "dara", "name": "Dara", "role": "ranger" },
+  { "id": "silas", "name": "Silas", "role": "surveyor" }
 ]

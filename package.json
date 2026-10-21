@@ -15,7 +15,11 @@
     "build": "npm run build -w apps/rumortown",
     "typecheck": "npm run typecheck --workspaces",
     "test": "vitest run",
-    "bench": "node --experimental-strip-types bench/sim.ts"
+    "bench": "node --experimental-strip-types bench/sim.ts",
+    "agent:demo": "node examples/agent.mjs demo",
+    "agent:serve": "node examples/agent.mjs serve",
+    "agent:replay": "node examples/agent.mjs replay",
+    "alerts:setup": "node scripts/setup-alerts.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261021.1",

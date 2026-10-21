@@ -1,5 +1,6 @@
 import { blockedReason, hash, normalise } from './moderation';
-import { actualCost, estimatePromptTokens, MAX_TOKENS, modelList, reservationCost } from './prices';
+import { actualCost, estimatePromptTokens, MAX_TOKENS, modelList, providerPriceCap, reservationCost } from './prices';
+import { notifyUsage } from './alerts';
 import { systemPrompt } from './prompt';
 import { publicKey, sign, verify } from './sign';
 import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
@@ -75,11 +76,12 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   }
 
   let models: string[];
+  if (env.AI_ENABLED !== 'true') throw new Failure('model');
   try { models = modelList(env.MODELS); } catch { throw new Failure('model'); }
   const body = {
     models, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify({ whisper: text }) }],
     response_format: { type: 'json_schema', json_schema: { name: 'whisper', strict: true, schema } },
-    provider: { require_parameters: true }, temperature: 0, max_tokens: MAX_TOKENS,
+    provider: { require_parameters: true, max_price: providerPriceCap(models) }, temperature: 0, max_tokens: MAX_TOKENS,
   };
   const worstCaseUsd = reservationCost(models, estimatePromptTokens(body));
   const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', request.headers.get('User-Agent') ?? '']));
@@ -91,11 +93,14 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   let dispatched = false;
   let settled = false;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6_000);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // Invalid/missing secrets fail before dispatch and can safely release the reservation.
     if (!env.OPENROUTER_API_KEY) throw new Failure('model');
     publicKey(env.SIGNING_KEY_JWK);
+    try { await notifyUsage(env, fetcher, reservationId, worstCaseUsd); }
+    catch { throw new Failure('alerts'); }
+    timer = setTimeout(() => controller.abort(), 6_000);
     dispatched = true;
     const response = await fetcher('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'content-type': 'application/json' },
@@ -126,7 +131,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     }
     if (error instanceof Failure) throw error;
     throw new Failure('model');
-  } finally { clearTimeout(timer); }
+  } finally { if (timer !== undefined) clearTimeout(timer); }
 }
 
 export function createWorker(deps: Dependencies = {}) {

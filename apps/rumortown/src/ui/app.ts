@@ -27,7 +27,7 @@ import { createDayEnd } from './day-end.js';
 import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js';
 import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
-import { dialArt, postboxArt } from './icons.js';
+import { dialArt } from './icons.js';
 import { createLayers } from './layers.js';
 import { advanceTicks } from './loop.js';
 import { newVillageUrl } from './new-village.js';
@@ -36,6 +36,7 @@ import { readShareFromLocation, writeShareToLocation } from './share-link.js';
 import { createStory } from './story.js';
 import { createStubRenderer } from './stub-renderer.js';
 import { createTag } from './tag.js';
+import { createTools } from './tools.js';
 import { createTimeControls, type Speed } from './timebar.js';
 import { createWhisperSheet, inReach } from './whisper.js';
 
@@ -165,16 +166,18 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const clock = h('div', { class: 'clock', role: 'group', 'aria-label': 'Clock' }, dial.root, h('span', { class: 'clock-text' }, timeText, dayText));
   const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false' }, 'Follow a rumor');
   const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Story so far');
-  const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Pin to the board');
+  const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Share this village');
   const exploreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Explore');
   const researchBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Notebook');
-  const pins = h('nav', { class: 'pins', 'aria-label': 'Board' }, exploreBtn, researchBtn, threadsBtn, storyBtn, shareBtn);
-  const dareNote = h('details', { class: 'dare-note', open: true },
+  const moreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'More');
+  const pins = h('nav', { class: 'pins', 'aria-label': 'Village tools' }, exploreBtn, threadsBtn, moreBtn);
+  const dareNote = h('details', { class: 'dare-note' },
     h('summary', null, 'Your dare'), h('p', null, reflection.dare.text));
   const top = h('header', { class: 'rt-top' }, clock, pins, dareNote);
 
-  const postbox = h('button', { class: 'postbox', type: 'button', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper'));
-  const prompt = h('p', { class: 'prompt', hidden: interventions.length > 0 }, 'Click to walk. Meet someone. Leave a whisper.');
+  const nearbyNote = h('small', { class: 'nearby-note', 'aria-hidden': 'true' }, 'Meet someone');
+  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Whisper', 'aria-haspopup': 'dialog' }, h('span', null, 'Whisper'), nearbyNote);
+  const pauseBtn = h('button', { class: 'quick-pause', type: 'button', onclick: () => setSpeed(speed === 0 ? lastPlaying : 0) }, 'Pause');
 
   const toast = h('p', { class: 'toast', role: 'status', hidden: true });
   const rewindText = h('span', { class: 'rewind-text' });
@@ -200,6 +203,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const heldKeys = new Map<string, Vec2>();
   let keyTarget: { tile: Vec2; at: number } | null = null;
   let destination: { pos: Vec2; label: string } | null = null;
+  let agentTour: { places: string[]; index: number; untilTick: number } | null = null;
   let markerAt: { pos: Vec2; until: number } | null = null;
   let insets = { top: 64, bottom: 96 };
   let lastPausedNote = 0;
@@ -372,17 +376,28 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const trailFrom = h('span', { class: 'trail-map-name' });
   const trailTo = h('span', { class: 'trail-map-name' });
   const trailMarkers = h('div', { class: 'trail-markers', 'aria-hidden': 'true', hidden: true }, trailFrom, trailTo);
-  const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'You are the traveller in gold. Click a path to walk, or open Explore.');
-  const bottom = h('div', { class: 'rt-bottom' }, postbox, prompt, time.bar, time.tab);
-  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, trail.el, trailMarkers, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, movementHint, rewind, toast, live, actionLive);
+  const tools = createTools({ layers, actions: [researchBtn, storyBtn, shareBtn], onAgent: startAgent, onOpenChange: open => {
+    heldKeys.clear();
+    if (open) { hold('tools'); hideToast(); } else release('tools');
+    syncScrim();
+  } });
+  for (const button of [researchBtn, storyBtn, shareBtn]) button.className = 'button button-quiet';
+  const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'Tap a path to walk. Gold is you. Explore shows the whole town.');
+  const agentText = h('span');
+  const agentNotice = h('div', { class: 'agent-notice', hidden: true },
+    h('span', { role: 'status', 'aria-live': 'polite' }, agentText),
+    h('button', { type: 'button', class: 'button button-quiet', onclick: () => stopAgent() }, 'Take over'));
+  const bottom = h('div', { class: 'rt-bottom' }, postbox, pauseBtn, time.bar, time.tab);
+  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, trail.el, trailMarkers, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, live, actionLive);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
-    scrim.hidden = !(whisper.isOpen() || share.isOpen() || dayEnd.isOpen() || guide.isOpen());
-    scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() ? 'true' : 'false';
+    scrim.hidden = !(whisper.isOpen() || share.isOpen() || dayEnd.isOpen() || guide.isOpen() || tools.isOpen());
+    scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
   }
   scrim.addEventListener('click', () => {
-    if (guide.isOpen()) guide.close();
+    if (tools.isOpen()) tools.close();
+    else if (guide.isOpen()) guide.close();
     else if (share.isOpen()) share.close();
     else if (whisper.isOpen()) whisper.close();
   });
@@ -427,8 +442,43 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     return null;
   }
 
-  function walkTo(point: Vec2): void {
+  function resumeForWalk(): void {
+    if (speed === 0 && sim.tick < runTicks) { setSpeed(1); say('Walking resumes time.', 1800); }
+    if (effectiveRate() === 0) notePaused();
+    if (threadsOn) showTrail(false);
+  }
+
+  function stopAgent(): void {
+    if (!agentTour) return;
+    agentTour = null; agentNotice.hidden = true; delete root.dataset.agent;
+    sim.movePlayer(tileOf(cur.player.pos)); cur = sim.snapshot();
+    destination = null;
+    movementHint.textContent = 'You are in control. Tap a path to walk.';
+    say('Local agent stopped. AI credits used: $0.');
+  }
+
+  function startAgent(): void {
+    if (sim.tick >= runTicks || rewinding) { say('Start a new village to try the agent.'); return; }
+    tag.close(); whisper.close(); showTrail(false);
+    agentTour = { places: ['square', 'bridge', 'east-market', 'gardens'], index: 0, untilTick: Math.min(runTicks, sim.tick + 600) };
+    agentNotice.hidden = false; root.dataset.agent = 'true';
+    setSpeed(2);
+    say('Local agent started. It uses $0 in AI credits.', 4000);
+    agentNext();
+  }
+
+  function agentNext(): void {
+    if (!agentTour) return;
+    const nextId = agentTour.places[agentTour.index++];
+    const place = map.places.find(p => p.id === nextId);
+    if (!place || sim.tick >= agentTour.untilTick) { stopAgent(); return; }
+    agentText.textContent = `Local agent: ${place.name}. $0 credits.`;
+    walkTo(place.door, true);
+  }
+
+  function walkTo(point: Vec2, automated = false): void {
     if (rewinding) return;
+    if (!automated) stopAgent();
     const requested = tileOf(point);
     const kind = map.tiles[requested.y * map.width + requested.x];
     if (kind === 'water') { say('The river is deep. Cross at the bridge.'); return; }
@@ -443,10 +493,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     sim.movePlayer(tile);
     cur = sim.snapshot();
     markerAt = { pos: { x: tile.x + 0.5, y: tile.y + 0.5 }, until: performance.now() + 1400 };
-    if (effectiveRate() === 0) notePaused();
+    resumeForWalk();
   }
 
   function walkToVillager(id: VillagerId): void {
+    stopAgent();
     const v = cur.villagers.find((x) => x.id === id);
     if (!v || rewinding) return;
     heldKeys.clear();
@@ -455,8 +506,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     movementHint.textContent = `Walking to ${v.name}.`;
     keyTarget = null;
     sim.movePlayer(tileOf(v.pos));
-    if (effectiveRate() === 0) notePaused();
-    else say(`Walking to ${v.name}.`, 1800);
+    resumeForWalk();
   }
 
   function followStep(): void {
@@ -482,6 +532,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function stepKey(dir: Vec2): void {
     if (rewinding) return;
+    stopAgent();
     const p = cur.player.pos;
     const now = performance.now();
     let base: Vec2 | null = tileOf(p);
@@ -497,7 +548,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     keyTarget = { tile: next, at: now };
     follow = null;
     sim.movePlayer(next);
-    if (effectiveRate() === 0) notePaused();
+    resumeForWalk();
   }
 
   function inspectNearest(): void {
@@ -528,7 +579,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     trail.focus(claimId);
     showTrail(true);
     bubbles.boost(listener, 5000);
-    prompt.hidden = true;
     tag.refresh(true);
     return true;
   }
@@ -633,6 +683,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   /** Rebuild the run from the same seed and whispers, then step to the target minute. */
   async function seek(targetTick: number): Promise<void> {
+    stopAgent();
     const token = ++rewindToken;
     const target = Math.round(clamp(targetTick, 0, maxTick));
     if (target === sim.tick && !rewinding) return;
@@ -680,24 +731,28 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   /* ---------------- Input ---------------- */
 
+  moreBtn.addEventListener('click', () => { closeSheetsForPhone(''); tools.open(moreBtn); });
   exploreBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('explore', exploreBtn); });
-  researchBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('research', researchBtn); });
+  researchBtn.addEventListener('click', () => { tools.close(); closeSheetsForPhone(''); guide.show('research', moreBtn); });
   threadsBtn.addEventListener('click', () => {
     showTrail(!threadsOn);
   });
   storyBtn.addEventListener('click', () => {
+    tools.close();
     if (story.isOpen()) story.close();
     else {
       closeSheetsForPhone('story');
-      story.open(storyBtn);
+      story.open(moreBtn);
     }
   });
   shareBtn.addEventListener('click', () => {
+    tools.close();
     closeSheetsForPhone('share');
-    share.open(shareBtn);
+    share.open(moreBtn);
   });
   postbox.addEventListener('click', () => {
     if (rewinding) return;
+    stopAgent();
     closeSheetsForPhone('whisper');
     whisper.open({ opener: postbox });
   });
@@ -862,6 +917,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       movementHint.textContent = arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.';
       destination = null;
     }
+    if (agentTour && effectiveRate() > 0 && !layers.anyModal()) {
+      if (sim.tick >= agentTour.untilTick) stopAgent();
+      else if (!cur.player.moving) agentNext();
+    }
     guide.update();
     const alpha = clamp(acc, 0, 1);
 
@@ -901,7 +960,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       // Projected positions are canvas-relative; DOM rectangles use viewport coordinates.
       exclusions: phone ? (() => {
         const origin = canvas.getBoundingClientRect();
-        return [clock, pins, threadsBtn, storyBtn, shareBtn, dareNote].map((control) => {
+        return [clock, pins, dareNote].map((control) => {
           const r = control.getBoundingClientRect();
           return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
         });
@@ -950,7 +1009,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     }
 
     updateClock();
-    postbox.dataset.reach = inReach(cur).length > 0 ? 'true' : 'false';
+    const nearby = inReach(cur).length;
+    nearbyNote.textContent = nearby ? `${nearby} nearby` : 'Find someone';
+    postbox.dataset.reach = String(nearby > 0);
+    pauseBtn.textContent = speed === 0 ? 'Resume' : 'Pause';
+    pauseBtn.disabled = holds.size > 0 || rewinding || sim.tick >= runTicks;
     const held = holds.size > 0 || rewinding;
     const key = `${cur.tick}|${maxTick}|${speed}|${held}|${interventions.length}`;
     if (key !== lastTimeKey) {
@@ -973,6 +1036,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       return p ? renderer.project(p, rig.camera) : null;
     },
     destroy() {
+      tools.close();
       guide.destroy();
       whisper.destroy();
       window.cancelAnimationFrame(rafId);

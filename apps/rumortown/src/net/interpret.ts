@@ -9,7 +9,7 @@ export interface InterpretOptions {
   fetch?: typeof fetch;
   timeoutMs?: number;
 }
-const workerReasons = ['turnstile', 'limit-visitor', 'limit-global', 'budget', 'model', 'invalid', 'ledger'] as const;
+const workerReasons = ['alerts', 'turnstile', 'limit-visitor', 'limit-global', 'budget', 'model', 'invalid', 'ledger'] as const;
 
 /** The deadline covers the response body and public-key verification as well as POST. */
 export async function interpretWhisper(text: string, opts: InterpretOptions): Promise<InterpretResult> {

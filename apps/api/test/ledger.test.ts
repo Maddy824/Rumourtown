@@ -3,12 +3,44 @@ import { memoryLedger, now, visitor } from './helpers';
 
 const stores: ReturnType<typeof memoryLedger>[] = [];
 function store(config: Parameters<typeof memoryLedger>[0] = {}) {
-  const s = memoryLedger(config); stores.push(s); return s;
+  const s = memoryLedger({ DAILY_ALLOWANCE_USD: '0.10', ...config }); stores.push(s); return s;
 }
 afterEach(() => { for (const s of stores.splice(0)) s.db.close(); });
 const reserve = (s: ReturnType<typeof store>, usd = 0.04, time = now, who = visitor) => s.rpc('reserve', { visitorKey: who, worstCaseUsd: usd, now: time });
 
 describe('BudgetLedger', () => {
+  it('paces the default allowance for 365 days within $7, without a New Year reset', async () => {
+    const s = store({ DAILY_ALLOWANCE_USD: undefined });
+    for (let day = 0; day < 365; day++) {
+      const result = await reserve(s, .019, now + day * 86_400_000);
+      expect(result.ok).toBe(true);
+      expect(await reserve(s, .000001, now + day * 86_400_000)).toEqual({ ok: false, reason: 'budget' });
+      await s.rpc('settle', { reservationId: result.reservationId, actualUsd: .019 });
+    }
+    expect(s.db.prepare('SELECT SUM(spent) AS total FROM days').all()).toEqual([{ total: 6_935_000_000_000 }]);
+    // A lower lifetime cap also applies to money already spent before a configuration change.
+    const capped = store({ DAILY_ALLOWANCE_USD: '7' });
+    const a = await reserve(capped, 7);
+    await capped.rpc('settle', { reservationId: a.reservationId, actualUsd: 7 });
+    expect(await reserve(capped, .000001, now + 366 * 86_400_000)).toEqual({ ok: false, reason: 'budget' });
+  });
+  it('counts outstanding holds on different days against one lifetime cap atomically', async () => {
+    const s = store({ DAILY_ALLOWANCE_USD: '.10', LIFETIME_ALLOWANCE_USD: '.03', PER_VISITOR_PER_HOUR: '100', GLOBAL_PER_MINUTE: '100' });
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => reserve(s, .01, now + i * 86_400_000)));
+    expect(results.filter(r => r.ok)).toHaveLength(3);
+    await s.rpc('release', { reservationId: results[0]!.reservationId });
+    expect((await reserve(s, .01, now + 30 * 86_400_000)).ok).toBe(true);
+  });
+  it('freezes all future dispatches after an unexpected overcharge, including on a new day', async () => {
+    const s = store();
+    const a = await reserve(s, .01);
+    expect(await s.rpc('settle', { reservationId: a.reservationId, actualUsd: .02 })).toEqual({ reason: 'ledger' });
+    expect(await reserve(s, 0, now + 86_400_000)).toEqual({ ok: false, reason: 'budget' });
+  });
+  it.each(['NaN', '-1', '7.01'])('refuses an invalid or excessive lifetime cap %s', async cap => {
+    const s = store({ LIFETIME_ALLOWANCE_USD: cap });
+    expect(await reserve(s)).toEqual({ reason: 'ledger' });
+  });
   it('reserves before returning, settles actual cost, releases and is idempotent', async () => {
     const s = store();
     const a = await reserve(s, 0.06);

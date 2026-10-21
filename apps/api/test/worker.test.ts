@@ -25,11 +25,11 @@ describe('Worker routes', () => {
     const payload = await response.json() as SignedPayload;
     expect(payload).toMatchObject({ claim: good, castVersion: 'v1', issuedAt: now });
     expect(await verify(payload, payload.sig, key.publicJwk)).toBe(true);
-    expect(mock.calls).toHaveLength(2);
+    expect(mock.calls).toHaveLength(3);
     expect(mock.calls[0]?.url).toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
     expect(String(mock.calls[0]?.init?.body)).toContain('secret=test-turnstile');
-    expect(mock.calls[1]?.url).toBe('https://openrouter.ai/api/v1/chat/completions');
-    const request = JSON.parse(String(mock.calls[1]?.init?.body));
+    expect(mock.calls[2]?.url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    const request = JSON.parse(String(mock.calls[2]?.init?.body));
     expect(request).toMatchObject({ temperature: 0, max_tokens: 200, provider: { require_parameters: true }, response_format: { type: 'json_schema', json_schema: { strict: true } } });
     expect(s.calls.map(c => c.method)).toEqual(['cacheGet', 'reserve', 'settle', 'cachePut']);
     expect(JSON.stringify(s.calls)).not.toContain('Mira stole bread from Tom.');
@@ -61,7 +61,7 @@ describe('Worker routes', () => {
     const response = await worker.fetch(interpretRequest(injection), env);
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ reason: 'invalid' });
-    const body = JSON.parse(String(mock.calls[1]?.init?.body));
+    const body = JSON.parse(String(mock.calls[2]?.init?.body));
     expect(body.messages[1]).toEqual({ role: 'user', content: JSON.stringify({ whisper: injection }) });
     expect(body.messages[0].content).not.toContain(injection);
   });
@@ -136,6 +136,54 @@ describe('Worker routes', () => {
 });
 
 describe('fail-closed execution and billing', () => {
+  it('keeps model calls disabled unless deliberately enabled', async () => {
+    const { worker, env, mock } = setup({ AI_ENABLED: undefined });
+    expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ reason: 'model' });
+    expect(mock.calls.some(c => c.url.includes('completions'))).toBe(false);
+  });
+  it('requires a push receipt before dispatch and does not send player text to ntfy', async () => {
+    const { worker, env, mock } = setup();
+    expect((await worker.fetch(interpretRequest(), env)).status).toBe(200);
+    const alert = mock.calls[1]!;
+    expect(alert.url).toBe(env.USAGE_ALERT_URL);
+    expect(String(alert.init?.body)).toContain('Reserved up to $');
+    expect(String(alert.init?.body)).not.toContain('Mira');
+    const body = JSON.parse(String(mock.calls[2]!.init?.body));
+    expect(body.provider.max_price).toEqual({ prompt: .1, completion: .4, request: 0 });
+    await worker.fetch(interpretRequest(), env);
+    expect(mock.calls.filter(c => c.url.startsWith('https://ntfy.sh/'))).toHaveLength(1);
+  });
+  it.each(['missing', 'unavailable', 'bad-receipt', 'redirect'])('does not spend when push alerts are %s', async mode => {
+    const { env, s, mock } = setup(mode === 'missing' ? { USAGE_ALERT_URL: undefined } : {});
+    const worker = createWorker({ now: () => now, fetch: (async (url, init) => {
+      if (String(url).startsWith('https://ntfy.sh/')) {
+        if (mode === 'unavailable') throw new Error('offline');
+        if (mode === 'redirect') return new Response(null, { status: 302 });
+        return Response.json({});
+      }
+      return mock.fetcher(url, init);
+    }) as Fetcher });
+    expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ reason: 'alerts' });
+    expect(mock.calls.some(c => c.url.includes('completions'))).toBe(false);
+    expect(s.db.prepare('SELECT reserved, spent FROM days').all()).toEqual([{ reserved: 0, spent: 0 }]);
+  });
+  it('times out an unavailable alert service and releases its unused reservation', async () => {
+    const { env, s, mock } = setup();
+    vi.useFakeTimers();
+    let started!: () => void;
+    const alertStarted = new Promise<void>(r => { started = r; });
+    const worker = createWorker({ now: () => now, fetch: (async (url, init) => {
+      if (!String(url).startsWith('https://ntfy.sh/')) return mock.fetcher(url, init);
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('timeout')), { once: true }); started();
+      });
+    }) as Fetcher });
+    const pending = worker.fetch(interpretRequest(), env);
+    await alertStarted; await vi.advanceTimersByTimeAsync(4001);
+    expect(await (await pending).json()).toEqual({ reason: 'alerts' });
+    expect(s.calls.some(c => c.method === 'release')).toBe(true);
+    expect(mock.calls.some(c => c.url.includes('completions'))).toBe(false);
+  });
   it('returns turnstile on verification failure with no ledger/model work', async () => {
     const { env, s } = setup();
     const external = vi.fn(async () => Response.json({ success: false }));
@@ -180,7 +228,7 @@ describe('fail-closed execution and billing', () => {
       const response = await worker.fetch(interpretRequest(), env);
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ unsupported, castVersion: 'v1', issuedAt: now });
-      expect(mock.calls).toHaveLength(2);
+      expect(mock.calls).toHaveLength(3);
       expect(s.calls.find(c => c.method === 'settle')?.body.actualUsd).toBeCloseTo(0.00007, 10);
       expect(s.calls.some(c => c.method === 'release')).toBe(false);
       expect(s.calls.some(c => c.method === 'cachePut')).toBe(false);
@@ -197,7 +245,7 @@ describe('fail-closed execution and billing', () => {
     const { env, s, mock } = setup();
     let models = 0;
     const worker = createWorker({ now: () => now, fetch: (async (url, init) => {
-      if (String(url).includes('siteverify')) return mock.fetcher(url, init);
+      if (String(url).includes('siteverify') || String(url).startsWith('https://ntfy.sh/')) return mock.fetcher(url, init);
       models++; throw new Error('network failure');
     }) as Fetcher });
     const response = await worker.fetch(interpretRequest(), env);
@@ -211,7 +259,7 @@ describe('fail-closed execution and billing', () => {
     let modelStarted = () => {};
     const started = new Promise<void>(resolve => { modelStarted = resolve; });
     const worker = createWorker({ now: () => now, fetch: (async (url, init) => {
-      if (String(url).includes('siteverify')) return mock.fetcher(url, init);
+      if (String(url).includes('siteverify') || String(url).startsWith('https://ntfy.sh/')) return mock.fetcher(url, init);
       return new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
         modelStarted();
@@ -256,7 +304,7 @@ describe('fail-closed execution and billing', () => {
   it.each(['malformed-json', 'http-error'])('retains the bound for a %s model response', async kind => {
     const { env, s, mock } = setup();
     const worker = createWorker({ now: () => now, fetch: (async (url, init) => {
-      if (String(url).includes('siteverify')) return mock.fetcher(url, init);
+      if (String(url).includes('siteverify') || String(url).startsWith('https://ntfy.sh/')) return mock.fetcher(url, init);
       return kind === 'malformed-json' ? new Response('not json') : Response.json({ error: 'unavailable' }, { status: 503 });
     }) as Fetcher });
     const response = await worker.fetch(interpretRequest(), env);

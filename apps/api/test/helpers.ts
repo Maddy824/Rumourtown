@@ -57,7 +57,7 @@ export async function keys() {
 }
 export function makeEnv(namespace: DurableObjectNamespace, secret: string, config: Partial<Env> = {}): Env {
   return { LEDGER: namespace, ALLOWED_ORIGIN: origin, SIGNING_KEY_JWK: secret,
-    TURNSTILE_SECRET: 'test-turnstile', OPENROUTER_API_KEY: 'test-openrouter', ...config };
+    AI_ENABLED: 'true', USAGE_ALERT_URL: 'https://ntfy.sh/rumortown-test-topic-not-real-123456789', TURNSTILE_SECRET: 'test-turnstile', OPENROUTER_API_KEY: 'test-openrouter', ...config };
 }
 export function interpretRequest(text = 'Mira stole bread from Tom.', overrides: Record<string, unknown> = {}, headers: Record<string, string> = {}): Request {
   return new Request('https://api.test/interpret', {
@@ -74,6 +74,7 @@ export function mockFetch(modelResult: unknown = provider()) {
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
+    if (url.startsWith('https://ntfy.sh/')) return Response.json({ id: 'test-receipt', event: 'message' });
     if (url.includes('siteverify')) return Response.json({ success: true, hostname: 'rumortown.test' });
     return Response.json(modelResult);
   }) as Fetcher;

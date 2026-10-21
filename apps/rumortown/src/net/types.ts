@@ -24,7 +24,7 @@ export interface SignedClaimPayload {
 export interface SignedClaim extends SignedClaimPayload { sig: string }
 export type FailureReason =
   | 'offline' | 'timeout' | 'turnstile' | 'limit-visitor' | 'limit-global'
-  | 'budget' | 'model' | 'invalid' | 'ledger' | 'bad-signature' | 'unknown';
+  | 'alerts' | 'budget' | 'model' | 'invalid' | 'ledger' | 'bad-signature' | 'unknown';
 export type InterpretResult =
   | ({ ok: true } & SignedClaim)
   | { ok: true; unsupported: UnsupportedReason }
@@ -33,7 +33,7 @@ export type InterpretResult =
 const castIds: readonly string[] = [
   'mira', 'tom', 'ben', 'ada', 'rosa', 'jonah', 'elin', 'pim', 'sol', 'greta',
   'ivo', 'nell', 'otto', 'wren', 'hal', 'dag', 'una', 'cass', 'fen', 'lio',
-  'mab', 'rook', 'tess', 'yan',
+  'mab', 'rook', 'tess', 'yan', 'suri', 'oren', 'leela', 'tavi', 'edda', 'arun', 'bram', 'nia', 'vesa', 'cora', 'dara', 'silas',
 ];
 // Keep in sync with apps/api/src/objects.ts: signed claims are already sanitised.
 const reviewedObjects: readonly string[] = [

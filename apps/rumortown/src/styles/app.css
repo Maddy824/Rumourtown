@@ -2356,6 +2356,34 @@ button.chain-actor:hover span {
 .rt[data-layout='phone'] .pins { flex-direction: row; flex-wrap: nowrap; align-items: center; width: 100%; overflow-x: auto; padding: 4px 0 7px; gap: 6px; }
 .rt[data-layout='phone'] .pin { flex: none; }
 .rt[data-layout='phone'] .dare-note { top: calc(100% + 2px); width: min(300px, calc(100% - 24px)); }
+
+/* Keep the main actions visible; additional tools live behind More. */
+.quick-whisper, .quick-pause {
+  display: grid; place-content: center; gap: 2px; flex: none;
+  min-width: 96px; min-height: 52px; padding: 6px 16px;
+  border: 0; border-radius: 6px; background: var(--paper); color: var(--ink);
+  font-weight: 720; cursor: pointer; box-shadow: var(--lift-pinned);
+}
+.quick-whisper { background: var(--mustard); }
+.quick-whisper small { font-size: 12px; font-weight: 500; white-space: nowrap; }
+.quick-pause:disabled { opacity: .65; cursor: default; }
+.rt[data-layout] .movement-hint { bottom: calc(76px + var(--safe-b)); }
+.rt[data-layout='phone'] .rt-bottom { gap: 8px; }
+.rt[data-layout='phone'] .quick-whisper, .rt[data-layout='phone'] .quick-pause,
+.rt[data-layout='phone'] .time-tab { flex: 1; min-width: 0; margin: 0; }
+.rt[data-layout='phone'] .pins { overflow: visible; gap: 6px; }
+.rt[data-layout='phone'] .pin { min-height: 44px; padding-left: 25px; padding-right: 10px; }
+.tools .guide-paper { max-width: 680px; margin: 0 auto; }
+.tools-menu { display: grid; gap: 10px; padding-top: 12px; }
+.tools-menu .button { min-height: 48px; text-align: left; }
+.control-steps { padding-left: 24px; }
+.control-steps li { margin: 16px 0; }
+.tools pre, .developer-loop { padding: 12px; background: var(--oat); border-radius: 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.tools a { color: var(--berry-deep); text-decoration: underline; }
+.agent-notice { position: absolute; z-index: 41; left: 50%; bottom: calc(80px + var(--safe-b)); translate: -50% 0; display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: 6px; background: var(--paper); color: var(--ink); box-shadow: var(--lift-pinned); font-size: 13px; }
+.agent-notice .button { flex: none; min-height: 44px; }
+.rt[data-agent='true'] .movement-hint { display: none; }
+.rt[data-layout='phone'][data-agent='true'] .toast { top: calc(170px + var(--safe-t)); bottom: auto; }
 .rt[data-layout='phone'] .story-meaning { grid-template-columns: 1fr 1fr; }
 .rt[data-layout='phone'] .story-meaning label:last-child { grid-column: 1 / -1; grid-template-columns: 1fr 2fr; align-items: center; }
 

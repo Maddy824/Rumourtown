@@ -40,10 +40,9 @@ visibility; `TalkApi` selects authored lines. The renderer reads snapshots, whil
 the interface issues `movePlayer` and `whisper` commands and reads `inspect`,
 `events` and `interventions`.
 
-At this documentation pass, `main.ts` still supplies `createFakeSimulation` and
-`withFakeReplay` to the shell. `sim/engine.ts` provides the real `createSimulation`
-implementation. The paths below describe that engine and the implemented Worker;
-they do not assert that browser integration or deployment has finished.
+`main.ts` mounts the real engine, world, talk and renderer by default; `?fake=1` selects the UI fixture. The browser currently writes claims locally. The optional Worker remains separate and is disabled by default.
+
+The headless `agent/environment.ts` adapter provides bounded tools over the same engine. Ordinary agent observations expose nearby public state; research exports expose hidden state separately. The browser also has a local tour planner with a visible usage notice and manual takeover. See [the agent interface](agents.md).
 
 ## One simulation tick
 
@@ -99,7 +98,7 @@ Those frame updates do not advance beliefs independently of `step()`.
 Agents are processed in cast order. Decisions are staggered every five ticks by
 agent index; conversations advance each tick. End-day work emits a summary,
 restores needs, reflects on memories, forgets source attribution and clears daily
-accusations. The engine currently runs it at `(tick + 1) % 900 === 0`.
+accusations. The engine currently runs it at `tick % 900 === 0`.
 The library's source-memory default is 240 caller ticks; the engine overrides that
 value to `2` and calls `forget` once per day to approximate a two-day half-life.
 
@@ -185,6 +184,7 @@ a successful custom claim. Unsupported input returns an unsigned refusal with
                  | cache miss
                  v
 +----------------------------------+
+| Require AI_ENABLED=true         |
 | Price allowlisted models         |
 | Hash visitor bucket              |
 | Ledger reserve worst-case cost   |
@@ -192,7 +192,8 @@ a successful custom claim. Unsupported input returns an unsigned refusal with
                  |
                  v
 +----------------------------------+
-| Check secrets, dispatch model    |
+| Check secrets, require ntfy     |
+| message receipt, dispatch model |
 | Six-second timeout, no retries   |
 +----------------+-----------------+
                  |
@@ -206,13 +207,15 @@ a successful custom claim. Unsupported input returns an unsigned refusal with
 
 One Durable Object named `global-budget` serves the whole deployment. Within a
 synchronous transaction, reservation checks the visitor's hourly count, the
-global minute count and the UTC day's spent plus reserved balance, then records
+global minute count, the UTC day's spent plus reserved balance, and lifetime spend plus reservations, then records
 the hold and increments counts. Defaults are 5 requests per visitor per hour,
-20 globally per minute and $0.10 per day. Cache hits precede reservation and do
+20 globally per minute, $0.019 per day and $7 lifetime. A provider settlement above the reserved bound freezes further calls. Cache hits precede reservation and do
 not consume those model-call counts. The cache stores a hash and signed structured
 payload; the ledger does not store the typed words.
 
-The price table rejects unpriced models. The reservation covers the most expensive
+Before dispatch, the Worker requires a phone-notification receipt; failed or missing alert configuration releases the unused reservation. The phone may still be offline, so receipt is service acceptance rather than confirmed device delivery. See [credit controls and notification setup](credit-controls.md).
+
+The price table rejects unpriced models, and provider price caps reject more expensive routes. The reservation covers the most expensive
 configured model, a conservative prompt-token bound and up to 200 output tokens.
 Returned usage is settled before output validation because an invalid or refused
 answer may already have cost money. A failure before dispatch releases the hold;

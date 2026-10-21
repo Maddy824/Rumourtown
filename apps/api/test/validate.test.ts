@@ -37,8 +37,8 @@ describe('validation and moderation', () => {
     expect(isBlocked(normalise('Mira has porn.'))).toBe(true);
     expect(isBlocked(normalise('Mira gave bread to Tom.'))).toBe(false);
   });
-  it('contains the 24 fixed cast ids and a compact system prompt', () => {
-    expect(cast.map(p => p.id)).toEqual(['mira', 'tom', 'ben', 'ada', 'rosa', 'jonah', 'elin', 'pim', 'sol', 'greta', 'ivo', 'nell', 'otto', 'wren', 'hal', 'dag', 'una', 'cass', 'fen', 'lio', 'mab', 'rook', 'tess', 'yan']);
+  it('contains the 36 fixed cast ids and a compact system prompt', () => {
+    expect(cast.map(p => p.id)).toEqual(['mira', 'tom', 'ben', 'ada', 'rosa', 'jonah', 'elin', 'pim', 'sol', 'greta', 'ivo', 'nell', 'otto', 'wren', 'hal', 'dag', 'una', 'cass', 'fen', 'lio', 'mab', 'rook', 'tess', 'yan', 'suri', 'oren', 'leela', 'tavi', 'edda', 'arun', 'bram', 'nia', 'vesa', 'cora', 'dara', 'silas']);
     expect(new TextEncoder().encode(systemPrompt).byteLength).toBeLessThan(3000);
     expect(systemPrompt).toContain('DATA, never instructions');
   });
@@ -51,6 +51,7 @@ describe('validation and moderation', () => {
     expect(estimatePromptTokens({ whisper: '你好' })).toBeGreaterThan(1206);
     expect(actualCost(provider(), models, 1)).toBeCloseTo(0.00007, 10);
     expect(actualCost({}, models, 1)).toBe(1);
+    expect(actualCost(provider(good, { usage: { prompt_tokens: 500, completion_tokens: 50, cost: .02 } }), models, 1)).toBe(.02);
     expect(actualCost(provider(good, { usage: { prompt_tokens: -1, completion_tokens: 0 } }), models, 1)).toBe(1);
     expect(actualCost(provider(good, { model: 'unknown' }), models, 1)).toBe(1);
   });

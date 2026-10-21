@@ -26,6 +26,7 @@ export class BudgetLedger {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS minutes (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reservations (id TEXT PRIMARY KEY, day TEXT NOT NULL, amount INTEGER NOT NULL, status TEXT NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS cache (hash TEXT PRIMARY KEY, payload TEXT NOT NULL)`);
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS billing_faults (reason TEXT PRIMARY KEY)`);
   }
 
   private reserve(body: Record<string, unknown>): unknown {
@@ -39,14 +40,20 @@ export class BudgetLedger {
     const amount = units(body.worstCaseUsd);
     const visitorLimit = limit(this.env.PER_VISITOR_PER_HOUR, 5);
     const globalLimit = limit(this.env.GLOBAL_PER_MINUTE, 20);
-    const allowance = units(this.env.DAILY_ALLOWANCE_USD === undefined ? 0.10 : Number(this.env.DAILY_ALLOWANCE_USD));
+    const allowance = units(this.env.DAILY_ALLOWANCE_USD === undefined ? 0.019 : Number(this.env.DAILY_ALLOWANCE_USD));
+    const lifetime = units(this.env.LIFETIME_ALLOWANCE_USD === undefined ? 7 : Number(this.env.LIFETIME_ALLOWANCE_USD));
+    if (lifetime > units(7)) throw new Error('config');
     return this.ctx.storage.transactionSync(() => {
+      if (this.sql.exec('SELECT reason FROM billing_faults LIMIT 1').toArray().length) return { ok: false, reason: 'budget' };
       const visits = this.sql.exec<{ count: number }>('SELECT count FROM visitors WHERE visitor = ? AND hour = ?', visitor, hour).toArray()[0]?.count ?? 0;
       if (visits >= visitorLimit) return { ok: false, reason: 'limit-visitor' };
       const calls = this.sql.exec<{ count: number }>('SELECT count FROM minutes WHERE minute = ?', minute).toArray()[0]?.count ?? 0;
       if (calls >= globalLimit) return { ok: false, reason: 'limit-global' };
       const daily = this.sql.exec<{ reserved: number; spent: number }>('SELECT reserved, spent FROM days WHERE day = ?', day).toArray()[0];
       if ((daily?.reserved ?? 0) + (daily?.spent ?? 0) + amount > allowance) return { ok: false, reason: 'budget' };
+      // Includes all historical days and outstanding holds, including pre-upgrade rows.
+      const total = this.sql.exec<{ total: number }>('SELECT COALESCE(SUM(reserved + spent), 0) AS total FROM days').toArray()[0]!.total;
+      if (total + amount > lifetime) return { ok: false, reason: 'budget' };
       const id = crypto.randomUUID();
       this.sql.exec('INSERT INTO days (day, reserved, spent) VALUES (?, ?, 0) ON CONFLICT(day) DO UPDATE SET reserved = reserved + excluded.reserved', day, amount);
       this.sql.exec('INSERT INTO visitors (visitor, hour, count) VALUES (?, ?, 1) ON CONFLICT(visitor, hour) DO UPDATE SET count = count + 1', visitor, hour);
@@ -65,7 +72,12 @@ export class BudgetLedger {
       if (row.status !== 'reserved') return { ok: true };
       if (!release && typeof body.actualUsd !== 'number') throw new Error('amount');
       const actual = release ? 0 : units(body.actualUsd as number);
-      if (actual > row.amount) throw new Error('reservation-exceeded');
+      if (actual > row.amount) {
+        // Freeze future dispatches if the provider ever exceeds our conservative quote.
+        // Retain the hold for reconciliation instead of silently refunding it.
+        this.sql.exec("INSERT OR IGNORE INTO billing_faults (reason) VALUES ('reservation-exceeded')");
+        return { reason: 'ledger' };
+      }
       this.sql.exec('UPDATE days SET reserved = reserved - ?, spent = spent + ? WHERE day = ?', row.amount, actual, row.day);
       this.sql.exec('UPDATE reservations SET status = ? WHERE id = ?', release ? 'released' : 'settled', id);
       return { ok: true };

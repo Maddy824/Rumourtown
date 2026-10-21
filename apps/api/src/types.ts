@@ -1,13 +1,16 @@
 import type { Claim, Unsupported } from './validate';
 
-export type FailureReason = 'turnstile' | 'limit-visitor' | 'limit-global' | 'budget' | 'model' | 'invalid' | 'ledger';
+export type FailureReason = 'turnstile' | 'limit-visitor' | 'limit-global' | 'budget' | 'model' | 'invalid' | 'ledger' | 'alerts';
 export interface Env {
   ALLOWED_ORIGIN: string;
   TURNSTILE_SECRET: string;
   OPENROUTER_API_KEY: string;
   SIGNING_KEY_JWK: string;
   MODELS?: string;
+  AI_ENABLED?: string;
+  USAGE_ALERT_URL?: string;
   DAILY_ALLOWANCE_USD?: string;
+  LIFETIME_ALLOWANCE_USD?: string;
   PER_VISITOR_PER_HOUR?: string;
   GLOBAL_PER_MINUTE?: string;
   LEDGER: DurableObjectNamespace;

@@ -20,7 +20,7 @@ Run commands from the repository root with Node 22, npm, Wrangler (installed by 
    gh secret set CLOUDFLARE_ACCOUNT_ID
    ```
 
-3. Create an OpenRouter key with a **$7 total cap**, prepaid credit, and auto top-up off. Do not enable periodic key-limit resets. Set the Worker secret; its daily allowance stays **$0.10**, with **5 calls per visitor per hour** and **20 calls globally per minute**.
+3. Create an OpenRouter key with a **$7 total cap**, prepaid credit, and auto top-up off. Do not enable periodic key-limit resets. Set the Worker secret; its daily allowance stays **$0.019**, with a **$7 lifetime ledger cap**, with **5 calls per visitor per hour** and **20 calls globally per minute**. Follow [phone alert setup](credit-controls.md) and test device delivery before changing `AI_ENABLED` from `"false"` to `"true"`. The secret `USAGE_ALERT_URL` is required for uncached model requests.
 
    ```sh
    open https://openrouter.ai/settings/keys
