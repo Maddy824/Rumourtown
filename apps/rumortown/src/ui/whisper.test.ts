@@ -164,3 +164,21 @@ describe('whisper confirmation and privacy', () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+it('shows an in-range sleeping resident as Asleep with no listener radio', () => {
+  vi.stubGlobal('document', sheetDocument());
+  vi.stubGlobal('window', { setTimeout, clearTimeout, matchMedia: () => ({ matches: true }) });
+  const sim = createFakeSimulation(731), snapshot = sim.snapshot();
+  snapshot.villagers = [{ ...person('mira', 1), activity: 'sleep' }];
+  snapshot.player.pos = { x: 0, y: 0 };
+  const whisper = createWhisperSheet({ sim: () => sim, snapshot: () => snapshot,
+    isPhone: () => true, reducedMotion: () => true, layers: { open() {}, closed() {} } as unknown as Layers,
+    whisper: () => false, walkTo() {}, onOpenChange() {} });
+  whisper.open({ listener: 'mira' });
+  const root = whisper.el as unknown as TestElement;
+  expect(root.querySelector('.walk-to')!.textContent).toBe('Asleep');
+  expect(root.querySelector('.walk-to')!.disabled).toBe(true);
+  expect(root.querySelectorAll('input')).toHaveLength(0);
+  expect(root.querySelectorAll('button').find(b => b.attrs.get('type') === 'submit')!.disabled).toBe(true);
+  whisper.destroy();
+});

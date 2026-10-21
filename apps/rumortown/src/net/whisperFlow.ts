@@ -1,14 +1,20 @@
 import { interpretWhisper, type InterpretOptions, type InterpretResult } from './interpret.js';
+import { cast } from '../content/cast/index.js';
+import { interpretLocally, type LocalPerson } from './local-interpreter.js';
+import type { Claim } from './types.js';
 import { fetchPublicKey } from './verify.js';
 import type { TurnstileClient } from './turnstile.js';
 
-type DoneResult = Extract<InterpretResult, { claim: unknown }>;
+// Local claims are never presented as signed Worker responses.
+export type WhisperResult = InterpretResult | { ok: true; claim: Claim; source: 'local' };
+type DoneResult = Extract<WhisperResult, { claim: unknown }>;
 type RestingResult = Exclude<InterpretResult, DoneResult>;
 export type WhisperState =
   | { status: 'idle' | 'checking' | 'asking' }
   | { status: 'done'; result: DoneResult }
   | { status: 'resting'; result: RestingResult; line: string };
 export interface WhisperFlowDependencies extends Omit<InterpretOptions, 'turnstileToken'> {
+  cast?: readonly LocalPerson[];
   turnstile: Pick<TurnstileClient, 'getToken'> & Partial<Pick<TurnstileClient, 'warm'>>;
   onStateChange?: (state: WhisperState) => void;
 }
@@ -16,7 +22,7 @@ export interface WhisperFlow {
   readonly state: WhisperState;
   warm(): void;
   /** While busy, repeated starts share the first operation without another call. */
-  start(text: string): Promise<InterpretResult>;
+  start(text: string): Promise<WhisperResult>;
 }
 
 const restingLine = "The town's gossip is resting. Try a ready-made rumor.";
@@ -39,13 +45,24 @@ function lineFor(result: RestingResult): string {
 
 export function createWhisperFlow(deps: WhisperFlowDependencies): WhisperFlow {
   let state: WhisperState = { status: 'idle' };
-  let active: Promise<InterpretResult> | undefined;
+  let active: Promise<WhisperResult> | undefined;
   let attempted = false;
   function transition(next: WhisperState): void {
     state = next;
     try { deps.onStateChange?.(next); } catch { /* UI observers cannot interrupt verification. */ }
   }
-  async function run(text: string): Promise<InterpretResult> {
+  async function run(text: string): Promise<WhisperResult> {
+    const local = interpretLocally(text, deps.cast ?? cast);
+    if ('claim' in local && local.confidence >= .75) {
+      const result: DoneResult = { ok: true, claim: { ...local.claim, confidence: local.confidence }, source: 'local' };
+      transition({ status: 'done', result });
+      return result;
+    }
+    if ('unsupported' in local) {
+      const result: RestingResult = { ok: true, unsupported: local.unsupported };
+      transition({ status: 'resting', result, line: lineFor(result) });
+      return result;
+    }
     transition({ status: 'checking' });
     let result: InterpretResult;
     const controller = new AbortController();

@@ -49,11 +49,14 @@ export function nearbyPeople(snap: WorldSnapshot, range = 6): VillagerView[] {
     .map((x) => x.v);
 }
 
-export const inReach = (snap: WorldSnapshot): VillagerView[] => nearbyPeople(snap, WHISPER_RANGE);
+export const inReach = (snap: WorldSnapshot): VillagerView[] => nearbyPeople(snap, WHISPER_RANGE).filter(v => v.activity !== 'sleep');
 
 export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const content = h('div', { class: 'whisper-content' });
-  const feedback = h('p', { class: 'whisper-feedback', role: 'status' });
+  // Reserve two text lines at phone width, including while empty. Both progress
+  // labels share this box; longer failure messages may still grow naturally.
+  const feedback = h('p', { class: 'whisper-feedback', role: 'status',
+    style: 'display: block; flex: 1 1 0; min-width: 0; min-height: 2lh;' });
   const retryBtn = h('button', { class: 'button button-quiet', type: 'button', hidden: true, onclick: () => {
     manual = false; confirmed = null; api.warm(); void submit();
   } }, 'Try again');
@@ -127,7 +130,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
               manual = true;
               showManual();
             } else {
-              feedback.textContent = '';
+              feedback.textContent = 'source' in result && result.source === 'local' ? 'Understood locally' : '';
               showConfirmation();
             }
           } else {
@@ -205,7 +208,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         const distance = Math.hypot(v.pos.x - snap.player.pos.x, v.pos.y - snap.player.pos.y);
         return h('div', { class: 'nearby-person' }, faceImg(v.id, v.look, 34),
           h('span', null, h('strong', null, v.name), h('small', null, `${sim.cast.get(v.id)?.role ?? 'Neighbour'}, ${distance.toFixed(1)} tiles`)),
-          h('button', { class: 'button button-quiet walk-to', type: 'button', 'aria-label': `Walk to ${v.name}`, onclick: () => { api.close(); ctx.walkTo(v.id); } }, 'Walk to'));
+          h('button', { class: 'button button-quiet walk-to', type: 'button', 'aria-label': v.activity === 'sleep' ? `${v.name}, asleep` : `Walk to ${v.name}`, disabled: v.activity === 'sleep', onclick: () => { api.close(); ctx.walkTo(v.id); } }, v.activity === 'sleep' ? 'Asleep' : 'Walk to'));
       }));
     if (near.length === 0) {
       content.replaceChildren(people);

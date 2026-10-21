@@ -83,9 +83,38 @@ describe('whisper sheet timing and writing', () => {
       : new Promise(resolve => { response = resolve; }));
     const view = sheet(); view.write('Tom took bread.'); view.submit();
     await pause(); expect(view.feedback()).toBe("Checking you're human…");
+    const status = view.root.querySelector('.whisper-feedback')!;
+    const style = status.attrs.get('style');
     token('ready'); await pause(); expect(view.feedback()).toBe('Asking the village…');
+    expect(view.root.querySelector('.whisper-feedback')).toBe(status);
+    expect(status.attrs.get('style')).toBe(style);
     response(Response.json({ unsupported: 'unclear', castVersion, issuedAt: 1 }));
     await pause(); expect(view.feedback()).toBe('Say it plainer.');
+    view.ui.destroy();
+  });
+
+  it('shows a local confirmation immediately, reserves status space and lets the player change it', async () => {
+    const focus = vi.spyOn(TestElement.prototype, 'focus');
+    const view = sheet(); view.write('Tom stole bread.'); view.submit();
+    await pause();
+    expect(view.feedback()).toBe('Understood locally');
+    const feedback = view.root.querySelector('.whisper-feedback')!;
+    expect(feedback.attrs.get('role')).toBe('status');
+    expect(feedback.attrs.get('style')).toContain('min-height: 2lh');
+    expect(feedback.attrs.get('style')).toContain('display: block');
+    expect(feedback.attrs.get('style')).toContain('flex: 1 1 0');
+    expect(client.getToken).not.toHaveBeenCalled();
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith('/interpret'))).toHaveLength(0);
+    const confirmation = view.root.querySelector('.whisper-confirmation')!;
+    expect(confirmation.hidden).toBe(false);
+    expect(confirmation.textContent).toContain('Mira will hear: Tom stole bread');
+    expect(focus.mock.instances.at(-1)).toBe(view.root.querySelectorAll('button').find(b => b.textContent === 'Whisper it'));
+    const style = feedback.attrs.get('style');
+    confirmation.querySelector('button')!.dispatchEvent(new Event('click'));
+    expect(view.root.querySelector('.story-meaning')!.hidden).toBe(false);
+    expect(view.root.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '2']);
+    expect(feedback.attrs.get('style')).toBe(style);
+    expect(focus.mock.instances.at(-1)).toBe(view.root.querySelector('select'));
     view.ui.destroy();
   });
 
