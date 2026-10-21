@@ -1,5 +1,7 @@
 # 24: Study — small language models as grounded agents in a deterministic world
 
+**Superseded framing:** see `docs/research/paper-plan.md` (epistemic vs world faithfulness; minimum experiment set; venues) and `docs/research/literature-2026-10-22.md`. The build list there replaces items 1–3 below.
+
 Owner direction: make Rumourtown a research platform as well as a game, studying agents on small language models (SLMs), and keep the system technically lean. This file is the study design and the build list.
 
 ## Research question
