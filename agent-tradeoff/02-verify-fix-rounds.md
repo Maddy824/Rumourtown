@@ -1,0 +1,5 @@
+# 02: Verify and commit any uncommitted fix rounds
+
+Some fix rounds may still be sitting uncommitted in the working tree when the Claude session stops. Check `git status --short`. For each directory with changes, find the matching report's last "Fix round" section in `.superpowers/sdd/2026-10-21-village-build/task-N-report.md`, run that task's test command (listed in the brief `task-N-brief.md`), and if green, commit that directory alone with a message `NN: <task> fix round <R>` where NN is the task number. If a directory's tests fail, do not commit it; write what fails in `agent-tradeoff/reports/02-report.md` and continue with the others.
+
+Known in-flight rounds at handoff time: Task 5 (engine) fix round 1 in `apps/rumortown/src/sim/agents/` and `apps/rumortown/src/sim/engine.ts`; Task 6 (renderer) fix round 2 in `apps/rumortown/src/render/`. Their reviews are in `task-5-review.md` and `task-6-rereview.md`; after committing, re-read each finding and confirm in the report that the committed code addresses it (file and line).
