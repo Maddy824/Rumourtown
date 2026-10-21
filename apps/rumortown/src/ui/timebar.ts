@@ -66,7 +66,7 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
   const days = h('div', { class: 'ribbon-days' });
   const marks = h('div', { class: 'ribbon-marks' });
   const readout = h('output', { class: 'ribbon-readout', hidden: true });
-  const input = h('input', { type: 'range', class: 'ribbon-input', min: '0', max: String(3 * MINUTES_PER_DAY), step: '1', value: '0', 'aria-label': 'Timeline' });
+  const input = h('input', { type: 'range', class: 'ribbon-input', min: '0', max: String(3 * MINUTES_PER_DAY), step: '1', value: '0', 'aria-label': 'Timeline, 24 hours per day, night from 21:30 to 06:00' });
   const ribbon = h('div', { class: 'ribbon' }, h('div', { class: 'ribbon-track', 'aria-hidden': 'true' }, reached, days), input, marks, readout);
   const clock = h('span', { class: 'strip-clock' });
   const bar = h('div', { class: 'timebar' }, clock, speed, ribbon);
@@ -169,7 +169,7 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
       if (dayCount !== lastDays) {
         lastDays = dayCount;
         days.replaceChildren(...Array.from({ length: dayCount }, (_, i) =>
-          h('span', { class: 'ribbon-day', style: `left: ${(i / dayCount) * 100}%; width: ${100 / dayCount}%` }, `Day ${i + 1}`)));
+          h('span', { class: 'ribbon-day', style: `left: ${(i / dayCount) * 100}%; width: ${100 / dayCount}%` }, h('span', { class: 'ribbon-night' }), h('span', { class: 'ribbon-day-label' }, `Day ${i + 1}`))));
       }
       clock.textContent = tickLabel(s.tick);
       const pins = mergeBeatPins(s.beats ?? []);

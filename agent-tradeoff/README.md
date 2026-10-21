@@ -57,7 +57,7 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.
 | 17 | done; SEO assets, About page, head tags, structured data |
 | 18 | done; writing-first sheet, Turnstile pre-warm, scoped deadlines |
-| 19 | B done and live (Workers AI first); A in progress (browser interpreter) |
+| 19 | B done and live; A and C13 committed in 863c47e; offline eval: 140/140 correct answers, 44/44 out-of-scope abstentions, 17.5% need Worker; see [19a report](reports/19a-report.md) |
 | 20 | done; light and time of day, shadows, figures, interiors, wind, paper board |
 | 21 | queued after 22; slow beats, local clock, 40 px anchors |
-| 22 | in progress; 24-hour village with night |
+| 22 | A–D complete; reviewed and fixed, replay matches Node 22/25 and Chrome, desktop/360 px night and keyboard checks verified; see reports/22-report.md |

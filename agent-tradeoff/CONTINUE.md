@@ -19,9 +19,9 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 
 | # | Task file | State at handoff | What to do |
 |---|---|---|---|
-| 22 | `22-night.md` | running or just finished | If `reports/22-report.md` exists with STATUS: DONE or BLOCKED and the tree holds its changes, verify (section 4) and commit per directory with `22:` messages; the replay pin changes: inspect the new replay and record old and new hashes. If the report is missing, run the task from its file. |
-| 19A | `19-local-first-interpretation.md` section A | running or just finished | Same procedure; commit with `19:`; put the offline eval numbers in `README.md`. |
-| 21 | `21-watch-a-rumor-grow.md` (sections A–E) | queued, after 22 | Run it only after 22 is committed (it depends on the 24-hour day). |
+| 22 | `22-night.md` | completed and verified; see `reports/22-report.md` | Full-day replay matches Node 22/25 and Chrome; desktop/phone and frame budget verified. Check `22:` commits and skip once clean. |
+| 19A | `19-local-first-interpretation.md` section A | committed in `863c47e` | Preserve the implemented local interpreter and recorded offline eval; do not rebuild it. |
+| 21 | `21-watch-a-rumor-grow.md` (sections A–E) | next | Run after confirming 22 is committed. Reconcile section D's old 07:00–22:00 language with task 22's 06:00-origin, 1,440-minute day; the full-day model takes precedence. |
 | — | Redeploy and live check | after 21 | Section 5, then section 6. |
 | 23 | Final whole-branch review | after the redeploy | Run `03-final-review.md`'s command against the whole branch again, then `04-final-fixes.md`. |
 | — | Owner steps | any time | `owner-checklist.md` (CI token, key cap, domain email, launch). |

@@ -2647,3 +2647,19 @@ button.chain-actor:hover span {
 .beat-card .beat-faces { margin: 0; }
 .beat-card > p, .beat-card > button { grid-column: 1 / -1; }
 .beat-card > button { justify-self: start; }
+
+/* 22: The village clock also colours arrival, district names and the full-day ribbon. */
+.ribbon-night { position: absolute; inset: 0 0 0 64.583333%; background: rgba(30,42,74,.28); pointer-events: none; }
+.ribbon-day-label { position: relative; }
+.now-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.now-awake { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.5; }
+.now-awake[hidden] { display: none; }
+.arrival[data-night='true'] .arrival-sky { background: var(--grain), linear-gradient(var(--clock-sky), #1e2a4a 65%, #5b6fa6); }
+.arrival[data-night='true'] .felt-cloud { opacity: .12; }
+.arrival[data-night='true'] .arrival-title { color: #f6f0e4; }
+.arrival[data-night='true'] .arrival-title a { color: #f7cf83; }
+.arrival-stars { display: none; position: absolute; inset: 0; pointer-events: none; }
+.arrival[data-night='true'] .arrival-stars { display: block; }
+.arrival-stars span { position: absolute; background: #f6f0e4; clip-path: polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%); }
+.district-banner[data-night='true'] { background: var(--grain), var(--clock-sky); color: #f6f0e4; border-color: #8fa6d3; }
+@media (prefers-reduced-motion: reduce) { .arrival[data-night='true'] .arrival-stars { display: none; } }

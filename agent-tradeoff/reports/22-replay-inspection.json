@@ -1,0 +1,91 @@
+{
+  "kinds": {
+    "action": 1765,
+    "line": 3342,
+    "belief": 2165,
+    "whisper": 1,
+    "witness": 32,
+    "day-end": 1
+  },
+  "acts": {
+    "greet": 548,
+    "smalltalk": 996,
+    "farewell": 541,
+    "news": 210,
+    "agree": 327,
+    "reactToWhisper": 1,
+    "warn": 26,
+    "defend": 686,
+    "gossip": 3,
+    "confide": 2,
+    "doubt": 2
+  },
+  "asleepAt2300": [
+    "mira",
+    "tom",
+    "ada",
+    "elin",
+    "pim",
+    "greta",
+    "nell",
+    "wren",
+    "hal",
+    "una",
+    "cass",
+    "mab",
+    "rook",
+    "tess",
+    "yan",
+    "suri",
+    "oren",
+    "leela",
+    "tavi",
+    "edda",
+    "arun",
+    "bram",
+    "nia",
+    "vesa",
+    "cora",
+    "dara",
+    "silas"
+  ],
+  "awakeAt2300": [
+    "ben",
+    "rosa",
+    "jonah",
+    "sol",
+    "ivo",
+    "otto",
+    "dag",
+    "fen",
+    "lio"
+  ],
+  "innNightLines": 66,
+  "innNightActs": [
+    "greet",
+    "news",
+    "smalltalk",
+    "farewell",
+    "defend",
+    "agree"
+  ],
+  "nightWitnesses": [
+    {
+      "kind": "witness",
+      "tick": 1020,
+      "villager": "dag",
+      "what": "Lio meets a travelling fiddler by the bridge at eleven to exchange a new tune",
+      "subject": "lio",
+      "secretId": "lio-midnight-meeting"
+    }
+  ],
+  "dawn": 360,
+  "ending": {
+    "kind": "day-end",
+    "tick": 1440,
+    "dayIndex": 0,
+    "summary": "The story that Tom stole bread from the bakery reached 35 people and faded; nothing came of it.",
+    "ending": "quiet"
+  },
+  "hash": "6137d96970f7a28e05e2fb37b57b9495274d1c256208d084818a336332994184"
+}

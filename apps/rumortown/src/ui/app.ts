@@ -3,6 +3,7 @@
  * The simulation steps at 2.5 game-minutes a second at 1× (5 at 2×, 20 at 8×, none when paused); the
  * renderer draws every animation frame, blending the previous and current snapshots.
  */
+import { clockLook, nightNow } from './night.js';
 import type { Tuning, ClaimId } from 'rumormind';
 import { readRegisteredClaim } from '../sim/registered-claim.js';
 import {
@@ -189,7 +190,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const top = h('header', { class: 'rt-top' }, clock, pins);
   const nowFaces = h('span', { class: 'now-faces', 'aria-hidden': 'true' });
   const nowText = h('span', { class: 'now-sentence' }, 'Whisper something and watch the agents react.');
-  const runningStory = h('button', { class: 'now-open', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, h('span', { class: 'sr-only' }, 'Now: '), nowFaces, nowText, h('span', { class: 'now-chevron', 'aria-hidden': 'true' }, '⌃'));
+  const nowAwake = h('small', { class: 'now-awake', hidden: true });
+  const runningStory = h('button', { class: 'now-open', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, h('span', { class: 'sr-only' }, 'Now: '), nowFaces, h('span', { class: 'now-copy' }, nowText, nowAwake), h('span', { class: 'now-chevron', 'aria-hidden': 'true' }, '⌃'));
   const resumeFollow = h('button', { class: 'following-paused', type: 'button', hidden: true }, 'Following paused. Tap to resume.');
   threadsBtn.className = 'follow-toggle';
   nowFaces.append(faceImg('stranger', 'stranger', 22), faceImg('mira', sim.cast.get('mira')?.look ?? 'stranger', 22));
@@ -987,7 +989,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     lastMinute = cur.minuteOfDay;
     timeText.textContent = clockText(cur.minuteOfDay);
     dayText.textContent = `Day ${cur.dayIndex + 1}`;
-    dial.set((cur.minuteOfDay - DAY_START_MINUTE) / MINUTES_PER_DAY);
+    dial.set(((cur.minuteOfDay - DAY_START_MINUTE + MINUTES_PER_DAY) % MINUTES_PER_DAY) / MINUTES_PER_DAY);
   }
 
   let rafId = 0;
@@ -1032,6 +1034,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const player = lerp(prev?.player.pos ?? cur.player.pos, cur.player.pos, alpha);
 
     const entered = districtEntry(player, now);
+    clockLook(districtBanner, cur.minuteOfDay);
     if (entered) { districtBanner.textContent = entered; bannerUntil = now + 2500; districtBanner.hidden = false; }
     if (now >= bannerUntil) districtBanner.hidden = true;
     story.updateChain();
@@ -1117,10 +1120,16 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     }
 
     const nextBeat = beats.at(-1) ?? null;
-    if (nextBeat !== runningBeat) {
+    const night = nightNow(cur, nextBeat?.event);
+    const nowSentenceText = night.quiet ? 'The village sleeps' : nextBeat ? nowSentence(nextBeat, sim) : 'Whisper something and watch the agents react.';
+    const awakeText = night.awake.length ? `Still awake: ${night.awake.join(', ')}` : '';
+    if (nextBeat !== runningBeat || nowText.textContent !== nowSentenceText || nowAwake.textContent !== awakeText) {
       runningBeat = nextBeat;
-      nowFaces.replaceChildren(...(nextBeat?.faces ?? ['stranger', 'mira']).map(id => faceImg(id, sim.cast.get(id)?.look ?? 'stranger', 22)));
-      nowText.textContent = nextBeat ? nowSentence(nextBeat, sim) : 'Whisper something and watch the agents react.';
+      const faces = night.quiet ? cur.villagers.filter(v => v.activity !== 'sleep').slice(0, 3).map(v => v.id) : nextBeat?.faces ?? ['stranger', 'mira'];
+      nowFaces.replaceChildren(...faces.map(id => faceImg(id, sim.cast.get(id)?.look ?? 'stranger', 22)));
+      nowText.textContent = nowSentenceText;
+      nowAwake.textContent = awakeText; nowAwake.hidden = !awakeText;
+      nowAwake.title = awakeText;
       measureInsets();
     }
     const noWhisper = !beats.some(b => b.event.kind === 'whisper');
@@ -1139,7 +1148,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   story.reset(resyncEvents());
   updateClock();
-  deps.arrival?.connect(() => renderer.project(cur.player.pos, rig.camera), layers);
+  deps.arrival?.connect(() => renderer.project(cur.player.pos, rig.camera), layers, () => cur.minuteOfDay);
   void (deps.arrivalDone ?? Promise.resolve()).then(() => {
     if (destroyed) return;
     awaitingArrival = false; release('arrival'); opening.show();

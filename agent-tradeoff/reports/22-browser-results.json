@@ -1,0 +1,45 @@
+[
+  {
+    "width": 1280,
+    "arrivalNight": "true",
+    "layout": {
+      "overflow": false,
+      "night": "true",
+      "now": "The village sleepsStill awake: Ben, Rosa, Jonah, Sol, Ivo, Otto, Dag, Fen, Lio",
+      "tick": 1020
+    },
+    "keyboard": {
+      "focus": "Whisper",
+      "sheetHidden": true
+    },
+    "errors": []
+  },
+  {
+    "width": 360,
+    "arrivalNight": "true",
+    "layout": {
+      "overflow": false,
+      "night": "true",
+      "now": "The village sleepsStill awake: Ben, Rosa, Jonah, Sol, Ivo, Otto, Dag, Fen, Lio",
+      "tick": 1020
+    },
+    "keyboard": {
+      "focus": "Whisper",
+      "sheetHidden": true
+    },
+    "errors": []
+  },
+  {
+    "replay": {
+      "hash": "6137d96970f7a28e05e2fb37b57b9495274d1c256208d084818a336332994184",
+      "events": 7306
+    },
+    "frames": {
+      "count": 176,
+      "p50": 0.39999985694885254,
+      "p95": 0.5,
+      "max": 1.5,
+      "flushedP95": 3.8000001907348633
+    }
+  }
+]

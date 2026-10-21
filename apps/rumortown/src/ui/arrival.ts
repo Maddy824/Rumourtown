@@ -1,4 +1,6 @@
 /** One bounded arrival, independent of font and map-cache preparation. */
+import { clockLook } from './night.js';
+import { paperStars } from '../render/night.js';
 import { SpriteCache } from '../render/sprites.js';
 import { h } from './dom.js';
 import type { Layers } from './layers.js';
@@ -6,6 +8,7 @@ export function createArrival(root: HTMLElement) {
   let finish: (() => void) | undefined, timer = 0, positionFrame = 0;
   let destination: (() => { x: number; y: number } | null) | undefined;
   let layers: Layers | undefined;
+  let clock = () => 8 * 60;
   const sprite = new SpriteCache().stranger('s', 0, 32, Math.min(2, window.devicePixelRatio || 1));
   const figure = h('canvas', { class: 'arrival-stranger', width: sprite.img.width, height: sprite.img.height, 'aria-hidden': 'true' });
   figure.getContext('2d')?.drawImage(sprite.img, 0, 0);
@@ -14,6 +17,7 @@ export function createArrival(root: HTMLElement) {
   const skip = h('button', { class: 'button arrival-skip', type: 'button' }, 'Skip');
   const el = h('section', { class: 'arrival', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Arriving in Rumourtown', hidden: true },
     h('div', { class: 'arrival-sky' }),
+    h('div', { class: 'arrival-stars', 'aria-hidden': 'true' }, ...paperStars.map(s => h('span', { style: `left:${s.x * 100}%;top:${s.y * 300}%;width:${s.size * 2}px;height:${s.size * 2}px` }))),
     ...[0, 1, 2, 3].map(i => h('div', { class: `felt-cloud cloud-${i}`, 'aria-hidden': 'true' })),
     h('div', { class: 'arrival-title' }, h('h1', null, 'Rumourtown'),
       h('p', null, 'Thirty-six villagers who think for themselves. You’re the stranger who came down from the sky.'),
@@ -39,7 +43,7 @@ export function createArrival(root: HTMLElement) {
   }
   return {
     start(): Promise<void> {
-      end(); position(); el.hidden = false; root.dataset.arriving = 'true';
+      end(); position(); clockLook(el, clock()); el.hidden = false; root.dataset.arriving = 'true';
       // Replaying restarts the single orchestrated animation.
       // Removing the animation class and flushing restarts it on a replay.
       el.classList.remove('arrival-playing'); void el.offsetWidth; el.classList.add('arrival-playing');
@@ -47,7 +51,7 @@ export function createArrival(root: HTMLElement) {
       layers?.open({ id: 'arrival', el, modal: true, close: end }); skip.focus({ preventScroll: true });
       return new Promise(resolve => { finish = resolve; timer = window.setTimeout(end, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 350 : 2800); });
     },
-    connect(locate: () => { x: number; y: number } | null, stack: Layers) { destination = locate; layers = stack; position(); if (!el.hidden) { trackLanding(); stack.open({ id: 'arrival', el, modal: true, close: end }); } },
+    connect(locate: () => { x: number; y: number } | null, stack: Layers, minute?: () => number) { if (minute) clock = minute; clockLook(el, clock()); destination = locate; layers = stack; position(); if (!el.hidden) { trackLanding(); stack.open({ id: 'arrival', el, modal: true, close: end }); } },
     destroy() { end(); el.remove(); },
   };
 }

@@ -1,5 +1,5 @@
 /**
- * The evening card over the village: how the day ended, in one sentence, and what the stranger's word is
+ * The dawn card over the village: how the day ended, in one sentence, and what the stranger's word is
  * worth now. Time holds until "Keep going".
  */
 import type { SimEvent } from '../sim/types.js';

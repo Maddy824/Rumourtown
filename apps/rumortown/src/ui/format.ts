@@ -20,7 +20,7 @@ export function clockText(minuteOfDay: number): string {
 }
 
 export const minuteOfTick = (tick: Tick): number =>
-  DAY_START_MINUTE + (((Math.floor(tick) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY);
+  (DAY_START_MINUTE + (((Math.floor(tick) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY)) % MINUTES_PER_DAY;
 export const dayIndexOfTick = (tick: Tick): number => Math.floor(Math.max(0, tick) / MINUTES_PER_DAY);
 export const tickClock = (tick: Tick): string => clockText(minuteOfTick(tick));
 /** "Day 1, 09:10" */
