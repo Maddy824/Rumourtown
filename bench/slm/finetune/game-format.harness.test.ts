@@ -84,7 +84,7 @@ test('CLI pipeline accepts ids and legacy examples, preserves splits and source 
   const cli = await promisify(execFile)(process.execPath, ['--experimental-strip-types',
     'bench/slm/finetune/game-format.ts', '--set', 'act', '--data', dir]);
   const result = JSON.parse(cli.stdout) as { train: number; valid: number; out: string };
-  expect(result).toEqual({ train: 1, valid: 1, out: join(dir, 'finetune', 'act-game') });
+  expect(result).toEqual({ train: 1, valid: 1, skipped: 0, out: join(dir, 'finetune', 'act-game') });
   expect(await readFile(join(dir, 'finetune', 'act', 'train.jsonl'), 'utf8')).toBe(before);
   for (const split of ['train', 'valid']) {
     const converted = JSON.parse((await readFile(join(result.out, `${split}.jsonl`), 'utf8')).trim());
