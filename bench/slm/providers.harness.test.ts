@@ -14,7 +14,7 @@ test('Ollama recorded response, seeded schema request and nanosecond throughput'
   const result = await ollama({ fetch }).generate(request);
   expect(fetch.mock.calls[0]![0]).toBe('http://127.0.0.1:11434/api/chat');
   expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual({ model: request.model, messages: request.messages,
-    stream: false, format: request.format, options: { seed: 42, temperature: .7, num_predict: 64 } });
+    stream: false, think: false, format: request.format, options: { seed: 42, temperature: .7, num_predict: 64 } });
   expect(result).toMatchObject({ provider: 'ollama', inputTokens: 40, outputTokens: 12, tokensPerSecond: 12, costUsd: 0, memoryBytes: null });
   expect(result.latencyMs).toBeGreaterThanOrEqual(0);
 });

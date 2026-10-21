@@ -54,7 +54,7 @@ export function ollama(options: TransportOptions & { baseUrl?: string } = {}): P
   return { name: 'ollama', async generate(request) {
     const start = performance.now();
     const data = await post(`${base}/api/chat`, { model: request.model, messages: request.messages,
-      stream: false, ...(request.format ? { format: request.format } : {}),
+      stream: false, think: false, ...(request.format ? { format: request.format } : {}),
       options: { seed: request.seed ?? 1, temperature: request.temperature ?? 0, num_predict: request.maxTokens ?? 192 } }, options);
     if (data.error || typeof data.message?.content !== 'string' || data.done !== true) throw new ProviderError('Invalid Ollama completion');
     const latencyMs = performance.now() - start;

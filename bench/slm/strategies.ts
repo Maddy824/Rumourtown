@@ -66,7 +66,7 @@ export async function execute(strategy: Strategy, s: Scenario, p: Probe, options
   const base = messagesFor(s, p, strategy !== 'persona');
   const make = async (provider: Provider, model: string, structured = false, constrained = false, temperature = 0, sample = 0): Promise<Attempt> => {
     const messages = base.map(m => ({ ...m }));
-    if (structured) messages[0]!.content += '\nCite then speak. Return only JSON {"uses":["fact ids"],"reply":"your reply"}. Every claim must be supported by a cited current belief. Use [] to abstain or for chatter.';
+    if (structured) messages[0]!.content += `\nCite then speak. Return only JSON {"uses":[...],"reply":"..."}. "uses" lists the exact "id" values of the current beliefs your reply relies on${facts[0] ? `, for example ["${facts[0].id}"]` : ''}. Every claim must be supported by a cited current belief. Use [] to abstain or for chatter.`;
     const generated = await provider.generate({ model, messages, temperature, seed: s.seed + sample,
       maxTokens: options.maxTokens, ...(constrained ? { format: REPLY_SCHEMA } : {}) });
     const value = structured ? parseObject(generated.text) : null;
@@ -79,7 +79,7 @@ export async function execute(strategy: Strategy, s: Scenario, p: Probe, options
   };
   if (strategy === 'plan') {
     const messages = base.map(m => ({ ...m }));
-    messages[0]!.content += '\nPlan only. Return JSON {"uses":["fact ids"],"act":"speech act"}. Select only current beliefs relevant to the question; use [] to abstain.';
+    messages[0]!.content += `\nPlan only. Return JSON {"uses":[...],"act":"..."}. "uses" lists the exact "id" values of the current beliefs relevant to the question${facts[0] ? `, for example ["${facts[0].id}"]` : ''}; use [] to abstain.`;
     const planned = await options.provider.generate({ model: options.model, messages, format: PLAN_SCHEMA,
       seed: s.seed, temperature: 0, maxTokens: options.maxTokens });
     const value = parseObject(planned.text);
