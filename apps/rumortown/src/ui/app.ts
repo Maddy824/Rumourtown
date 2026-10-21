@@ -19,6 +19,7 @@ import {
   type VillagerId,
   type WorldSnapshot,
 } from '../sim/types.js';
+import { createRumorTrail, createTrailHistory } from './rumor-trail.js';
 import { createBubbles } from './bubbles.js';
 import { createCameraRig } from './camera.js';
 import { createFieldGuide } from './field-guide.js';
@@ -49,8 +50,6 @@ export interface AppDeps {
   startTick?: number;
   /** Length of the timeline ribbon in days. Default 3. */
   runDays?: number;
-  /** Typed whispers are available only when both deployment settings exist. */
-  whisperClient?: { baseUrl: string; siteKey: string };
 }
 
 export interface AppHandle {
@@ -129,7 +128,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   }
   const reflection = runReflection(seed);
   const startTick = Math.min(runTicks, Math.max(0, deps.startTick ?? 130));
-  while (sim.tick < startTick) sim.step();
+  let trailHistory = createTrailHistory();
+  trailHistory.record(sim.snapshot().threads);
+  while (sim.tick < startTick) { sim.step(); trailHistory.record(sim.snapshot().threads); }
 
   const shareState = (): ShareState => ({ v: 1, seed, cast: castVersion, interventions: interventions.slice() });
   let written = writeShareToLocation(shareState());
@@ -162,16 +163,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const timeText = h('span', { class: 'clock-time' });
   const dayText = h('span', { class: 'clock-day' });
   const clock = h('div', { class: 'clock', role: 'group', 'aria-label': 'Clock' }, dial.root, h('span', { class: 'clock-text' }, timeText, dayText));
-  const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false' }, 'Who told whom');
+  const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false' }, 'Follow a rumor');
   const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Story so far');
   const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Pin to the board');
   const exploreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Explore');
   const researchBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Notebook');
   const pins = h('nav', { class: 'pins', 'aria-label': 'Board' }, exploreBtn, researchBtn, threadsBtn, storyBtn, shareBtn);
-  const threadsNote = h('p', { class: 'threads-note', hidden: true }, 'Each red thread is one telling.');
   const dareNote = h('details', { class: 'dare-note', open: true },
     h('summary', null, 'Your dare'), h('p', null, reflection.dare.text));
-  const top = h('header', { class: 'rt-top' }, clock, pins, threadsNote, dareNote);
+  const top = h('header', { class: 'rt-top' }, clock, pins, dareNote);
 
   const postbox = h('button', { class: 'postbox', type: 'button', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper'));
   const prompt = h('p', { class: 'prompt', hidden: interventions.length > 0 }, 'Click to walk. Meet someone. Leave a whisper.');
@@ -274,7 +274,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   };
 
   const whisper = createWhisperSheet({
-    client: deps.whisperClient ? { ...deps.whisperClient, castVersion } : undefined,
     sim: () => sim,
     snapshot: () => cur,
     isPhone,
@@ -368,9 +367,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       syncScrim();
     },
   });
+  const trail = createRumorTrail({ sim: () => sim, history: () => trailHistory.links,
+    pause: () => setSpeed(0), play: () => setSpeed(1), close: () => { showTrail(false); threadsBtn.focus(); } });
+  const trailFrom = h('span', { class: 'trail-map-name' });
+  const trailTo = h('span', { class: 'trail-map-name' });
+  const trailMarkers = h('div', { class: 'trail-markers', 'aria-hidden': 'true', hidden: true }, trailFrom, trailTo);
   const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'You are the traveller in gold. Click a path to walk, or open Explore.');
   const bottom = h('div', { class: 'rt-bottom' }, postbox, prompt, time.bar, time.tab);
-  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, movementHint, rewind, toast, live, actionLive);
+  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, trail.el, trailMarkers, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, movementHint, rewind, toast, live, actionLive);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
@@ -521,6 +525,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     cur = sim.snapshot();
     const fresh = consumeEvents();
     if (fresh.length) story.push(fresh);
+    trail.focus(claimId);
+    showTrail(true);
     bubbles.boost(listener, 5000);
     prompt.hidden = true;
     tag.refresh(true);
@@ -529,7 +535,18 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   /* ---------------- Events ---------------- */
 
+  function showTrail(open: boolean): void {
+    threadsOn = open;
+    root.dataset.tracing = String(open);
+    threadsBtn.setAttribute('aria-pressed', String(open));
+    trail.el.hidden = !open;
+    trailMarkers.hidden = !open;
+    if (open) { hideToast(); dareNote.open = false; trail.update(); }
+    measureInsets();
+  }
+
   function consumeEvents(): SimEvent[] {
+    trailHistory.record(cur.threads);
     const fresh = sim.events(cursor.tick);
     const out: SimEvent[] = [];
     let skip = cursor.seen;
@@ -631,11 +648,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       next = deps.createSim(seed, interventions.slice());
       next.movePlayer(standAt);
     }
+    const nextHistory = back ? createTrailHistory() : trailHistory;
+    nextHistory.record(next.snapshot().threads);
     const from = next.tick;
     const span = Math.max(1, target - from);
     while (next.tick < target) {
       const until = performance.now() + 10;
-      while (next.tick < target && performance.now() < until) next.step();
+      while (next.tick < target && performance.now() < until) { next.step(); nextHistory.record(next.snapshot().threads); }
       rewindThread.style.transform = `scaleX(${((next.tick - from) / span).toFixed(3)})`;
       await sleep(0);
       if (token !== rewindToken) return;
@@ -644,6 +663,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (wait > 0) await sleep(wait);
     if (token !== rewindToken) return;
     sim = next;
+    trailHistory = nextHistory;
     cur = sim.snapshot();
     prev = cur;
     acc = 0;
@@ -663,9 +683,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   exploreBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('explore', exploreBtn); });
   researchBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('research', researchBtn); });
   threadsBtn.addEventListener('click', () => {
-    threadsOn = !threadsOn;
-    threadsBtn.setAttribute('aria-pressed', String(threadsOn));
-    threadsNote.hidden = !threadsOn;
+    showTrail(!threadsOn);
   });
   storyBtn.addEventListener('click', () => {
     if (story.isOpen()) story.close();
@@ -778,7 +796,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   phoneQuery.addEventListener('change', applyLayout);
   const onResize = (): void => resize();
   window.addEventListener('resize', onResize);
-  dareNote.addEventListener('toggle', onResize);
+  dareNote.addEventListener('toggle', measureInsets);
   applyLayout();
 
   /* ---------------- Frame ---------------- */
@@ -797,7 +815,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function renderWorld(alpha: number): void {
     try {
-      renderer.render(prev, cur, rig.camera, { threads: threadsOn, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion() });
+      renderer.render(prev, threadsOn ? { ...cur, threads: trail.link() ? [trail.link()!] : [] } : cur, rig.camera, { threads: threadsOn, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion() });
       renderFailures = 0;
     } catch (err) {
       renderFailures += 1;
@@ -854,9 +872,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     });
     const player = lerp(prev?.player.pos ?? cur.player.pos, cur.player.pos, alpha);
 
+    trail.update();
     const cover = sheetCover();
     rig.far = threadsOn || scrubFar;
-    rig.setInsets({ top: insets.top, bottom: insets.bottom, sheet: cover });
+    rig.setInsets({
+      top: insets.top,
+      bottom: threadsOn && phone ? rig.camera.height - trail.el.getBoundingClientRect().top + 10 : insets.bottom,
+      left: threadsOn && !phone ? trail.el.getBoundingClientRect().right + 12 : 0,
+      sheet: cover,
+    });
     rig.update(player, dt, firstFrame || reducedMotion());
     firstFrame = false;
     renderWorld(alpha);
@@ -865,6 +889,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const project = (p: Vec2): { x: number; y: number } => renderer.project(p, cam);
     bubbles.update({
       cur,
+      muted: threadsOn || layers.anyModal(),
       positions,
       player,
       camera: cam,
@@ -884,6 +909,17 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       bottomLimit: cam.height - (phone ? Math.max(cover, insets.bottom) : insets.bottom),
       now,
     });
+
+    const currentLink = threadsOn ? trail.link() : undefined;
+    trailMarkers.hidden = !currentLink;
+    if (currentLink) {
+      for (const [id, label] of [[currentLink.from, trailFrom], [currentLink.to, trailTo]] as const) {
+        const p = project(id === 'stranger' ? player : positions.get(id) ?? player);
+        label.textContent = id === 'stranger' ? 'You' : sim.cast.get(id)?.name ?? id;
+        label.style.left = `${clamp(p.x, 34, cam.width - 34)}px`;
+        label.style.top = `${p.y + (label === trailFrom ? -24 : 14)}px`;
+      }
+    }
 
     // The tag hangs beside its villager, tied on with a string.
     const sel = tag.selected();

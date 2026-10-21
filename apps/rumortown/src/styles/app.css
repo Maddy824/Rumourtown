@@ -2313,3 +2313,48 @@ button.chain-actor:hover span {
 .guide-people { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .guide-people li { padding: 8px 0; border-bottom: 1px solid var(--stitch); }
 .guide-people span { display: block; font-size: 13px; color: var(--ink-soft); margin-top: 5px; }
+
+/* A single readable conversation, and a focused route beside the village. */
+:where(.rt) :where(select, textarea) { font: inherit; color: inherit; }
+.own-claim textarea {
+  width: 100%; min-height: 84px; resize: vertical; padding: 10px 12px;
+  border: 1.5px solid var(--stitch); border-radius: 4px; background: #fffaf0;
+  font-size: 16px; line-height: 1.5;
+}
+.story-meaning { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; }
+.story-meaning label { display: grid; gap: 4px; font-size: var(--fs-s); }
+.story-meaning select, .rumor-trail select {
+  min-width: 0; width: 100%; min-height: 36px; padding: 6px; border: 1px solid var(--stitch);
+  border-radius: 3px; background: #fffaf0;
+}
+.whisper-suggestions summary { cursor: pointer; padding: 8px 0; font-weight: 650; }
+.whisper-suggestions[open] .whisper-what { margin-top: 12px; }
+.rumor-trail {
+  position: absolute; z-index: 41; left: var(--gutter); top: 110px; width: 300px;
+  padding: 12px; border-radius: 5px; box-shadow: var(--lift-card); background: var(--paper);
+  max-height: calc(100% - 250px); overflow: auto; font-size: var(--fs-s);
+}
+.trail-heading { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-weight: 750; }
+.trail-heading button { min-height: 32px; padding: 4px 8px; }
+.trail-claim { font-size: 15px; font-weight: 650; margin: 10px 0; overflow-wrap: anywhere; }
+.trail-route { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 8px 0; }
+.trail-person { display: flex; gap: 5px; align-items: center; }
+.trail-verb { color: var(--berry-deep); }
+.trail-status { margin: 6px 0; font-size: 12px; }
+.trail-controls { display: flex; gap: 5px; }
+.trail-controls button { flex: 1; padding: 6px; min-height: 36px; font-size: 12px; white-space: nowrap; }
+.trail-controls [aria-pressed='true'] { background: var(--oat); box-shadow: inset 0 0 0 1px var(--stitch); }
+.trail-note { color: var(--ink-soft); font-size: 11px; margin: 8px 0 0; }
+.trail-markers { position: absolute; inset: 0; pointer-events: none; z-index: 25; }
+.trail-map-name { position: absolute; transform: translateX(-50%); padding: 2px 6px; border-radius: 3px; background: var(--paper); color: var(--berry-deep); font-size: 12px; font-weight: 750; box-shadow: var(--lift-pinned); }
+.rt[data-tracing='true'] .dare-note, .rt[data-tracing='true'] .movement-hint { display: none; }
+.rt[data-layout='phone'] .rumor-trail { top: auto; bottom: 112px; left: 12px; width: calc(100% - 24px); max-height: 235px; padding: 8px 10px; }
+.rt[data-layout='phone'] .trail-claim { display: none; }
+.rt[data-layout='phone'] .trail-route { padding: 5px 0; }
+.rt[data-layout='phone'] .trail-note { font-size: 10px; line-height: 1.3; margin-top: 5px; }
+.rt[data-layout='phone'] .rt-top { flex-wrap: wrap; gap: 6px; }
+.rt[data-layout='phone'] .pins { flex-direction: row; flex-wrap: nowrap; align-items: center; width: 100%; overflow-x: auto; padding: 4px 0 7px; gap: 6px; }
+.rt[data-layout='phone'] .pin { flex: none; }
+.rt[data-layout='phone'] .dare-note { top: calc(100% + 2px); width: min(300px, calc(100% - 24px)); }
+.rt[data-layout='phone'] .story-meaning { grid-template-columns: 1fr 1fr; }
+.rt[data-layout='phone'] .story-meaning label:last-child { grid-column: 1 / -1; grid-template-columns: 1fr 2fr; align-items: center; }

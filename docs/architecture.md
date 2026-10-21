@@ -149,7 +149,7 @@ at most 32 characters and at most 400 interventions. Ticks must be integers from
 rejects fragments longer than 16,000 characters, invalid encoding and malformed
 JSON. The interface also checks the cast version and known listener and claim ids.
 
-This format is encoded, not compressed. It contains claim ids rather than typed
+This format is encoded, not compressed. Player-written claims use a bounded `written_` base64url payload containing original text, subject, category and severity. The claim id therefore carries text for those claims, while authored and legacy interpreted claims remain taxonomy ids. Player-written claims are validated and registered at their intervention tick. For legacy interpreted claims it contains claim ids rather than typed
 text, player paths or generated dialogue. The design calls for signed custom
 claims and compression, but the current `ShareState` contract has no field for
 signed claims. Worker signatures therefore do not yet travel in this link format.

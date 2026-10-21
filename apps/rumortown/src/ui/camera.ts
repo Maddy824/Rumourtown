@@ -9,6 +9,7 @@
 import { TILE, type Camera, type Vec2, type VillageMap } from '../sim/types.js';
 
 export interface Insets {
+  left?: number;
   top: number;
   bottom: number;
   /** Extra cover from the bottom, such as an open sheet on a phone. */
@@ -38,9 +39,8 @@ export function createCameraRig(map: VillageMap): CameraRig {
   /** The map is centred in the viewport, so it must clear the larger of the two insets on both sides. */
   const farZoom = (): number => {
     const margin = 12;
-    const band = Math.max(insets.top, insets.bottom);
-    const availW = Math.max(80, camera.width - margin * 2);
-    const availH = Math.max(80, camera.height - band * 2 - margin * 2);
+    const availW = Math.max(80, camera.width - (insets.left ?? 0) - margin * 2);
+    const availH = Math.max(80, camera.height - insets.top - insets.bottom - margin * 2);
     const z = Math.min(availW / map.width, availH / map.height);
     return Math.max(2, Math.floor(z * 4) / 4);
   };
@@ -61,8 +61,10 @@ export function createCameraRig(map: VillageMap): CameraRig {
       if (rig.far) {
         camera.zoom = farZoom();
         camera.center = { x: map.width / 2, y: map.height / 2 };
+        camera.offset = { x: (insets.left ?? 0) / 2, y: (insets.top - insets.bottom) / 2 };
         return;
       }
+      camera.offset = { x: 0, y: 0 };
       camera.zoom = TILE;
       // Put the stranger in the middle of the band that the strip and any sheet leave uncovered.
       const bandTop = Math.min(insets.top, 72);

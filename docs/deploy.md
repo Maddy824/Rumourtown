@@ -1,5 +1,7 @@
 # Deploy RumorTown
 
+The current browser game supports local typed stories without an API, Turnstile or OpenRouter. The interpretation service recipe below is optional infrastructure; it is not connected to the current writing form. The existing combined deployment workflow still provisions both apps.
+
 Run commands from the repository root with Node 22, npm, Wrangler (installed by `npm ci`), and the GitHub CLI available. Replace example hostnames with yours.
 
 1. Create a Cloudflare account, add your domain if using custom hostnames, and note the account ID. Create an API token scoped to that account with Workers Scripts edit permission (and Workers Routes edit for custom routes).
@@ -25,7 +27,7 @@ Run commands from the repository root with Node 22, npm, Wrangler (installed by 
    npx --no-install wrangler secret put OPENROUTER_API_KEY --config apps/api/wrangler.toml
    ```
 
-4. Create a Turnstile widget for the game's hostname. The game reads `VITE_API_BASE_URL` and `VITE_TURNSTILE_SITE_KEY` at build time. Set these public settings as GitHub repository variables before the deployment build, and store the widget's secret key in the API. Replace the example URL and site key with your production values. Do not use test keys in production.
+4. Create a Turnstile widget for the game's hostname. The legacy interpreter integration uses `VITE_API_BASE_URL` and `VITE_TURNSTILE_SITE_KEY`; the current writing form ignores them. Set these public settings as GitHub repository variables before the deployment build, and store the widget's secret key in the API. Replace the example URL and site key with your production values. Do not use test keys in production.
 
    ```sh
    open 'https://dash.cloudflare.com/?to=/:account/turnstile'
@@ -44,7 +46,7 @@ Run commands from the repository root with Node 22, npm, Wrangler (installed by 
        VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
    ```
 
-   Vite embeds these public values in the built assets. Changing a repository variable requires a new build and deployment.
+   These values become browser configuration only when the optional interpreter integration is enabled. Changing a repository variable requires a new build and deployment.
 
 5. Generate the ECDSA P-256 keys and pipe only the private JWK into the third API credential. The API exposes the public JWK at `/pubkey`. Keep a private backup according to your usual secret-storage process, then delete the temporary file.
 

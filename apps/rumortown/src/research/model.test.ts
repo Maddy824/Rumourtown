@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cast, castVersion, claims } from '../content/cast/index.js';
 import { villageMap } from '../content/map/index.js';
-import { createRegisteredClaim } from '../sim/registered-claim.js';
+import { createRegisteredClaim, createWrittenClaim } from '../sim/registered-claim.js';
 import { createSimulation } from '../sim/engine.js';
 import { createTalk } from '../sim/talk/index.js';
 import { createMover, createWorld } from '../sim/world/index.js';
@@ -11,7 +11,7 @@ const make: Factory = (seed, interventions, tuning) => createSimulation({ seed, 
   world: { ...createWorld(villageMap), createMover }, talk: createTalk(cast) });
 
 describe('research observations', () => {
-  it.each(['tom-stole-bread', createRegisteredClaim({ kind: 'theft', about: 'ben', object: 'bread', severity: 2, valence: -1 }, new Map(cast.map(d => [d.id, d]))).id])('reconstructs exported inputs, including runtime claims: %s', claimId => {
+  it.each(['tom-stole-bread', createRegisteredClaim({ kind: 'theft', about: 'ben', object: 'bread', severity: 2, valence: -1 }, new Map(cast.map(d => [d.id, d]))).id, createWrittenClaim('Tom keeps honey hidden by the mill', 'tom', 'hoarding', 2, new Map(cast.map(d => [d.id, d]))).id])('reconstructs exported inputs, including runtime claims: %s', claimId => {
     const sim = make(731, [{ tick: 60, listener: 'mira', claimId }]);
     while (sim.tick < 240) sim.step();
     const before = JSON.stringify(sim.snapshot());

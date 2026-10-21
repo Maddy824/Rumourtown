@@ -21,9 +21,7 @@ export const deps: AppDeps = {
     ? createFakeSimulation(seed, interventions)
     : createSimulation({ seed, world, cast, claims, talk: createTalk(cast), interventions, tuning }),
   createRenderer: createStubRenderer,
-  whisperClient: import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_TURNSTILE_SITE_KEY
-    ? { baseUrl: import.meta.env.VITE_API_BASE_URL, siteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY }
-    : undefined,
+
 };
 
 /*

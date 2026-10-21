@@ -29,8 +29,8 @@ export function computeView(map: VillageMap, camera: Camera, out: View): View {
   const zoom = camera.zoom > 0 && Number.isFinite(camera.zoom) ? camera.zoom : TILE;
   const cx = clampAxis(Number.isFinite(camera.center.x) ? camera.center.x : map.width / 2, map.width, camera.width, zoom);
   const cy = clampAxis(Number.isFinite(camera.center.y) ? camera.center.y : map.height / 2, map.height, camera.height, zoom);
-  out.ox = camera.width / 2 - cx * zoom;
-  out.oy = camera.height / 2 - cy * zoom;
+  out.ox = camera.width / 2 - cx * zoom + (camera.offset?.x ?? 0);
+  out.oy = camera.height / 2 - cy * zoom + (camera.offset?.y ?? 0);
   out.zoom = zoom;
   return out;
 }

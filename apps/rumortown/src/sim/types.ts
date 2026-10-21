@@ -423,6 +423,8 @@ export interface SimulationOptions {
 /* ---------------- Rendering ---------------- */
 
 export interface Camera {
+  /** Screen offset when an overview leaves room for an open panel. */
+  offset?: Vec2;
   /** World centre in tiles. */
   center: Vec2;
   /** CSS pixels per tile. */

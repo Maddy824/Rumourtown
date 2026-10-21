@@ -1,8 +1,8 @@
 # Things only the owner can do
 
-In order. Each item is blocked until the previous one is done.
+Local play and writing your own stories need no account or key. The API setup and paid evaluation items below are optional; they do not block the current game. Public hosting and package publication remain separate launch steps.
 
-1. **Play-test locally.** `npm run dev` at the repo root, open the printed address on a laptop and on your phone (same Wi-Fi, use the Network address). Whisper "Tom stole bread" to Mira, run a day at 8×, open tags, toggle "Who told whom", scrub, copy the link, reload it. Write what felt wrong in `agent-tradeoff/reports/playtest.md` so Codex can tune it (give it the file as a task).
+1. **Play-test locally.** `npm run dev` at the repo root, open the printed address on a laptop and on your phone (same Wi-Fi, use the Network address). Whisper "Tom stole bread" to Mira, run a day at 8×, open tags, open "Follow a rumor", scrub, copy the link, reload it. Write what felt wrong in `agent-tradeoff/reports/playtest.md` so Codex can tune it (give it the file as a task).
 2. **Decide the two open design questions**: the village's setting and names (storybook-neutral as now, or a specific place), and the name "RumorTown". Both are data changes; tell Codex which files to change (`apps/rumortown/src/content/cast/`, `index.html` title, README).
 3. **Cloudflare account** (free, no card): create it, then `npx wrangler login`. Generate the signing key: `node --experimental-strip-types apps/api/src/keygen.ts`. Set the API secrets as `docs/deploy.md` lists (`wrangler secret put` for TURNSTILE_SECRET, OPENROUTER_API_KEY, SIGNING_KEY_JWK). Create a Turnstile widget and note its site key.
 4. **OpenRouter**: buy $10 of credit, keep auto top-up off, create two keys with credit limits: `rumortown-live` ($7) and `rumortown-dev` ($2). The live key goes into the Worker secret; the dev key into `apps/api/.dev.vars` as `OPENROUTER_API_KEY=...` (git-ignored) for local evals.

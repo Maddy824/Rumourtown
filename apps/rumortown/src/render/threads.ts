@@ -10,7 +10,7 @@ import { hashString } from './grain.js';
 /** Writes the screen position of a thread end into `out`; false when that villager is not shown. */
 export type ResolveEnd = (id: string, out: { x: number; y: number }) => boolean;
 
-const DRAW_MS = 400;
+const DRAW_MS = 1400;
 const HALF_LIFE_TICKS = 90;
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -118,7 +118,21 @@ export class ThreadPainter {
     ctx.stroke();
     this.twistMarks(ctx, ax, ay, qcx, qcy, ex, ey, width, alpha, u);
 
-    if (p >= 1) this.pin(ctx, bx, by, pinR, alpha, false);
+    if (p >= 1) {
+      this.pin(ctx, bx, by, pinR, alpha, false);
+      // Direction remains legible when motion is reduced or time is paused.
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(Math.atan2(by - cy, bx - cx));
+      ctx.fillStyle = rgba(FELT.thread, alpha);
+      ctx.beginPath();
+      ctx.moveTo(-5 * u, 0);
+      ctx.lineTo(-15 * u, -5 * u);
+      ctx.lineTo(-15 * u, 5 * u);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     else this.needle(ctx, ex, ey, 2 * (1 - p) * (cx - ax) + 2 * p * (bx - cx), 2 * (1 - p) * (cy - ay) + 2 * p * (by - cy), u);
   }
 

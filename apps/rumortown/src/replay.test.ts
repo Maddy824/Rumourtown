@@ -3,7 +3,7 @@ import { cast, claims } from './content/cast/index.js';
 import { villageMap } from './content/map/index.js';
 import { createSimulation } from './sim/engine.js';
 import { createFakeSimulation } from './sim/fake.js';
-import { createRegisteredClaim, readRegisteredClaim } from './sim/registered-claim.js';
+import { createRegisteredClaim, createWrittenClaim, readRegisteredClaim } from './sim/registered-claim.js';
 import { createTalk } from './sim/talk/index.js';
 import { createMover, createWorld } from './sim/world/index.js';
 import type { Intervention } from './sim/types.js';
@@ -116,6 +116,21 @@ describe('integrated village replay', () => {
     runTo(live, 900);
     runTo(replay, 900);
     expect(replay.events(0)).toEqual(live.events(0));
+  });
+
+  it('replays player-written prose through a shared link with the same exact events', () => {
+    const anchor: Intervention = { tick: 0, listener: 'mira', claimId: 'tom-stole-bread' };
+    const live = make([anchor]);
+    const claim = createWrittenClaim('Tom keeps a secret stash of honey behind the mill.', 'tom', 'hoarding', 2, live.cast);
+    live.registerClaim(claim);
+    expect(live.whisper('mira', claim.id)).toBe(true);
+    const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v2', interventions: live.interventions() }))!;
+    const replay = make(shared.interventions);
+    runTo(live, 900); runTo(replay, 900);
+    expect(replay.claims.get(claim.id)?.text).toBe(claim.text);
+    expect(replay.events(0)).toEqual(live.events(0));
+    expect(replay.events(0).some(e => e.kind === 'line' && e.claimId === claim.id)).toBe(true);
+    expect(replay.claims.get(claim.id)?.contradicts).toEqual([]);
   });
 
   it('keeps the stand-in replay and evening card available', () => {

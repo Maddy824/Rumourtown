@@ -27,12 +27,12 @@ export function createStubRenderer(canvas: HTMLCanvasElement, map: VillageMap): 
   let dpr = 1;
 
   const project = (pos: Vec2, cam: Camera): { x: number; y: number } => ({
-    x: (pos.x - cam.center.x) * cam.zoom + cam.width / 2,
-    y: (pos.y - cam.center.y) * cam.zoom + cam.height / 2,
+    x: (pos.x - cam.center.x) * cam.zoom + cam.width / 2 + (cam.offset?.x ?? 0),
+    y: (pos.y - cam.center.y) * cam.zoom + cam.height / 2 + (cam.offset?.y ?? 0),
   });
   const unproject = (px: number, py: number, cam: Camera): Vec2 => ({
-    x: (px - cam.width / 2) / cam.zoom + cam.center.x,
-    y: (py - cam.height / 2) / cam.zoom + cam.center.y,
+    x: (px - cam.width / 2 - (cam.offset?.x ?? 0)) / cam.zoom + cam.center.x,
+    y: (py - cam.height / 2 - (cam.offset?.y ?? 0)) / cam.zoom + cam.center.y,
   });
 
   const lerpPos = (prev: WorldSnapshot | null, v: VillagerView, i: number, alpha: number): Vec2 => {

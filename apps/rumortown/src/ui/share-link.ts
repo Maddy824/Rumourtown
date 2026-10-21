@@ -68,7 +68,7 @@ function validate(raw: unknown): ShareState | null {
     const { tick, listener, claimId } = i;
     if (typeof tick !== 'number' || !Number.isInteger(tick) || tick < 0 || tick > MAX_TICK) return null;
     if (typeof listener !== 'string' || !ID.test(listener)) return null;
-    if (typeof claimId !== 'string' || !ID.test(claimId)) return null;
+    if (typeof claimId !== 'string' || !(ID.test(claimId) || /^written_[A-Za-z0-9_-]{1,1024}$/.test(claimId))) return null;
     interventions.push({ tick, listener, claimId });
   }
   interventions.sort((a, b) => a.tick - b.tick);

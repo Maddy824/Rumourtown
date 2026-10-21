@@ -2,7 +2,7 @@
 
 RumorTown is a browser game about a village of 24 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
 
-Whisper to Mira that Tom stole bread, turn on “Who told whom”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Open “Explore” to travel by paths, cross the river at the bridge and watch conversations around the village. Hold WASD or an arrow key to walk. Each villager has a private worry, an ambition and social motives. Rewind the timeline or share the run with a link.
+Whisper to Mira that Tom stole bread, open “Follow a rumor”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Open “Explore” to travel by paths, cross the river at the bridge and watch conversations around the village. Hold WASD or an arrow key to walk. Each villager has a private worry, an ambition and social motives. Rewind the timeline or share the run with a link.
 
 The “Notebook” exports synthetic observations as JSON/CSV and compares three-day runs across one or five seeds with an assumption removed. See the [research model, evidence and limitations](docs/research-model.md).
 
@@ -22,9 +22,9 @@ npm run build
 npm run bench
 ```
 
-Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. The ready-made rumor menu works without an interpretation service. The optional Worker requires separate Cloudflare and OpenRouter configuration.
+Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. Both player-written whispers and the ready-made rumor menu work locally. Write up to 100 characters, choose the subject, story category and weight, then follow its tellings one at a time. The original words stay in replay links and research exports.
 
-The default game runs the real village simulation. `?fake=1` opens the UI fixture; `?renderer=stub` selects the plain development renderer. No account or API key is needed to play with ready-made claims.
+The default game runs the real village simulation. `?fake=1` opens the UI fixture; `?renderer=stub` selects the plain development renderer. No account or API key is needed to play or write your own stories.
 
 ## Repository map
 
@@ -51,7 +51,7 @@ These eight rules describe the main belief and gossip mechanisms. “Measured di
 | Bad news is more likely to be passed on. | Negative content gets sharing odds of `1.5`, represented by a `ln(1.5)` score bonus. Confidence, closeness and whether the listener already knows also affect telling. Measured sharing effect; tuned score mapping. Acerbi 2022; Dores Cruz et al. 2021. |
 | Trust falls faster than it recovers. | Negative trust adjustments count twice; exposure can impose a lasting ceiling of `0.75` of full trust. Measured direction; tuned multiplier and ceiling. Schweitzer 2006. |
 
-Dialogue is authored and selected by rules. A language model only interprets typed text as a structured claim; it does not write live dialogue or choose villagers' actions. Inspection exposes remembered sources, moods and reasons for decisions.
+Dialogue is authored and selected by rules. Player-written text uses the subject, category and weight you select; the game does not infer its meaning. The optional interpretation Worker remains a separate service and is not called by the current writing form. Inspection exposes remembered sources, moods and reasons for decisions.
 
 ## The $10 guarantee
 

@@ -1,11 +1,8 @@
 /**
- * The whisper sheet, opened from the postbox: who is within two tiles, a menu of ready-made claims grouped
- * by who they are about, and optional verified typed claims. Time holds while it is open.
+ * The whisper sheet, opened from the postbox: who is within two tiles, player-written stories and optional ready-made claims. Time holds while it is open.
  */
 import type { ClaimId } from 'rumormind';
-import { loadTurnstile, type TurnstileClient } from '../net/turnstile.js';
-import { createWhisperFlow } from '../net/whisperFlow.js';
-import { createRegisteredClaim } from '../sim/registered-claim.js';
+import { createWrittenClaim, MAX_WRITTEN_TEXT } from '../sim/registered-claim.js';
 import type { GameClaim, Simulation, VillagerId, VillagerView, WorldSnapshot } from '../sim/types.js';
 import { conceal, h, reveal } from './dom.js';
 import { faceImg } from './faces.js';
@@ -25,7 +22,6 @@ export interface WhisperContext {
   whisper: (listener: VillagerId, claimId: ClaimId) => boolean;
   walkTo: (id: VillagerId) => void;
   onOpenChange: (open: boolean) => void;
-  client?: { baseUrl: string; siteKey: string; castVersion: string };
 }
 
 export interface WhisperSheet {
@@ -64,51 +60,34 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   let listener: VillagerId | null = null;
   let claimId: ClaimId | null = null;
   let ownText = '';
-  let busy = false;
-  let session = 0;
-  let turnstile: TurnstileClient | undefined;
-  const challenge = h('div');
-  form.appendChild(challenge);
+  let about = '';
+  let kind: GameClaim['kind'] = 'lying';
+  let severity: GameClaim['severity'] = 2;
 
   const update = (): void => {
-    sendBtn.disabled = busy || !(listener && (claimId || (ctx.client && ownText.trim())));
-    content.querySelectorAll<HTMLInputElement>('input').forEach(input => {
-      input.disabled = busy || (input.type === 'text' && !ctx.client);
-    });
+    sendBtn.disabled = !(listener && (claimId || (ownText.trim() && about && about !== listener)));
   };
 
-  form.addEventListener('submit', async (ev) => {
+  form.addEventListener('submit', (ev) => {
     ev.preventDefault();
-    if (busy || !listener) return;
+    if (!listener) return;
     const to = listener;
     const sim = ctx.sim();
     const name = sim.cast.get(to)?.name ?? 'They';
     let chosen = claimId;
-    if (ctx.client && ownText.trim()) {
-      const currentSession = session;
-      busy = true;
-      update();
-      const client = loadTurnstile(ctx.client.siteKey, challenge);
-      turnstile = client;
-      const flow = createWhisperFlow({
-        ...ctx.client, turnstile: client,
-        onStateChange: (state) => {
-          if (session !== currentSession) return;
-          if (state.status === 'checking') feedback.textContent = 'Checking before your whisper…';
-          else if (state.status === 'asking') feedback.textContent = 'Finding the village story…';
-          else if (state.status === 'resting') feedback.textContent = state.line;
-        },
-      });
-      const result = await flow.start(ownText);
-      client.destroy();
-      if (session !== currentSession || !open || sim !== ctx.sim()) return;
-      turnstile = undefined;
-      busy = false;
-      update();
-      if (!result.ok || !('claim' in result)) return;
-      const claim = createRegisteredClaim(result.claim, sim.cast);
-      sim.registerClaim(claim);
-      chosen = claim.id;
+    if (ownText.trim()) {
+      if (about === to) {
+        feedback.textContent = 'Choose a listener other than the person your story is about.';
+        return;
+      }
+      try {
+        const claim = createWrittenClaim(ownText, about, kind, severity, sim.cast);
+        sim.registerClaim(claim);
+        chosen = claim.id;
+      } catch {
+        feedback.textContent = `Use one sentence of up to ${MAX_WRITTEN_TEXT} characters and choose its subject.`;
+        return;
+      }
     }
     if (!chosen) return;
     if (sim.claims.get(chosen)?.about === to) {
@@ -134,11 +113,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   };
 
   const build = (preferred?: VillagerId): void => {
-    session += 1;
-    turnstile?.destroy();
-    turnstile = undefined;
     ownText = '';
-    busy = false;
     const sim = ctx.sim();
     const snap = ctx.snapshot();
     const near = inReach(snap);
@@ -173,7 +148,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
           const input = h('input', { type: 'radio', name: 'rt-listener', value: v.id, class: 'sr-only', checked: v.id === listener });
           input.addEventListener('change', () => {
             listener = v.id;
-            update();
+            describe();
           });
           return h('label', { class: 'who' }, input,
             h('span', { class: 'who-card' }, faceImg(v.id, v.look, 34),
@@ -181,7 +156,11 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         })));
 
     const claims = [...sim.claims.values()];
-    claimId = suggest(near, listener, claims);
+    const suggestion = suggest(near, listener, claims);
+    claimId = null;
+    about = sim.claims.get(suggestion ?? '')?.about ?? [...sim.cast.keys()].find(id => id !== listener) ?? '';
+    kind = 'lying';
+    severity = 2;
     const order = new Map<string, number>();
     near.forEach((v, i) => order.set(v.id, i));
     let i = near.length;
@@ -207,9 +186,9 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
             input.addEventListener('change', () => {
               claimId = c.id;
               ownText = '';
-              const typed = content.querySelector<HTMLInputElement>('.own-claim input');
+              const typed = content.querySelector<HTMLTextAreaElement>('.own-claim textarea');
               if (typed) typed.value = '';
-              update();
+              describe();
             });
             const effect = c.valence < 0 ? `Hurts ${object}` : c.valence > 0 ? `Helps ${object}` : null;
             return h('label', { class: 'claim', 'data-valence': String(c.valence) }, input,
@@ -222,16 +201,45 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
           }));
       }));
 
-    const typed = h('input', { type: 'text', disabled: !ctx.client, maxlength: 140 });
+    const typed = h('textarea', { id: 'rt-own-story', rows: 3, maxlength: MAX_WRITTEN_TEXT,
+      placeholder: 'Tom keeps a secret stash of honey behind the mill.', 'aria-describedby': 'rt-writing-note' });
+    const aboutSelect = h('select', { 'aria-label': 'Who is your story about?' },
+      [...sim.cast.values()].map(d => h('option', { value: d.id, selected: d.id === about }, d.name)));
+    const meanings: [GameClaim['kind'], string][] = [
+      ['lying', 'A lie'], ['theft', 'Theft'], ['cheating', 'Cheating'], ['romance', 'A secret romance'],
+      ['broken-promise', 'A broken promise'], ['insult', 'An insult'], ['hoarding', 'Hoarding'],
+      ['shirking', 'Avoiding work'], ['boasting', 'Boasting'], ['kindness', 'Kindness'],
+      ['paid-debt', 'Repaying a debt'], ['nursed', 'Caring for someone'],
+    ];
+    const meaningSelect = h('select', { 'aria-label': 'What kind of story?' },
+      meanings.map(([value, label]) => h('option', { value }, label)));
+    const weightSelect = h('select', { 'aria-label': 'How much does it matter?' },
+      h('option', { value: '1' }, 'Small'), h('option', { value: '2', selected: true }, 'Serious'), h('option', { value: '3' }, 'Very serious'));
+    const preview = h('p', { class: 'sheet-note', id: 'rt-writing-note', role: 'status' });
+    const describe = (): void => {
+      const picked = claimId ? sim.claims.get(claimId) : undefined;
+      const helps = picked ? picked.valence > 0 : ['kindness', 'paid-debt', 'nursed'].includes(kind);
+      preview.textContent = picked ? `Selected: ${picked.text}` : `${ownText.length}/${MAX_WRITTEN_TEXT} characters. ${helps ? 'Helps' : 'Hurts'} ${sim.cast.get(about)?.name ?? 'the subject'}’s reputation. Your words stay in the story and its shared link.`;
+      feedback.textContent = about === listener && ownText.trim() ? 'Pick someone else to hear this story.' : '';
+      update();
+    };
+    aboutSelect.addEventListener('change', () => { about = aboutSelect.value; describe(); });
+    meaningSelect.addEventListener('change', () => { kind = meaningSelect.value as GameClaim['kind']; describe(); });
+    weightSelect.addEventListener('change', () => { severity = Number(weightSelect.value) as GameClaim['severity']; describe(); });
     typed.addEventListener('input', () => {
       ownText = typed.value;
       claimId = null;
       what.querySelectorAll<HTMLInputElement>('input').forEach((input) => { input.checked = false; });
-      update();
+      describe();
     });
-    content.replaceChildren(who, what, h('label', { class: 'own-claim' },
-      h('span', null, ctx.client ? 'Type your own' : 'Type your own (coming later)'), typed),
-      ...(ctx.client ? [h('p', { class: 'sheet-note' }, 'Your typed words go to an AI service to be understood, then are discarded.')] : []));
+    const suggestions = h('details', { class: 'whisper-suggestions' }, h('summary', null, 'Or choose a village story'), what);
+    content.replaceChildren(who,
+      h('label', { class: 'own-claim', for: 'rt-own-story' }, h('span', null, 'Write your whisper'), typed),
+      h('p', { class: 'sheet-note' }, 'Write it in your own words. Choose how the villagers should treat it.'),
+      h('div', { class: 'story-meaning' },
+        h('label', null, 'About', aboutSelect), h('label', null, 'Kind of story', meaningSelect), h('label', null, 'Weight', weightSelect)),
+      preview, suggestions);
+    describe();
     update();
   };
 
@@ -245,8 +253,8 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         ctx.layers.open({ id: 'whisper', el, modal: true, close: () => api.close() }, opts.opener);
         ctx.onOpenChange(true);
       }
-      // Start at the top of the form: who, then what. With nobody in reach, the first walk-to button.
-      const target = ['.who input:checked', '.claim input:checked', '.walk-to', '.close']
+      // Start with writing; with nobody in reach, offer the first walk-to button.
+      const target = ['.own-claim textarea', '.walk-to', '.close']
         .map((sel) => el.querySelector<HTMLElement>(sel))
         .find((x): x is HTMLElement => x !== null);
       target?.focus({ preventScroll: true });
@@ -254,13 +262,9 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     },
     close() {
       if (!open) return;
-      session += 1;
-      turnstile?.destroy();
-      turnstile = undefined;
-      busy = false;
       open = false;
       ownText = '';
-      const typed = content.querySelector<HTMLInputElement>('.own-claim input');
+      const typed = content.querySelector<HTMLTextAreaElement>('.own-claim textarea');
       if (typed) typed.value = '';
       conceal(el, ctx.reducedMotion());
       ctx.layers.closed('whisper');
@@ -268,7 +272,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     },
     isOpen: () => open,
     cover: () => (open && ctx.isPhone() ? el.offsetHeight : 0),
-    destroy() { session += 1; turnstile?.destroy(); },
+    destroy() { api.close(); },
   };
   return api;
 }

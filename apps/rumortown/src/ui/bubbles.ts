@@ -1,5 +1,5 @@
 /**
- * Speech bubbles as DOM paper tags, positioned every frame from world coordinates. At most six are shown,
+ * Speech bubbles as DOM paper tags, positioned every frame from world coordinates. At most two are shown,
  * chosen by nearness to the stranger and by tier. New lines are mirrored, throttled, to a polite live region.
  */
 import type { Camera, Vec2, VillagerId, WorldSnapshot } from '../sim/types.js';
@@ -14,6 +14,7 @@ export interface BubbleFrame {
   selected: VillagerId | null;
   far: boolean;
   compact: boolean;
+  muted?: boolean;
   /** Bubbles may not rise above this line (the top strip) or sit below this one (the bottom controls). */
   topLimit: number;
   bottomLimit: number;
@@ -91,9 +92,9 @@ function fit(b: Bubble): void {
   b.h = b.el.offsetHeight;
 }
 
-const MAX_BUBBLES = 6;
+const MAX_BUBBLES = 2;
 /** A bubble stays up at least this long, so fast speeds stay readable. */
-const MIN_SHOW_MS = 1600;
+const MIN_SHOW_MS = 3200;
 const ANNOUNCE_EVERY_MS = 3500;
 
 export interface BubbleLayer {
@@ -134,6 +135,12 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
       shown.clear();
     },
     update(f) {
+      if (f.muted) {
+        for (const b of shown.values()) b.el.remove();
+        shown.clear();
+        pending = null;
+        return;
+      }
       layer.dataset.far = f.far ? 'true' : 'false';
       if (lastFar !== f.far) {
         lastFar = f.far;
@@ -142,8 +149,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
       const candidates: { id: VillagerId; name: string; text: string; x: number; y: number; foot: number; score: number }[] = [];
       for (const v of f.cur.villagers) {
         const existing = shown.get(v.id);
-        let text = v.bubble?.text ?? null;
-        if (!text && existing && f.now - existing.shownAt < MIN_SHOW_MS) text = existing.current;
+        const text = existing && f.now - existing.shownAt < MIN_SHOW_MS ? existing.current : v.bubble?.text ?? null;
         if (!text) continue;
         const pos = f.positions.get(v.id) ?? v.pos;
         const p = f.project(pos);
@@ -158,7 +164,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         candidates.push({ id: v.id, name: v.name, text, x: p.x, y: headY, foot, score });
       }
       candidates.sort((a, b) => a.score - b.score);
-      const cap = f.far ? (f.compact ? 2 : 4) : MAX_BUBBLES;
+      const cap = f.compact || f.selected ? 1 : MAX_BUBBLES;
       const chosen = candidates.slice(0, cap);
       const keep = new Set(chosen.map((c) => c.id));
       for (const [id, b] of shown) {

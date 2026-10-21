@@ -44,5 +44,7 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 07 | Accessibility pass | done; keyboard/mobile Chrome and contrast verified |
 | 08 | Launch copy | done; titles, post, clip storyboard and GIF plan prepared |
 | 09 | Interactive village and research observations | done; live atlas, travel, richer cast, river, exports and comparisons verified |
+| 10 | Readable conversations, typed stories and focused rumor trails | done; local writing, exact replay, step controls and phone layout verified |
+| 11 | Expand the world and cast | in progress; requested after task 10 |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.

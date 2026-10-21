@@ -6,6 +6,14 @@ const map: VillageMap = { width: 48, height: 32, tiles: new Array(48 * 32).fill(
 const cam = (x: number, y: number, zoom = TILE, width = 360, height = 640): Camera => ({ center: { x, y }, zoom, width, height });
 
 describe('camera', () => {
+  it('keeps panel-offset rendering and picking in agreement', () => {
+    const map = { width: 40, height: 30 } as VillageMap;
+    const cam = { center: { x: 20, y: 15 }, width: 1000, height: 800, zoom: 10, offset: { x: 160, y: -100 } };
+    const pos = { x: 7.5, y: 9.5 };
+    const p = project(map, pos, cam);
+    expect(p).toEqual({ x: 535, y: 245 });
+    expect(unproject(map, p.x, p.y, cam)).toEqual(pos);
+  });
   it('puts the centre tile in the middle of the viewport', () => {
     const p = project(map, { x: 20, y: 15 }, cam(20, 15));
     expect(p.x).toBeCloseTo(180);
