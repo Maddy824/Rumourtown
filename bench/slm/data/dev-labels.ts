@@ -28,6 +28,12 @@ export const cases: Case[] = [
   { reply: 'Ada has been ill all week and Tom looked after her.', epistemic: false },
   { reply: 'Nobody has told me anything about Jonah.', epistemic: true, abstained: true },
   { reply: 'Rosa and Jonah are getting married in spring.', epistemic: false },
+  // Out of character: the reply talks about the conversation instead of speaking in it.
+  { reply: 'Hmm, the user is asking about Tom. Tom stole bread from the bakery.', epistemic: false },
+  { reply: 'Let me recall my current beliefs. I heard Tom stole bread from the bakery.', epistemic: false },
+  { reply: "As an AI I can't gossip, but I heard Tom stole bread from the bakery.", epistemic: false },
+  // In character mentions that must stay allowed.
+  { reply: 'Let us walk to the inn, the player of the fiddle is there tonight.', epistemic: true },
   // Known-hard cases: measured, not asserted. These define the verifier's own limits.
   { reply: "Ivo borrowed Ben's tools without asking.", epistemic: false, hard: 'role reversal' },
   { reply: 'The baker lost a loaf and Tom was seen near the shelf.', epistemic: false, hard: 'paraphrase with role words' },

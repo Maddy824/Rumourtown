@@ -6,7 +6,7 @@
  */
 
 export interface FactRef { id: string; text: string; confidence: number; band: 'sure' | 'fairly sure' | 'half' | 'doubt'; chain: string[]; trueInWorld: boolean }
-export type Label = 'supported' | 'contradicts' | 'unknown-to-speaker' | 'chatter';
+export type Label = 'supported' | 'contradicts' | 'unknown-to-speaker' | 'chatter' | 'out-of-character';
 export interface Verdict {
   sentences: { text: string; label: Label; factId?: string; score?: number }[];
   epistemicFaithful: boolean;
@@ -24,6 +24,8 @@ const HEDGE = /\b(?:maybe|might|perhaps|possibly|i heard|i've heard|they say|peo
 const CERTAIN = /\b(?:definitely|for sure|certainly|i know|i saw|no doubt|without a doubt|everyone knows|it'?s true|absolutely)\b/i;
 const NEGATE = /\b(?:not|never|no|didn'?t|doesn'?t|isn'?t|wasn'?t|nothing|nobody|innocent)\b/i;
 const ABSTAIN = /\b(?:haven'?t heard|have not heard|don'?t know|do not know|no idea|can'?t say|cannot say|nobody(?:'s| has) told me|not heard anything|wouldn'?t know)\b/i;
+// Talk about the conversation itself: the user, the prompt, the belief list, being an AI, or thinking aloud.
+const META = /\b(?:the user|the player(?! of)|as an ai|an ai\b|language model|current beliefs|my beliefs (?:list|say|above)|beliefs (?:above|below|list)|the (?:system )?prompt|instructions? (?:say|tell|above)|role-?play|in character|let me (?:think|recall|break this down|see)|okay, let'?s see|i need to be careful)\b/i;
 const SOURCE = /\b([A-Z][a-z]+)\s+(?:told me|said|says|mentioned|swears)\b|\b(?:heard (?:it )?from|according to)\s+([A-Z][a-z]+)\b/;
 
 /** Everyday synonyms folded to one word, so slang matches the believed fact ("pinched a loaf" = "stole bread"). */
@@ -93,6 +95,7 @@ export async function verify(reply: string, facts: FactRef[], unknownWorldFacts:
   const out: Verdict['sentences'] = [];
   let calibrated = true, provenance: boolean | null = null;
   for (const text of sentences(reply)) {
+    if (META.test(text)) { out.push({ text, label: 'out-of-character' }); continue; }
     // The named source ("Mira told me…") is who the speaker heard it from, not who the claim is about.
     const source = SOURCE.exec(text);
     const sourceName = source ? (source[1] ?? source[2])!.toLowerCase() : null;
@@ -125,7 +128,7 @@ export async function verify(reply: string, facts: FactRef[], unknownWorldFacts:
     const leak = await bestMatch(claim, unknownWorldFacts, names, castNames, options.embed);
     out.push({ text, label: 'unknown-to-speaker', score: leak.index >= 0 ? +leak.score.toFixed(3) : undefined });
   }
-  const bad = out.some(s => s.label === 'contradicts' || s.label === 'unknown-to-speaker');
+  const bad = out.some(s => s.label === 'contradicts' || s.label === 'unknown-to-speaker' || s.label === 'out-of-character');
   const supportedFacts = out.filter(s => s.label === 'supported').map(s => facts.find(f => f.id === s.factId)!);
   return {
     sentences: out,
