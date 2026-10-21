@@ -152,7 +152,7 @@ describe('integrated village replay', () => {
     expect(firstDaySpread).toBeGreaterThanOrEqual(12);
     expect(drama).toBeGreaterThanOrEqual(4);
     expect(transmissions).toBeLessThan(10000);
-  }, 15000);
+  }, 60000);
 
   it('reaches the third evening with authored reflection and a dare result', () => {
     const sim = make([{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }]);

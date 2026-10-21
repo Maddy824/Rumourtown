@@ -6,6 +6,8 @@ Whisper to Mira that Tom stole bread, turn on “Who told whom”, and watch the
 
 Built by [Madhav Sunil](https://github.com/Maddy824).
 
+![RumorTown's felt village, with villagers talking beside the bakery, fields and river.](docs/images/village.png)
+
 ## Run locally
 
 From the repository root:

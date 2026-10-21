@@ -1,5 +1,9 @@
 {
   "name": "rumortown-monorepo",
+  "description": "A village of 24 people who gossip, with a deterministic social simulation and a reusable TypeScript belief engine.",
+  "author": "Madhav Sunil",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/Maddy824/Rumourtown.git" },
   "private": true,
   "type": "module",
   "workspaces": [
