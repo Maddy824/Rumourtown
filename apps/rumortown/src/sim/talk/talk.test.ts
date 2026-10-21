@@ -536,6 +536,10 @@ describe('filling lines', () => {
     expect(render('dag-skims-tolls', 'dag', 'ben')).toBe('I keep a cut of the bridge tolls for myself.');
     expect(render('dag-skims-tolls', 'ben', 'dag')).toBe('You keep a cut of the bridge tolls for yourself.');
     expect(render('hal-lied-about-wheel', 'hal', 'ivo')).toBe('I lied about your iron to get out of paying for my wheel.');
+    expect(render('ivo-sold-bad-iron', 'ivo', 'hal')).toBe('I put cracked iron on your cart wheel and charged you full price.');
+    expect(render('ivo-sold-bad-iron', 'hal', 'ivo')).toBe('You put cracked iron on my cart wheel and charged me full price.');
+    expect(render('sol-secret-sweetheart', 'greta', 'sol')).toBe('You meet a sweetheart behind the haystacks while I work the south field.');
+    expect(render('sol-secret-sweetheart', 'mira', 'greta')).toBe('Sol meets a sweetheart behind the haystacks while you work the south field.');
     expect(render('mira-wont-pay-pim', 'mira', 'pim')).toBe('I owe you money and have no intention of paying.');
     expect(render('rosa-shirks-the-inn', 'rosa', 'tess')).toBe('I sneak off every afternoon and leave you to run the inn.');
     expect(render('wren-skips-work', 'wren', 'mira')).toBe('I skip off from the bakery whenever your back is turned.');
@@ -675,8 +679,9 @@ describe('pickTopic', () => {
     expect(picks.filter((p) => p === 'bread').length / picks.length).toBeGreaterThan(0.4);
   });
 
-  it('reads minutes before 07:00 as minutes since the day began', () => {
+  it('keeps minutes before 07:00 in the morning rather than adding another seven hours', () => {
     expect(TOPICS_BY_BAND.morning).toContain(talk.pickTopic(villager('sol'), villager('hal'), 30, createRng(1)));
+    expect(TOPICS_BY_BAND.morning).toContain(talk.pickTopic(villager('sol'), villager('hal'), 390, () => 0));
   });
 });
 

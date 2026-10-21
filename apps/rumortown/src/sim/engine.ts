@@ -17,7 +17,7 @@ import { currentEntryIndex, entryOf, onArrived, pathFrom, placeOf, updateSchedul
 import { whisper } from './agents/stranger.js';
 import { decide } from './agents/utility.js';
 import { tickWitnessing } from './agents/witness.js';
-import { readRegisteredClaim } from './registered-claim.js';
+import { matchesAuthoredFact, readRegisteredClaim } from './registered-claim.js';
 import {
   DAY_START_MINUTE,
   MINUTES_PER_DAY,
@@ -158,7 +158,7 @@ export function createSimulation(opts: SimulationOptions): Simulation {
     if (claims.has(claim.id)) return;
     const alternatives = claimList.filter((c) => {
       const harmful = c.alternativeOf ? claims.get(c.alternativeOf) : undefined;
-      return c.valence > 0 && c.about === claim.about && harmful?.kind === claim.kind;
+      return c.valence > 0 && harmful !== undefined && matchesAuthoredFact(claim, harmful);
     });
     const added = { ...claim, contradicts: alternatives.map((c) => c.id) };
     claims.set(added.id, added);
@@ -209,12 +209,11 @@ export function createSimulation(opts: SimulationOptions): Simulation {
       if ((ctx.tick + a.index) % DECISION_PERIOD === 0 && a.conversation === null && !isAsleep(a)) decide(ctx, a);
     }
     // Movement, with light separation from everyone else.
-    const playerPos = ctx.player.mover.pos;
     for (const a of agents) {
       if (a.conversation !== null || !a.mover.moving) continue;
       const others: Vec2[] = [];
       for (const o of agents) if (o !== a) others.push(o.mover.pos);
-      others.push(playerPos);
+      // Player walks are not part of a share link, so they cannot alter NPC paths or decisions.
       a.mover.update(1, VILLAGER_SPEED, others);
       if (a.mover.arrived()) onArrived(a);
     }

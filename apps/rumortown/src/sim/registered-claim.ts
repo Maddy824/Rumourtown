@@ -10,6 +10,12 @@ const kinds: readonly string[] = [
 const objects = ['bread', 'loaf', 'flour', 'sack', 'tools', 'coins', 'letter', 'ring', 'wool', 'cloth',
   'honey', 'wheel', 'boat', 'fish', 'eggs', 'milk', 'candle', 'book', 'cart', 'key'];
 
+/** A recorded act can only support a typed version of the same authored fact. */
+export function matchesAuthoredFact(claim: GameClaim, fact: GameClaim): boolean {
+  return claim.about === fact.about && claim.kind === fact.kind && claim.object === fact.object &&
+    (claim.target === undefined || claim.target === fact.target);
+}
+
 export function createRegisteredClaim(fields: ClaimFields, cast: ReadonlyMap<VillagerId, Dossier>): GameClaim {
   const subject = cast.get(fields.about);
   if (!subject || (fields.target !== undefined && (!cast.has(fields.target) || fields.target === fields.about))) {

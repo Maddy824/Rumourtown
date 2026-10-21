@@ -19,6 +19,18 @@ const runTo = (sim: ReturnType<typeof make>, tick: number): void => {
 };
 
 describe('integrated village replay', () => {
+  it('keeps NPC events identical when the player follows a different walking path', () => {
+    const idle = make(), walking = make();
+    for (let t = 0; t < 900; t++) {
+      if (t % 3 === 0) {
+        const mira = walking.snapshot().villagers.find(v => v.id === 'mira')!;
+        walking.movePlayer({ x: Math.floor(mira.pos.x), y: Math.floor(mira.pos.y) });
+      }
+      idle.step(); walking.step();
+    }
+    expect(walking.snapshot().player.pos).not.toEqual(idle.snapshot().player.pos);
+    expect(walking.events(0)).toEqual(idle.events(0));
+  });
   it('pins seed 731 with one whisper at tick 60 after 900 ticks', async () => {
     const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v1',
       interventions: [{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }] }))!;
@@ -35,7 +47,7 @@ describe('integrated village replay', () => {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(sim.events(0))));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
     console.log(`Replay SHA-256: ${hash}`);
-    expect(hash).toBe('37969fab5d382e233387147d50a03731979d309b36bb98086651fe89b2cc1b6b');
+    expect(hash).toBe('2ce0d00d4593488c7aee1af1a2a4ce824f571ffc9a468eaad356bf8734d84159');
     const replay = make(state.interventions);
     runTo(replay, 900);
     expect(replay.events(0)).toEqual(sim.events(0));
@@ -55,6 +67,9 @@ describe('integrated village replay', () => {
     sim.registerClaim(unrelated);
     expect(sim.claims.get(unrelated.id)?.contradicts).toEqual([]);
     expect(JSON.stringify(claims)).toBe(original);
+    const different = createRegisteredClaim({ kind: 'theft', about: 'tom', target: 'jonah', object: 'coins', severity: 2, valence: -1 }, sim.cast);
+    sim.registerClaim(different);
+    expect(sim.claims.get(different.id)?.contradicts).toEqual([]);
   });
 
   it('restores typed claims only at their whisper tick and retains them through a share link', () => {
@@ -109,6 +124,34 @@ describe('integrated village replay', () => {
     expect(sim.interventions()).toEqual([{ tick: 60, listener: 'mira', claimId: 'stole' }]);
     expect(sim.events(900).some((e) => e.kind === 'day-end')).toBe(true);
   });
+
+  it('rejects a whisper about its listener without recording an intervention', () => {
+    const sim = make();
+    const before = sim.events(0);
+    expect(sim.whisper('tom', 'tom-stole-bread')).toBe(false);
+    expect(sim.interventions()).toEqual([]);
+    expect(sim.events(0)).toEqual(before);
+    const replay = make([{ tick: 0, listener: 'tom', claimId: 'tom-stole-bread' }]);
+    expect(replay.interventions()).toEqual([]);
+    expect(replay.events(0).some(e => e.kind === 'whisper')).toBe(false);
+  });
+
+  it('lets an ordinary opening rumor travel across a fixed seed sample without endless fresh-news repeats', () => {
+    let firstDaySpread = 0, drama = 0, transmissions = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const sim = createSimulation({ seed, cast, claims, world: { ...createWorld(villageMap), createMover },
+        talk: createTalk(cast), interventions: [{ tick: 130, listener: 'mira', claimId: 'tom-stole-bread' }] });
+      runTo(sim, 2700);
+      const lines = sim.events(0).filter(e => e.kind === 'line').filter(e => e.claimId === 'tom-stole-bread');
+      const passing = lines.filter(e => ['gossip', 'warn', 'confide', 'agree'].includes(e.act));
+      if (passing.some(e => e.tick <= 900)) firstDaySpread++;
+      if (lines.some(e => ['accuse', 'defend'].includes(e.act))) drama++;
+      transmissions += passing.length;
+    }
+    expect(firstDaySpread).toBeGreaterThanOrEqual(12);
+    expect(drama).toBeGreaterThanOrEqual(4);
+    expect(transmissions).toBeLessThan(1000);
+  }, 15000);
 
   it('reaches the third evening with authored reflection and a dare result', () => {
     const sim = make([{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }]);

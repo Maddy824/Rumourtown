@@ -34,7 +34,7 @@ export const STRANGER: Dossier = {
 export function whisper(ctx: Ctx, listenerId: VillagerId, claimId: ClaimId, force: boolean): boolean {
   const listener = agentOf(ctx, listenerId);
   const claim = ctx.claims.get(claimId);
-  if (!listener || !claim) return false;
+  if (!listener || !claim || claim.about === listenerId) return false;
   const player = ctx.player.mover;
   if (!force && ctx.world.distance(player.pos, listener.mover.pos) > WHISPER_RANGE) return false;
   if (force) {

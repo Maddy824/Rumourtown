@@ -19,6 +19,7 @@ import { reflect, remember } from './reflection.js';
 import { initRelationships } from './relations.js';
 import { onArrived, updateSchedule } from './schedule.js';
 import { takeSide } from './sideTaking.js';
+import { tickWitnessing } from './witness.js';
 import { accusationOpen, confrontReason, tellingFor } from './tellings.js';
 
 const harmful: GameClaim = { id: 'stole', about: 'tom', kind: 'theft', valence: -1, severity: 2, target: 'mira', text: 'Tom stole bread', contradicts: ['truth'] };
@@ -358,6 +359,14 @@ function arrangeEnding(ctx: Ctx, claim: GameClaim, ending: Ending): void {
 }
 
 describe('endings over the introduced set', () => {
+  it('exposure outranks a story dying at its first listener', () => {
+    const ctx = fixture();
+    const sc = introduce(ctx, harmful, ['mira']);
+    hearFromStranger(ctx, agent(ctx, 'mira'), harmful);
+    seeClaim(ctx, agent(ctx, 'mira'), truth, 1);
+    expect(sc.trustLost).toBe(true);
+    expect(judgeDay(ctx).ending).toBe('exposed');
+  });
   it.each(endings)('reports %s for a claim with that outcome', (ending) => {
     const ctx = fixture(); arrangeEnding(ctx, harmful, ending);
     const verdict = judgeDay(ctx); expect(verdict.ending).toBe(ending); expect(verdict.summary).toContain('Tom');
@@ -380,6 +389,52 @@ describe('endings over the introduced set', () => {
     ctx.accusations[0]!.forgiven = true;
     expect(judgeDay(ctx).summary).toContain('they made up');
   });
+});
+
+it('keeps a delayed bystander response attached to its original accusation', () => {
+  const other = { ...harmful, id: 'other', about: 'mira', text: 'Mira stole tools' };
+  const ctx = fixture(['mira', 'tom', 'ada'], [harmful, truth, other]);
+  const original = introduce(ctx);
+  const unrelated = introduce(ctx, other);
+  ctx.rel.setAffinity('ada', 'tom', 1); ctx.rel.setAffinity('tom', 'ada', 1);
+  ctx.rel.setAffinity('ada', 'mira', -1); ctx.rel.setAffinity('mira', 'ada', -1);
+  const conv = confrontation(ctx, true);
+  expect(ctx.publicResponses).toHaveLength(1);
+  conv.accusation = accusation({ claimId: other.id, accuser: 'tom', accused: 'mira' });
+  conv.ended = true;
+  tick(ctx, 2);
+  expect(original.backedAccused.has('ada')).toBe(true);
+  expect(unrelated.backedAccused.size).toBe(0);
+  expect(agent(ctx, 'tom').mood.list(ctx.tick).some(m => m.label === 'defended by Ada')).toBe(true);
+  expect(agent(ctx, 'mira').mood.list(ctx.tick).some(m => m.label === 'defended by Ada')).toBe(false);
+});
+
+it('enters sleep immediately when the new standing spot is the current tile', () => {
+  const ctx = fixture(['mira', 'tom']);
+  const mira = agent(ctx, 'mira');
+  const spot = ctx.world.place('bakery').spots[0]!;
+  mira.mover.pos = { x: spot.x + 0.5, y: spot.y + 0.5 };
+  mira.spot = null;
+  mira.goal = { kind: 'schedule', since: 0 };
+  mira.d.schedule = [{ start: 0, place: 'bakery', activity: 'rest' }, { start: 4, place: 'bakery', activity: 'sleep' }];
+  ctx.tick = 4;
+  updateSchedule({ ...ctx, world: { ...ctx.world, spotFor: () => spot } }, mira);
+  expect(mira.mover.moving).toBe(false);
+  expect(mira.activity).toBe('sleep');
+});
+
+it('does not use an unrelated bread errand to disprove typed coin theft', () => {
+  const coins: GameClaim = { ...harmful, id: 'typed_theft_tom_jonah_coins_2', object: 'coins', target: 'jonah', contradicts: [] };
+  const ctx = fixture(['mira', 'tom'], [harmful, truth, coins]);
+  const tom = agent(ctx, 'tom'), mira = agent(ctx, 'mira');
+  const spot = ctx.world.place('bakery').spots[0]!;
+  tom.mover.pos = { x: spot.x + 0.5, y: spot.y + 0.5 };
+  mira.mover.pos = { ...tom.mover.pos };
+  tom.d.secrets = [{ id: 'bread', kind: 'delivery', description: 'delivers bread', place: 'bakery', window: [0, 10], confirms: ['kindness'], contradicts: ['theft'] }];
+  hear(ctx, mira, coins);
+  const before = mira.ledger.confidence(coins.id);
+  tickWitnessing(ctx);
+  expect(mira.ledger.confidence(coins.id)).toBe(before);
 });
 
 it.each([['fallback', createMover], ['world', worldMover]] as const)('uses the %s mover to walk at one tile per minute and stop on arrival', (_, makeMover) => {

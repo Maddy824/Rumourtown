@@ -111,7 +111,7 @@ export interface QueuedLine {
   claimId?: ClaimId;
   why: string;
   /** Resolved when spoken: the bystander picks a side with their beliefs at that moment. */
-  decideSide?: { accuser: VillagerId; accused: VillagerId; claimId: ClaimId };
+  decideSide?: { accuser: VillagerId; accused: VillagerId; claimId: ClaimId; accusation: AccusationRecord };
 }
 
 export interface Conversation {

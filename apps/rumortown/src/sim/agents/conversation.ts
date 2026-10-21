@@ -185,7 +185,7 @@ export function tickConversations(ctx: Ctx): void {
   let pending = 0;
   for (const response of ctx.publicResponses) {
     if (response.readyTick > ctx.tick) { ctx.publicResponses[pending++] = response; continue; }
-    resolveSide(ctx, response.conversation, response.line);
+    resolveSide(ctx, response.line);
     speak(ctx, response.conversation, response.line);
   }
   ctx.publicResponses.length = pending;
@@ -225,7 +225,7 @@ function nextLine(ctx: Ctx, conv: Conversation, members: Agent[]): QueuedLine {
   while (conv.queue.length) {
     const q = conv.queue.shift()!;
     if (!conv.members.includes(q.speaker) || !conv.members.includes(q.listener)) continue;
-    if (q.decideSide) resolveSide(ctx, conv, q);
+    if (q.decideSide) resolveSide(ctx, q);
     return q;
   }
   for (const m of members) {
@@ -358,6 +358,8 @@ function chooseLine(ctx: Ctx, conv: Conversation, speaker: Agent, members: Agent
 /* ---------------- Speaking and its effects ---------------- */
 
 function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
+  // A counter-accusation may have replaced the live conversation's accusation while this reply waited.
+  if (line.decideSide) conv = { ...conv, accusation: line.decideSide.accusation };
   const speaker = agentOf(ctx, line.speaker);
   const listener = agentOf(ctx, line.listener);
   if (!speaker || !listener) return;
@@ -376,7 +378,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
     if (src) key.source = src;
   }
   if (line.act === 'smalltalk') {
-    if (conv.topic === null) conv.topic = ctx.talk.pickTopic(speaker.d, listener.d, minuteOfDay(ctx.tick), ctx.rng);
+    if (conv.topic === null) conv.topic = ctx.talk.pickTopic(speaker.d, listener.d, 420 + minuteOfDay(ctx.tick), ctx.rng);
     key.topic = conv.topic;
   }
   const spoken = ctx.talk.say(key, ctx.rng);
@@ -529,7 +531,7 @@ function onAccuse(ctx: Ctx, conv: Conversation, accuser: Agent, accused: Agent, 
   conv.queue.push({ speaker: accused.d.id, listener: accuser.d.id, act, claimId, why });
   for (const b of bystanders) {
     const line: QueuedLine = { speaker: b.d.id, listener: accuser.d.id, act: 'doubt', claimId: claim.id, why: '',
-      decideSide: { accuser: accuser.d.id, accused: accused.d.id, claimId: claim.id } };
+      decideSide: { accuser: accuser.d.id, accused: accused.d.id, claimId: claim.id, accusation: record } };
     if (conv.members.includes(b.d.id)) conv.queue.push(line);
     else ctx.publicResponses.push({ conversation: conv, readyTick: ctx.tick + 2, line });
   }
@@ -537,7 +539,7 @@ function onAccuse(ctx: Ctx, conv: Conversation, accuser: Agent, accused: Agent, 
 }
 
 /** A bystander's side, decided with their beliefs at the moment they speak. */
-function resolveSide(ctx: Ctx, conv: Conversation, q: QueuedLine): void {
+function resolveSide(ctx: Ctx, q: QueuedLine): void {
   const d = q.decideSide;
   if (!d) return;
   const b = agentOf(ctx, q.speaker);
@@ -545,7 +547,7 @@ function resolveSide(ctx: Ctx, conv: Conversation, q: QueuedLine): void {
   const accused = agentOf(ctx, d.accused);
   const claim = ctx.claims.get(d.claimId);
   if (!b || !accuser || !accused || !claim) return;
-  const side = takeSide(ctx, b, accuser, accused, claim, conv.accusation?.isPublic ?? true);
+  const side = takeSide(ctx, b, accuser, accused, claim, d.accusation.isPublic);
   q.why = side.why;
   q.listener = accuser.d.id;
   if (side.side === 'accuser') {

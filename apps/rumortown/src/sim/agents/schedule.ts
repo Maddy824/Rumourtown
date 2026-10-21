@@ -87,7 +87,7 @@ export function goToPlace(ctx: Ctx, agent: Agent, placeId: PlaceId, activity: Ac
   agent.mover.setPath(path);
   agent.goal = { ...goal, place: placeId };
   // Nobody sleeps on the way home; the arrival handler sets the entry's activity.
-  agent.activity = activity === 'sleep' ? 'rest' : visibleActivity(activity);
+  agent.activity = activity === 'sleep' && agent.mover.moving ? 'rest' : visibleActivity(activity);
   return true;
 }
 

@@ -49,9 +49,6 @@ function judgeClaim(ctx: Ctx, sc: StrangerClaim): Verdict {
   const accusations = ctx.accusations.filter((r) => r.claimId === claim.id);
   const apology = accusations.find((r) => r.apologized);
 
-  if (sc.heardBy.size < 2) {
-    return { ending: 'died', summary: `${firstName} heard the stranger's story about ${subject} and kept it to ${reflexive(first)}; it went no further.` };
-  }
   if (main && sc.correctedFirsthand.has(main.d.id) && sc.trustLost) {
     return { ending: 'exposed', summary: `The story that ${claim.text} fell apart in front of ${main.d.name}; the stranger's word is worth less in the village now.` };
   }
@@ -65,6 +62,9 @@ function judgeClaim(ctx: Ctx, sc: StrangerClaim): Verdict {
       ending: 'reconciled',
       summary: `${nameOf(ctx, apology.accuser, true)} accused ${nameOf(ctx, apology.accused, true)} over the story that ${claim.text}, then said sorry; ${apology.forgiven ? 'they made up before dark' : 'forgiveness has yet to follow'}.`,
     };
+  }
+  if (sc.heardBy.size < 2) {
+    return { ending: 'died', summary: `${firstName} heard the stranger's story about ${subject} and kept it to ${reflexive(first)}; it went no further.` };
   }
   if (main && main.ledger.confidence(claim.id) > 0.6) {
     return { ending: 'grudge', summary: `${main.d.name} still believes ${claim.text}; nobody proved otherwise, and ${main.d.pronouns.subject} holds it against ${subject}.` };

@@ -4,6 +4,7 @@
  * and, through contradictions, correct the harmful ones. A whisper is witnessed the same way.
  */
 import type { GameClaim, Secret, VillagerId } from '../types.js';
+import { matchesAuthoredFact } from '../registered-claim.js';
 import { dist, emit, isAsleep, nameOf, type Agent, type Ctx } from './context.js';
 import { correctBelief, seeClaim } from './hearing.js';
 import { IMPORTANCE, WITNESS_RANGE } from './params.js';
@@ -30,6 +31,8 @@ export function tickWitnessing(ctx: Ctx): void {
     const contradicted: GameClaim[] = [];
     for (const c of ctx.claimList) {
       if (c.about !== actor.d.id) continue;
+      if (c.id.startsWith('typed_') && !ctx.claimList.some(fact =>
+        !fact.id.startsWith('typed_') && matchesAuthoredFact(c, fact))) continue;
       if (secret.confirms.includes(c.kind)) confirmed.push(c);
       else if (secret.contradicts.includes(c.kind)) contradicted.push(c);
     }

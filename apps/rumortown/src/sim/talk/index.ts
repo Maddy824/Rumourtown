@@ -14,7 +14,7 @@ import { lineBank } from '../../content/lines/index.js';
 import { EVENING_STARTS, MIDDAY_STARTS, ROLE_TOPICS, TOPICS_BY_BAND, type TopicBand } from '../../content/lines/topics.js';
 import { CLAIM_ACTS, type LineSet, type VoiceArchetype } from '../../content/lines/types.js';
 import { VOICES, voiceOf } from '../../content/lines/voices.js';
-import { DAY_START_MINUTE, MINUTES_PER_DAY, type Dossier, type SpeechAct, type SpokenLine, type TalkApi, type VillagerId } from '../types.js';
+import { MINUTES_PER_DAY, type Dossier, type SpeechAct, type SpokenLine, type TalkApi, type VillagerId } from '../types.js';
 import { compileBank, NEEDS, type CompiledLine, type CompiledSet } from './compile.js';
 import { deriveContext, type LineContext, type TalkKey } from './context.js';
 import { canFill, fillLine } from './fill.js';
@@ -187,9 +187,8 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
 
   function pickTopic(speaker: Dossier, listener: Dossier, minuteOfDay: number, rng: () => number): string {
     const r = rng();
-    // Minutes since midnight, as in WorldSnapshot.minuteOfDay. Values before 07:00 are read as minutes since day start.
-    let minute = ((Math.floor(minuteOfDay) % 1440) + 1440) % 1440;
-    if (minute < DAY_START_MINUTE) minute += DAY_START_MINUTE;
+    // Minutes since midnight, as in WorldSnapshot.minuteOfDay.
+    const minute = ((Math.floor(minuteOfDay) % 1440) + 1440) % 1440;
     const band: TopicBand = minute < MIDDAY_STARTS ? 'morning' : minute < EVENING_STARTS ? 'midday' : 'evening';
     const topics = TOPICS_BY_BAND[band];
     const lean = (d: Dossier, topic: string): number => {

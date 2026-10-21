@@ -63,7 +63,7 @@ const PARTICIPLES = new Set([
 /** Words after a contracted "is" ("Tom's hoarding", "Tom's not"). */
 const IS_FOLLOWERS = new Set(['not', 'a', 'an', 'the', 'up', 'out', 'off', 'in', 'on', 'at', 'so', 'too', 'very', 'always', 'still', 'back', 'away', 'ill', 'kind', 'tired', 'late', 'right', 'wrong']);
 
-const COORDINATED_VERBS = new Set(['has', 'is', 'does', 'leaves', 'keeps', 'takes', 'gives', 'puts', 'pays', 'owes', 'asks', 'says', 'tells', 'meets', 'brags']);
+const COORDINATED_VERBS = new Set(['has', 'is', 'does', 'leaves', 'keeps', 'takes', 'gives', 'puts', 'pays', 'owes', 'asks', 'says', 'tells', 'meets', 'brags', 'works', 'waters', 'sells', 'skips', 'sneaks', 'chalks', 'counts']);
 
 /** Words ending in s that are never a third-person verb. */
 const NOT_S_VERBS = new Set(['always', 'sometimes', 'this', 'his', 'its', 'us', 'yes', 'less', 'unless', 'across', 'perhaps', 'besides', 'towards', 'afterwards', 'was', 'is', 'has', 'does', 'as']);
@@ -100,7 +100,7 @@ function isAdverb(word: string): boolean {
 
 function isFiniteVerb(word: string): boolean {
   const w = word.toLowerCase();
-  if (AUXILIARIES.has(w) || IRREGULAR_PAST.has(w)) return true;
+  if (AUXILIARIES.has(w) || IRREGULAR_PAST.has(w) || COORDINATED_VERBS.has(w)) return true;
   return w.length > 4 && w.endsWith('ed') && !w.endsWith('eed');
 }
 
@@ -186,6 +186,7 @@ export function adaptClause(text: string, rules: readonly NameRule[], options: A
   });
   const lowerRules = rules.map((r) => ({ ...r, lower: r.name.toLowerCase() }));
   const antecedents: NameRule[] = [];
+  const objectAntecedents: NameRule[] = [];
   let leadingForm: NameForm | undefined;
 
   for (let w = 0; w < wordIdx.length; w++) {
@@ -196,6 +197,7 @@ export function adaptClause(text: string, rules: readonly NameRule[], options: A
     let rule: NameRule | undefined = lowerRules.find((r) => r.lower === bare.toLowerCase());
     let pronounRole: Role | undefined;
     if (rule) {
+      objectAntecedents.push(rule);
       const repeated = antecedents.some((r) => r.name === rule?.name);
       // A possessive name does not usually take over a same-gender antecedent:
       // "Hal lied about Ivo's iron to avoid paying for his wheel" still means Hal's wheel.
@@ -209,7 +211,10 @@ export function adaptClause(text: string, rules: readonly NameRule[], options: A
       // The nearest named antecedent of the right gender handles the fixed bank's clauses:
       // "Mira paid Pim every penny she owed him", "Tom took bread to Ada because she is ill".
       const reflexives: Readonly<Record<string, string>> = { he: 'himself', she: 'herself', they: 'themselves' };
-      rule = [...antecedents].reverse().find((r) => r.pronouns
+      const after = w + 1 < wordIdx.length ? tokens[wordIdx[w + 1] as number]?.toLowerCase() : undefined;
+      const isObject = objectAntecedents.some(r => r.pronouns?.object === lower &&
+        (r.pronouns.possessive !== lower || !after || isFiniteVerb(after)));
+      rule = [...(isObject ? objectAntecedents : antecedents)].reverse().find((r) => r.pronouns
         && (Object.values(r.pronouns).includes(lower) || reflexives[r.pronouns.subject] === lower));
       if (!rule || rule.form.kind === 'name' || rule.form.kind === 'third') continue;
       const p = rule.pronouns as Pronouns;
