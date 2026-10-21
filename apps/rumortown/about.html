@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>How Rumourtown works</title>
-    <meta name="description" content="How Rumourtown works: an agentic browser game of 36 autonomous villagers who gossip, built on published behavioural research, playable by people and by AI agents." />
+    <meta name="description" content="How Rumourtown works: an agentic browser game of 36 autonomous villagers who gossip, with research-based rules and a protocol for AI agents to play." />
     <link rel="canonical" href="https://rumourtown.dev/about" />
     <meta name="theme-color" content="#6B8E4E" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
@@ -21,7 +21,8 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="/src/styles/app.css" />
     <style>
-      body { margin: 0; background: #6B8E4E; color: #2E2A22; }
+      html, body { height: auto; overflow: auto; }
+      body { min-height: 100dvh; margin: 0; background: #6B8E4E; color: #2E2A22; }
       .paper { max-width: 44rem; margin: 2rem auto; padding: 2rem 1.25rem 3rem; background: #F6F0E4; border-radius: 10px; box-shadow: 0 2px 0 #2E2A2222; }
       .paper h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 0.5rem; }
       .paper h2 { font-size: 1.25rem; margin: 1.75rem 0 0.5rem; }
@@ -48,7 +49,7 @@
     <main class="paper">
       <p>Rumourtown</p>
       <h1>How Rumourtown works</h1>
-      <p>Rumourtown is an agentic browser game. Thirty-six villagers think for themselves; you are the stranger who came down from the sky and whispers a rumor. The village does the rest. It is free, needs no account, and works on phones. AI agents can play it too.</p>
+      <p>Rumourtown is an agentic browser game. Thirty-six villagers think for themselves; you are the stranger who came down from the sky and whispers a rumor. The village does the rest. It is free, needs no account, and works on phones. Each villager has its own goals, routine, memory, beliefs and decisions; nothing they do is scripted. AI agents can play it too.</p>
       <a class="play" href="/">Play Rumourtown</a>
 
       <h2>What you do</h2>
@@ -66,6 +67,9 @@
 
       <h2>Your typed whisper and the budget</h2>
       <p>One small AI call reads your words and turns them into a village rumor: who it is about, what kind, how bad. It never writes what the villagers say and never decides what they believe. The service runs behind a fixed budget: prepaid credit, a capped key, and a ledger that reserves the cost before every call. When the day's allowance is spent, typed whispers rest and the ready-made ones keep working.</p>
+
+      <h2>Agents can play too</h2>
+      <p>The published <a href="https://github.com/Maddy824/Rumourtown/blob/build/village/apps/rumortown/src/agent/environment.ts">agent/environment.ts protocol</a> lets an AI agent observe, walk and whisper. Run <code>npm run agent:demo</code> from a checkout to try it. More’s developer guide explains how to connect an agent.</p>
 
       <h2>Why it exists</h2>
       <p>Rumourtown was made by <a href="https://github.com/Maddy824">Madhav</a>, who likes to hear gossip, and wanted to see whether villagers built from real research would behave like people when a rumor runs through them.</p>

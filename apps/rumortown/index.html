@@ -3,13 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Rumourtown is a felt village of 36 people who gossip. Whisper a lie and watch it travel." />
-    <title>Rumourtown</title>
+    <title>Rumourtown: a village that gossips</title>
+    <meta name="description" content="An agentic game of autonomous villagers. Whisper rumors and watch gossip spread. Play in your browser or through the agent protocol with AI agents." />
+    <link rel="canonical" href="https://rumourtown.dev/" />
+    <meta name="theme-color" content="#6b8e4e" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://rumourtown.dev/" />
+    <meta property="og:title" content="Rumourtown: a village that gossips" />
+    <meta property="og:description" content="An agentic game of autonomous villagers. Whisper rumors and watch gossip spread. Play in your browser or through the agent protocol with AI agents." />
+    <meta property="og:image" content="https://rumourtown.dev/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A felt-and-paper village with a red thread of gossip running between villagers" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Rumourtown: a village that gossips" />
+    <meta name="twitter:description" content="An agentic game of autonomous villagers. Whisper rumors and watch gossip spread. Play in your browser or through the agent protocol with AI agents." />
+    <meta name="twitter:image" content="https://rumourtown.dev/og.jpg" />
+    <meta name="twitter:image:alt" content="A felt-and-paper village with a red thread of gossip running between villagers" />
     <link rel="preload" href="/fonts/BricolageGrotesque-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/src/styles/app.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Rumourtown",
+        "url": "https://rumourtown.dev/",
+        "description": "Rumourtown is an agentic game where villagers are autonomous agents with goals, routines, memory and beliefs. Whisper rumors and watch gossip spread. AI agents can play through the agent protocol.",
+        "keywords": "agentic game, social simulation, autonomous agents, gossip",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "offers": { "@type": "Offer", "price": 0, "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Madhav Sunil", "sameAs": "https://github.com/Maddy824" },
+        "image": "https://rumourtown.dev/og.jpg",
+        "inLanguage": "en"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Rumourtown",
+        "url": "https://rumourtown.dev/",
+        "description": "An agentic game where villagers are autonomous agents and AI agents can play through the agent protocol.",
+        "keywords": "agentic game, social simulation, autonomous agents, gossip",
+        "author": { "@type": "Person", "name": "Madhav Sunil", "sameAs": "https://github.com/Maddy824" },
+        "inLanguage": "en"
+      }
+    </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- The app replaces this first-paint arrival when the village mounts. -->
+      <section class="arrival" aria-labelledby="rt-arrival-intro-title">
+        <div class="arrival-sky" aria-hidden="true"></div>
+        <div class="arrival-title" style="opacity: 1">
+          <h1 id="rt-arrival-intro-title">Rumourtown</h1>
+          <p>An agentic game of 36 autonomous villagers. Whisper a rumor and watch it travel. Play in your browser; AI agents can play through the agent protocol.</p>
+          <noscript><p>Rumourtown needs JavaScript to run the village. <a href="/about">Read how Rumourtown works</a>.</p></noscript>
+        </div>
+      </section>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

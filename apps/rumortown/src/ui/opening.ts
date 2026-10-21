@@ -30,7 +30,8 @@ export function createOpening(layers: Layers, showMe: () => void, showGuide: () 
     h('div', { class: 'opening-paper' }, progress, glyph, title, text, research,
       h('div', { class: 'card-actions' }, back, next, show,
         h('button', { class: 'button button-quiet', type: 'button', onclick: close }, 'Skip')),
-      h('button', { class: 'text-button', type: 'button', onclick: () => { close(); showGuide(); } }, 'How it works')));
+      h('button', { class: 'text-button', type: 'button', onclick: () => { close(); showGuide(); } }, 'How it works'),
+      h('p', null, h('a', { href: '/about', target: '_blank', rel: 'noopener noreferrer' }, 'Read about Rumourtown'))));
   function render(): void {
     const content = OPENING_CARDS[page]!;
     progress.textContent = `How it works, ${page + 1} of 3`;
