@@ -131,7 +131,8 @@ export function orchestrate(input: OrchestratorInput): Route {
     }
     if (place) {
       const placeName = input.map.places.find(p => p.id === place)!.name;
-      return { kind: 'local', reply: `${placeName} is this way.`, action: 'move', target: place, reason: 'move' };
+      const named = /^(?:[A-Z][a-z]+'s|Village|Eastbank|Willow|Commons|North|South|Community|Boat|Seed|Reading)\b/.test(placeName) ? placeName : `The ${placeName.toLowerCase()}`;
+      return { kind: 'local', reply: `${named} is this way.`, action: 'move', target: place, reason: 'move' };
     }
   }
 
