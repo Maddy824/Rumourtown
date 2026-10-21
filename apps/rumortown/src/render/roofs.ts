@@ -8,7 +8,7 @@ import { hash, makeCanvas } from './grain.js';
 import type { Standing } from './felt.js';
 import type { Building } from './buildings.js';
 import { BODY } from './sprites.js';
-import { awning, chimney, doorway, dormer, gable, shingles, sign, tower, wheel, type RoofStyle } from './ornaments.js';
+import { awning, chimney, doorway, dormer, gableSteps, shinglesSteps, sign, tower, wheel, type RoofStyle } from './ornaments.js';
 
 function roofStyle(b: Building): RoofStyle {
   const v = hash(b.x, b.y, 301);
@@ -33,7 +33,7 @@ const OVERHANG = 0.16;
 const BAND = 0.95;
 
 /** Builds one façade sprite per building at this zoom. */
-export function buildRoofs(buildings: readonly Building[], z: number, s: number): Standing[] {
+export function* buildRoofsSteps(buildings: readonly Building[], z: number, s: number): Generator<void, Standing[]> {
   const out: Standing[] = [];
   for (const b of buildings) {
     const wT = b.w + OVERHANG * 2 + PAD * 2;
@@ -43,7 +43,7 @@ export function buildRoofs(buildings: readonly Building[], z: number, s: number)
     const left = (PAD + OVERHANG) * z;
     const base = (hT - PAD * 0.35) * z;
     surf.ctx.setTransform(s, 0, 0, s, left * s, base * s);
-    paintFacade(surf.ctx, b, z, s);
+    yield* paintFacadeSteps(surf.ctx, b, z, s);
     out.push({ img: surf.canvas, x: b.x * z - left, y: b.y * z - base, w: wT * z, h: hT * z, sortY: b.y + 0.05, roof: true });
   }
   return out;
@@ -57,7 +57,7 @@ export function roofOverlaps(roof: Standing, x: number, y: number, zoom: number,
 }
 
 /** Paints a façade with its base on y = 0, spanning x = 0..b.w tiles. */
-function paintFacade(ctx: CanvasRenderingContext2D, b: Building, z: number, s: number): void {
+function* paintFacadeSteps(ctx: CanvasRenderingContext2D, b: Building, z: number, s: number): Generator<void> {
   const u = z / 32;
   const style = roofStyle(b);
   const w = b.w * z;
@@ -92,7 +92,7 @@ function paintFacade(ctx: CanvasRenderingContext2D, b: Building, z: number, s: n
 
   ctx.save();
   ctx.clip(shape);
-  shingles(ctx, style, x0, x1, band, z, seed);
+  yield* shinglesSteps(ctx, style, x0, x1, band, z, seed);
   // Light from the upper left falls across the paper.
   const g = ctx.createLinearGradient(x0, -band, x1, 0);
   g.addColorStop(0, rgba(PAPER, 0.16));
@@ -119,8 +119,8 @@ function paintFacade(ctx: CanvasRenderingContext2D, b: Building, z: number, s: n
 
   // Features on the band: a front gable makes a home read as a house; dormers for the rest.
   const span = x1 - x0;
-  if (b.kind === 'home' || b.kind === 'bakery') gable(ctx, x0 + span * (b.kind === 'bakery' ? (chimneyLeft ? 0.6 : 0.4) : 0.5), -band, Math.min(2.4 * z, span * 0.5), 0.7 * z, style, z, s);
-  if (b.kind === 'inn') for (const f of [0.28, 0.72]) gable(ctx, x0 + span * f, -band, Math.min(2 * z, span * 0.36), 0.62 * z, style, z, s);
+  if (b.kind === 'home' || b.kind === 'bakery') yield* gableSteps(ctx, x0 + span * (b.kind === 'bakery' ? (chimneyLeft ? 0.6 : 0.4) : 0.5), -band, Math.min(2.4 * z, span * 0.5), 0.7 * z, style, z, s);
+  if (b.kind === 'inn') for (const f of [0.28, 0.72]) yield* gableSteps(ctx, x0 + span * f, -band, Math.min(2 * z, span * 0.36), 0.62 * z, style, z, s);
   if (b.kind === 'shop') dormer(ctx, x0 + span * 0.5, -band, style, z, s);
   if (b.kind === 'shop') awning(ctx, x0, x1, z);
   if (b.kind === 'bakery') sign(ctx, x1 - 0.2 * z, -band * 0.45, 'loaf', z, s);

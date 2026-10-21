@@ -79,7 +79,7 @@ export interface PieceStyle {
 }
 
 /** One cut felt piece: shadow, fill, mottling, fibres, fuzzy edge, running stitch. */
-export function feltPiece(ctx: CanvasRenderingContext2D, contours: Contour[], inside: Inside, map: VillageMap, z: number, s: number, st: PieceStyle): Path2D {
+export function* feltPieceSteps(ctx: CanvasRenderingContext2D, contours: Contour[], inside: Inside, map: VillageMap, z: number, s: number, st: PieceStyle): Generator<void, Path2D> {
   const u = z / 32;
   const shape = new Path2D();
   for (const c of contours) contourPath(shape, c, z, 0, st.radius * u);
@@ -95,11 +95,11 @@ export function feltPiece(ctx: CanvasRenderingContext2D, contours: Contour[], in
 
   ctx.save();
   ctx.clip(shape);
-  mottle(ctx, map, inside, z, st.light, st.dark, st.seed);
-  if (u >= 0.35 && st.fibres > 0) fibreField(ctx, map, inside, z, st.light, st.dark, st.fibres, st.seed + 1);
+  yield* mottleSteps(ctx, map, inside, z, st.light, st.dark, st.seed);
+  if (u >= 0.35 && st.fibres > 0) yield* fibreFieldSteps(ctx, map, inside, z, st.light, st.dark, st.fibres, st.seed + 1);
   ctx.restore();
 
-  if (st.fuzz && u >= 0.45) edgeFuzz(ctx, contours, z, st.fill, st.light, st.seed + 2);
+  if (st.fuzz && u >= 0.45) yield* edgeFuzzSteps(ctx, contours, z, st.fill, st.light, st.seed + 2);
   if (st.stitch && u >= 0.4) {
     const stitch = new Path2D();
     for (const c of contours) contourPath(stitch, c, z, 3.6 * u, st.radius * u);
@@ -135,9 +135,11 @@ function blob(color: string): HTMLCanvasElement {
 }
 
 /** Dye variation: one soft blob per tile, keyed by a seeded hash, wider than the tile so no grid shows. */
-export function mottle(ctx: CanvasRenderingContext2D, map: VillageMap, inside: Inside, z: number, light: string, dark: string, seed: number): void {
+export function* mottleSteps(ctx: CanvasRenderingContext2D, map: VillageMap, inside: Inside, z: number, light: string, dark: string, seed: number): Generator<void, void> {
   const lb = blob(light);
+  yield;
   const db = blob(dark);
+  yield;
   for (let y = -1; y <= map.height; y++) {
     for (let x = -1; x <= map.width; x++) {
       if (!inside(x, y)) continue;
@@ -148,13 +150,14 @@ export function mottle(ctx: CanvasRenderingContext2D, map: VillageMap, inside: I
       const cy = (y + 0.5 + (hash(x, y, seed + 5) - 0.5) * 0.8) * z;
       ctx.globalAlpha = 0.1 + Math.abs(h - 0.5) * 0.42;
       ctx.drawImage(h < 0.5 ? db : lb, cx - size / 2, cy - size / 2, size, size);
+      yield;
     }
   }
   ctx.globalAlpha = 1;
 }
 
 /** Fibres over every tile of a region, in two tones. `density` is fibres per tile at the close zoom. */
-export function fibreField(ctx: CanvasRenderingContext2D, map: VillageMap, inside: Inside, z: number, light: string, dark: string, density: number, seed: number): void {
+export function* fibreFieldSteps(ctx: CanvasRenderingContext2D, map: VillageMap, inside: Inside, z: number, light: string, dark: string, density: number, seed: number): Generator<void, void> {
   const u = z / 32;
   const rnd = seeded(seed * 7919 + 13);
   const pl = new Path2D();
@@ -165,6 +168,7 @@ export function fibreField(ctx: CanvasRenderingContext2D, map: VillageMap, insid
       if (!inside(x, y)) continue;
       addFibres(pl, x * z, y * z, z, z, n, rnd, 1.6 * u, 4.4 * u);
       addFibres(pd, x * z, y * z, z, z, n, rnd, 1.6 * u, 4.4 * u);
+      yield;
     }
   }
   ctx.lineCap = 'round';
@@ -179,16 +183,19 @@ export function fibreField(ctx: CanvasRenderingContext2D, map: VillageMap, insid
 }
 
 /** Fibres poking out across a piece's edge so it reads as cut felt, not a vector shape. */
-export function edgeFuzz(ctx: CanvasRenderingContext2D, contours: Contour[], z: number, fill: string, light: string, seed: number): void {
+export function* edgeFuzzSteps(ctx: CanvasRenderingContext2D, contours: Contour[], z: number, fill: string, light: string, seed: number): Generator<void, void> {
   const u = z / 32;
   const rnd = seeded(seed * 131 + 7);
   const pf = new Path2D();
   const pl = new Path2D();
   for (const c of contours) {
-    forEachEdge(c, z, (x0, y0, x1, y1, nx, ny) => {
+    const edges: [number, number, number, number, number, number][] = [];
+    forEachEdge(c, z, (...edge) => edges.push(edge));
+    for (const [x0, y0, x1, y1, nx, ny] of edges) {
       const len = Math.hypot(x1 - x0, y1 - y0);
       const count = Math.floor(len / (1.7 * u));
       for (let i = 0; i < count; i++) {
+        if (i % 16 === 0) yield;
         const t = rnd();
         const bx = x0 + (x1 - x0) * t - nx * (0.4 + rnd()) * u;
         const by = y0 + (y1 - y0) * t - ny * (0.4 + rnd()) * u;
@@ -198,7 +205,7 @@ export function edgeFuzz(ctx: CanvasRenderingContext2D, contours: Contour[], z: 
         p.moveTo(bx, by);
         p.quadraticCurveTo(bx + Math.cos(a + 0.6) * l * 0.5, by + Math.sin(a + 0.6) * l * 0.5, bx + Math.cos(a) * l, by + Math.sin(a) * l);
       }
-    });
+    }
   }
   ctx.lineCap = 'round';
   ctx.lineWidth = 0.8 * u;

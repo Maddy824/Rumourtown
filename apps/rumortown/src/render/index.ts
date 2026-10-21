@@ -5,15 +5,14 @@
  */
 import { TILE, type Camera, type Renderer, type RenderOptions, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
 import { computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
-import { findBuildings, paintWalls } from './buildings.js';
-import { paintRooms } from './rooms.js';
-import { buildRoofs, roofOverlaps } from './roofs.js';
-import { LAYER_MARGIN, paintGround } from './tiles.js';
-import { buildTrees } from './landmarks.js';
+import { findBuildings } from './buildings.js';
+import { roofOverlaps } from './roofs.js';
+import { LAYER_MARGIN } from './tiles.js';
+import { prepareLayer, type Layer } from './layer.js';
 import type { Standing } from './felt.js';
 import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
-import { hashString, makeCanvas, makeCork, makeGrain } from './grain.js';
+import { hashString, makeCork, makeGrain } from './grain.js';
 import { INK, MUSTARD, PAPER, mix, rgba } from './palette.js';
 import { IdleQueue } from './idle.js';
 
@@ -21,18 +20,6 @@ export { fitZoom } from './camera.js';
 /** The close camera: CSS pixels per tile. */
 export const CLOSE_ZOOM = TILE;
 
-interface Layer {
-  zoom: number;
-  dpr: number;
-  /** Backing pixels per CSS pixel; below dpr only when the layer would be too large. */
-  scale: number;
-  canvas: HTMLCanvasElement;
-  /** Trees and roof façades, sorted by depth. */
-  standing: Standing[];
-}
-
-/** Largest ground layer in backing pixels (iOS Safari caps a canvas near 16.7M); beyond this it paints at a lower scale. */
-const MAX_LAYER_PIXELS = 12e6;
 const GRAIN_ALPHA = 0.06;
 const WALK_FRAME_MS = 170;
 const RECENT_SPEECH_MS = 2000;
@@ -121,20 +108,16 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (current) requestSprites(current);
   }
 
-  function buildLayer(zoom: number, publish = true): Layer {
-    const cssW = (map.width + LAYER_MARGIN * 2) * zoom;
-    const cssH = (map.height + LAYER_MARGIN * 2) * zoom;
-    let scale = dpr;
-    if (cssW * cssH * scale * scale > MAX_LAYER_PIXELS) scale = Math.sqrt(MAX_LAYER_PIXELS / (cssW * cssH));
-    const { canvas: lc, ctx: g } = makeCanvas(cssW * scale, cssH * scale);
-    g.setTransform(scale, 0, 0, scale, LAYER_MARGIN * zoom * scale, LAYER_MARGIN * zoom * scale);
-    paintGround(g, map, zoom, scale, () => paintRooms(g, map, buildings, zoom, scale));
-    paintWalls(g, map, zoom, scale);
-    const standing = buildTrees(map, zoom, dpr).concat(buildRoofs(buildings, zoom, dpr));
-    standing.sort((a, b) => a.sortY - b.sortY);
-    const layer: Layer = { zoom, dpr, scale, canvas: lc, standing };
-    if (publish) layers.push(layer);
-    return layer;
+  /** Initial creation/explicit resize can prepare the bootstrap layers before animation starts. */
+  function buildLayer(zoom: number): void {
+    const work = prepareLayer(map, buildings, zoom, dpr);
+    for (;;) {
+      const step = work.next();
+      if (step.done) {
+        if (step.value) layers.push(step.value);
+        return;
+      }
+    }
   }
 
   /** Keep drawing the nearest complete layer while the exact requested zoom is prepared. */
@@ -150,8 +133,11 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       const zoom = requestedZoom;
       // The iterator runs only from IdleQueue, never synchronously from render().
       // Keep the layer private until its complete sprite wardrobe is ready too.
-      const layer = buildLayer(zoom, false);
-      yield;
+      const layer = yield* prepareLayer(map, buildings, zoom, dpr, () => zoom === requestedZoom);
+      if (!layer) {
+        sprites.retain(layers.map((l) => l.zoom), dpr);
+        continue;
+      }
       for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1] as const) {
         if (zoom !== requestedZoom) break;
         sprites.stranger(facing, frame, zoom, dpr);

@@ -81,7 +81,7 @@ export function findBuildings(map: VillageMap): Building[] {
 /* ------------------------------------------------------------------ */
 /* Walls and doors, painted into the ground layer                     */
 
-export function paintWalls(ctx: CanvasRenderingContext2D, map: VillageMap, z: number, s: number): void {
+export function* paintWallsSteps(ctx: CanvasRenderingContext2D, map: VillageMap, z: number, s: number): Generator<void> {
   const u = z / 32;
   const W = map.width;
   const H = map.height;
@@ -103,6 +103,7 @@ export function paintWalls(ctx: CanvasRenderingContext2D, map: VillageMap, z: nu
   const doors: { x: number; y: number; horizontal: boolean }[] = [];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
+      yield;
       if (!isNode(x, y)) continue;
       const here = kind(x, y);
       const px = (x + ax(x, y)) * z;
@@ -167,7 +168,11 @@ export function paintWalls(ctx: CanvasRenderingContext2D, map: VillageMap, z: nu
   }
   ctx.restore();
 
-  for (const d of doors) paintDoor(ctx, d.x, d.y, d.horizontal, ax(d.x, d.y), ay(d.x, d.y), z, s);
+  yield;
+  for (const d of doors) {
+    paintDoor(ctx, d.x, d.y, d.horizontal, ax(d.x, d.y), ay(d.x, d.y), z, s);
+    yield;
+  }
 }
 
 function paintDoor(ctx: CanvasRenderingContext2D, x: number, y: number, horizontal: boolean, ax: number, ay: number, z: number, s: number): void {

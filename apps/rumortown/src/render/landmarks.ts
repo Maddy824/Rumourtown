@@ -156,7 +156,7 @@ export function well(ctx: CanvasRenderingContext2D, tx: number, ty: number, z: n
   ctx.fill();
 }
 
-export function treeShadows(ctx: CanvasRenderingContext2D, map: VillageMap, k: (x: number, y: number) => TileKind, z: number, s: number): void {
+export function* treeShadowsSteps(ctx: CanvasRenderingContext2D, map: VillageMap, k: (x: number, y: number) => TileKind, z: number, s: number): Generator<void> {
   const u = z / 32;
   ctx.save();
   ctx.shadowColor = rgba(INK, 0.4);
@@ -164,6 +164,7 @@ export function treeShadows(ctx: CanvasRenderingContext2D, map: VillageMap, k: (
   ctx.fillStyle = rgba(INK, 0.32);
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      yield;
       if (k(x, y) !== 'tree') continue;
       ctx.beginPath();
       ctx.ellipse((x + 0.6) * z, (y + 0.8) * z, 0.52 * z, 0.19 * z, 0, 0, Math.PI * 2);
@@ -287,7 +288,7 @@ function paintTree(ctx: CanvasRenderingContext2D, variant: number, orchard: bool
 }
 
 /** Builds a sprite per tree variant at this zoom and returns one standing piece per tree tile. */
-export function buildTrees(map: VillageMap, z: number, s: number): Standing[] {
+export function* buildTreesSteps(map: VillageMap, z: number, s: number): Generator<void, Standing[]> {
   const k = sampler(map);
   const sprites = new Map<string, HTMLCanvasElement>();
   const left = 0.9;
@@ -297,6 +298,7 @@ export function buildTrees(map: VillageMap, z: number, s: number): Standing[] {
   const out: Standing[] = [];
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      yield;
       if (k(x, y) !== 'tree') continue;
       const orchard = !!placeAt(map.places, x, y, (p) => p.kind === 'orchard' || p.id === 'orchard');
       const variant = Math.floor(hash(x, y, 111) * 4);

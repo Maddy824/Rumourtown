@@ -6,7 +6,7 @@ import type { TileKind, VillageMap } from '../sim/types.js';
 import { BERRY, DENIM, FELT, INK, MOSS, MUSTARD, OAT, PAPER, darken, lighten, mix, rgba } from './palette.js';
 import { hash } from './grain.js';
 import { traceContours, type Inside } from './regions.js';
-import { feltPiece, roundRectPath, runningStitch } from './felt.js';
+import { feltPieceSteps, roundRectPath, runningStitch } from './felt.js';
 import type { Building } from './buildings.js';
 
 const TINT = {
@@ -47,24 +47,28 @@ function floorFor(b: Building): { tint: string; pattern: Pattern } {
 const isRoomTile = (t: TileKind | undefined) => t === 'floor' || t === 'wall' || t === 'door';
 
 /** Paints every room's floor into the ground layer. Called by the ground painter at the right depth. */
-export function paintRooms(ctx: CanvasRenderingContext2D, map: VillageMap, buildings: readonly Building[], z: number, s: number): void {
+export function* paintRoomsSteps(ctx: CanvasRenderingContext2D, map: VillageMap, buildings: readonly Building[], z: number, s: number): Generator<void> {
   const u = z / 32;
   const W = map.width;
   const H = map.height;
   const tileAt = (x: number, y: number) => (x >= 0 && y >= 0 && x < W && y < H ? map.tiles[y * W + x] : undefined);
   const covered = new Uint8Array(W * H);
-  buildings.forEach((b, i) => {
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i] as Building;
+    yield;
     const inside: Inside = (x, y) => x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h && isRoomTile(tileAt(x, y));
     for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) if (inside(x, y)) covered[y * W + x] = 1;
     const f = floorFor(b);
-    const shape = feltPiece(ctx, traceContours(W, H, inside, 1), inside, map, z, s, { fill: f.tint, light: lighten(f.tint, 0.45), dark: darken(f.tint, 0.1), thread: darken(f.tint, 0.3), radius: 3, lift: 0.75, fibres: 9, stitch: false, fuzz: false, seed: 61 + i });
-    if (u < 0.4) return;
+    const shape = yield* feltPieceSteps(ctx, traceContours(W, H, inside, 1), inside, map, z, s, { fill: f.tint, light: lighten(f.tint, 0.45), dark: darken(f.tint, 0.1), thread: darken(f.tint, 0.3), radius: 3, lift: 0.75, fibres: 9, stitch: false, fuzz: false, seed: 61 + i });
+    if (u < 0.4) continue;
+    yield;
     floorPattern(ctx, shape, b, f, z);
+    yield;
     furnish(ctx, b, map, f.tint, z, s);
-  });
+  }
   const stray: Inside = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !covered[y * W + x] && isRoomTile(tileAt(x, y));
   const strayContours = traceContours(W, H, stray, 1);
-  if (strayContours.length) feltPiece(ctx, strayContours, stray, map, z, s, { fill: FELT.floor, light: lighten(FELT.floor, 0.4), dark: darken(FELT.floor, 0.1), thread: FELT.floorLine, radius: 3, lift: 0.7, fibres: 9, stitch: false, fuzz: false, seed: 97 });
+  if (strayContours.length) yield* feltPieceSteps(ctx, strayContours, stray, map, z, s, { fill: FELT.floor, light: lighten(FELT.floor, 0.4), dark: darken(FELT.floor, 0.1), thread: FELT.floorLine, radius: 3, lift: 0.7, fibres: 9, stitch: false, fuzz: false, seed: 97 });
 }
 
 function floorPattern(ctx: CanvasRenderingContext2D, shape: Path2D, b: Building, f: { tint: string; pattern: Pattern }, z: number): void {

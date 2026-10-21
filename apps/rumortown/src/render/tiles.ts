@@ -7,8 +7,8 @@ import type { TileKind, VillageMap } from '../sim/types.js';
 import { BERRY, FELT, INK, MUSTARD, PAPER, darken, mix, rgba } from './palette.js';
 import { hash, seeded } from './grain.js';
 import { components, traceContours, type Inside } from './regions.js';
-import { feltPiece, fibreField, groundOf, mottle, placeAt, roundRectPath, sampler, type Ground } from './felt.js';
-import { bridge, treeShadows, well } from './landmarks.js';
+import { feltPieceSteps, fibreFieldSteps, groundOf, mottleSteps, placeAt, roundRectPath, sampler, type Ground } from './felt.js';
+import { bridge, treeShadowsSteps, well } from './landmarks.js';
 
 /** Tiles of felt sheet beyond the map edge, seen only at the far zoom. */
 export const SHEET_OVERHANG = 0.3;
@@ -19,7 +19,7 @@ export const LAYER_MARGIN = 0.7;
  * Paints the whole ground: the sheet, river, fields, paths, then `rooms` (floors, from the
  * buildings module) at the right depth, then the bridge, well and tree shadows. Origin = tile (0, 0).
  */
-export function paintGround(ctx: CanvasRenderingContext2D, map: VillageMap, z: number, s: number, rooms?: () => void): void {
+export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap, z: number, s: number, rooms?: () => Generator<void>): Generator<void> {
   const u = z / 32;
   const g = groundOf(map);
   const k = sampler(map);
@@ -42,9 +42,9 @@ export function paintGround(ctx: CanvasRenderingContext2D, map: VillageMap, z: n
   ctx.save();
   ctx.clip(sheet);
   const all: Inside = () => true;
-  mottle(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 11);
-  if (u >= 0.35) fibreField(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 26, 12);
-  if (u >= 0.5) grassDetails(ctx, map, g, k, z);
+  yield* mottleSteps(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 11);
+  if (u >= 0.35) yield* fibreFieldSteps(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 26, 12);
+  if (u >= 0.5) yield* grassDetails(ctx, map, g, k, z);
 
   const isWater: Inside = (x, y) => g(x, y) === 'water';
   const isField: Inside = (x, y) => g(x, y) === 'field';
@@ -52,8 +52,8 @@ export function paintGround(ctx: CanvasRenderingContext2D, map: VillageMap, z: n
 
   const water = traceContours(W, H, isWater, 2);
   if (water.length) {
-    feltPiece(ctx, water, isWater, map, z, s, { fill: FELT.water, light: FELT.waterLight, dark: FELT.waterDark, thread: FELT.waterThread, radius: 9, lift: 0.9, fibres: 18, stitch: true, fuzz: true, seed: 21 });
-    if (u >= 0.4) waterMarks(ctx, map, isWater, k, z);
+    yield* feltPieceSteps(ctx, water, isWater, map, z, s, { fill: FELT.water, light: FELT.waterLight, dark: FELT.waterDark, thread: FELT.waterThread, radius: 9, lift: 0.9, fibres: 18, stitch: true, fuzz: true, seed: 21 });
+    if (u >= 0.4) yield* waterMarks(ctx, map, isWater, k, z);
   }
 
   const fieldComps = components(W, H, isField);
@@ -62,38 +62,42 @@ export function paintGround(ctx: CanvasRenderingContext2D, map: VillageMap, z: n
     const set = new Set(comp.tiles);
     const inComp: Inside = (x, y) => x >= 0 && y >= 0 && x < W && y < H && set.has(y * W + x);
     const contours = traceContours(W, H, inComp, 2);
-    const shape = feltPiece(ctx, contours, inComp, map, z, s, { fill: FELT.soil, light: mix(FELT.soil, MUSTARD, 0.25), dark: darken(FELT.soil, 0.25), thread: FELT.soilThread, radius: 7, lift: 0.8, fibres: 16, stitch: true, fuzz: true, seed: 31 + i });
+    const shape = yield* feltPieceSteps(ctx, contours, inComp, map, z, s, { fill: FELT.soil, light: mix(FELT.soil, MUSTARD, 0.25), dark: darken(FELT.soil, 0.25), thread: FELT.soilThread, radius: 7, lift: 0.8, fibres: 16, stitch: true, fuzz: true, seed: 31 + i });
     const place = placeAt(map.places, comp.x + Math.floor(comp.w / 2), comp.y + Math.floor(comp.h / 2), (p) => p.kind === 'field');
     const wheat = place ? !/south/.test(place.id) : i % 2 === 0;
-    cropRows(ctx, shape, comp, z, wheat, 41 + i);
+    yield* cropRows(ctx, shape, comp, z, wheat, 41 + i);
   }
 
   const path = traceContours(W, H, isPath, 2);
   if (path.length) {
-    const shape = feltPiece(ctx, path, isPath, map, z, s, { fill: FELT.path, light: FELT.pathLight, dark: darken(FELT.path, 0.16), thread: FELT.pathThread, radius: 10, lift: 0.85, fibres: 18, stitch: true, fuzz: true, seed: 51 });
-    if (u >= 0.4) cobbles(ctx, shape, map, isPath, z);
-    if (u >= 0.5) pathPebbles(ctx, map, isPath, z);
+    const shape = yield* feltPieceSteps(ctx, path, isPath, map, z, s, { fill: FELT.path, light: FELT.pathLight, dark: darken(FELT.path, 0.16), thread: FELT.pathThread, radius: 10, lift: 0.85, fibres: 18, stitch: true, fuzz: true, seed: 51 });
+    if (u >= 0.4) yield* cobbles(ctx, shape, map, isPath, z);
+    if (u >= 0.5) yield* pathPebbles(ctx, map, isPath, z);
   }
 
-  rooms?.();
+  if (rooms) yield* rooms();
 
-  for (const comp of components(W, H, (x, y) => k(x, y) === 'bridge')) bridge(ctx, comp, k, z, s);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (k(x, y) === 'well') well(ctx, x, y, z, s);
-  treeShadows(ctx, map, k, z, s);
+  for (const comp of components(W, H, (x, y) => k(x, y) === 'bridge')) { bridge(ctx, comp, k, z, s); yield; }
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) if (k(x, y) === 'well') { well(ctx, x, y, z, s); yield; }
+    yield;
+  }
+  yield* treeShadowsSteps(ctx, map, k, z, s);
 
   ctx.restore();
-  if (u >= 0.3) sheetEdge(ctx, -ov, -ov, W * z + ov * 2, H * z + ov * 2, u);
+  if (u >= 0.3) yield* sheetEdge(ctx, -ov, -ov, W * z + ov * 2, H * z + ov * 2, u);
 }
 
 /** Blanket stitch around the village sheet: a line along the edge with ticks running off it. */
-function sheetEdge(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, u: number): void {
+function* sheetEdge(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, u: number): Generator<void> {
   const inset = 5 * u;
   const step = 7 * u;
   const p = new Path2D();
-  const edge = (ax: number, ay: number, bx: number, by: number, nx: number, ny: number) => {
+  const edge = function* (ax: number, ay: number, bx: number, by: number, nx: number, ny: number): Generator<void> {
     const len = Math.hypot(bx - ax, by - ay);
     const n = Math.max(1, Math.round(len / step));
     for (let i = 0; i < n; i++) {
+      if (i % 16 === 0) yield;
       const t0 = i / n;
       const t1 = (i + 1) / n;
       const px = ax + (bx - ax) * t0;
@@ -104,10 +108,10 @@ function sheetEdge(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
       p.lineTo(ax + (bx - ax) * t1 + nx * inset, ay + (by - ay) * t1 + ny * inset);
     }
   };
-  edge(x, y, x + w, y, 0, 1);
-  edge(x + w, y, x + w, y + h, -1, 0);
-  edge(x + w, y + h, x, y + h, 0, -1);
-  edge(x, y + h, x, y, 1, 0);
+  yield* edge(x, y, x + w, y, 0, 1);
+  yield* edge(x + w, y, x + w, y + h, -1, 0);
+  yield* edge(x + w, y + h, x, y + h, 0, -1);
+  yield* edge(x, y + h, x, y, 1, 0);
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineWidth = 1.2 * u;
@@ -121,13 +125,14 @@ function sheetEdge(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 /** Small stitched tufts and French-knot flowers, sparse and quiet. */
-function grassDetails(ctx: CanvasRenderingContext2D, map: VillageMap, g: (x: number, y: number) => Ground, k: (x: number, y: number) => TileKind, z: number): void {
+function* grassDetails(ctx: CanvasRenderingContext2D, map: VillageMap, g: (x: number, y: number) => Ground, k: (x: number, y: number) => TileKind, z: number): Generator<void> {
   const u = z / 32;
   const tufts = new Path2D();
   const knots: { x: number; y: number; c: string }[] = [];
   const flowerColours = [PAPER, MUSTARD, mix(BERRY, PAPER, 0.25)];
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      yield;
       if (g(x, y) !== 'grass' || k(x, y) !== 'grass') continue;
       const h = hash(x, y, 71);
       const px = (x + 0.2 + hash(x, y, 72) * 0.6) * z;
@@ -148,6 +153,7 @@ function grassDetails(ctx: CanvasRenderingContext2D, map: VillageMap, g: (x: num
   ctx.strokeStyle = FELT.grassThread;
   ctx.stroke(tufts);
   for (const n of knots) {
+    yield;
     ctx.fillStyle = rgba(INK, 0.25);
     ctx.beginPath();
     ctx.arc(n.x + 0.4 * u, n.y + 0.6 * u, 1.35 * u, 0, Math.PI * 2);
@@ -160,11 +166,12 @@ function grassDetails(ctx: CanvasRenderingContext2D, map: VillageMap, g: (x: num
 }
 
 /** Short stitched wave marks on the river: two or three stitches on a gentle arc. */
-function waterMarks(ctx: CanvasRenderingContext2D, map: VillageMap, isWater: Inside, k: (x: number, y: number) => TileKind, z: number): void {
+function* waterMarks(ctx: CanvasRenderingContext2D, map: VillageMap, isWater: Inside, k: (x: number, y: number) => TileKind, z: number): Generator<void> {
   const u = z / 32;
   const p = new Path2D();
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      yield;
       if (!isWater(x, y) || k(x, y) === 'bridge') continue;
       const marks = hash(x, y, 81) < 0.55 ? 1 : 2;
       for (let m = 0; m < marks; m++) {
@@ -186,7 +193,7 @@ function waterMarks(ctx: CanvasRenderingContext2D, map: VillageMap, isWater: Ins
 }
 
 /** Crop rows across a field: raised felt strips of wheat (with stalk stitches) or greens (with knots). */
-function cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: number; y: number; w: number; h: number }, z: number, wheat: boolean, seed: number): void {
+function* cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: number; y: number; w: number; h: number }, z: number, wheat: boolean, seed: number): Generator<void> {
   const u = z / 32;
   const horizontal = comp.w >= comp.h;
   const span = horizontal ? comp.h : comp.w;
@@ -203,6 +210,7 @@ function cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: numbe
   const ticks = new Path2D();
   const knots: { x: number; y: number; r: number }[] = [];
   for (let r = 0; r < rows; r++) {
+    yield;
     const a0 = 0.32 + rnd() * 0.08;
     const a1 = along - 0.32 - rnd() * 0.08;
     const b = offset + r * pitch;
@@ -214,6 +222,7 @@ function cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: numbe
     const len = (a1 - a0) * z;
     if (wheat) {
       for (let d = 3 * u; d < len - 2 * u; d += 3.4 * u) {
+        yield;
         const jitter = (rnd() - 0.5) * 1.2 * u;
         if (horizontal) {
           ticks.moveTo(x + d + jitter, y + h * 0.78);
@@ -225,6 +234,7 @@ function cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: numbe
       }
     } else {
       for (let d = 4 * u; d < len - 3 * u; d += 6.5 * u) {
+        yield;
         knots.push(horizontal ? { x: x + d + (rnd() - 0.5) * 1.5 * u, y: y + h / 2, r: (2.6 + rnd()) * u } : { x: x + w / 2, y: y + d + (rnd() - 0.5) * 1.5 * u, r: (2.6 + rnd()) * u });
       }
     }
@@ -242,6 +252,7 @@ function cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: numbe
     ctx.strokeStyle = dark;
     ctx.stroke(ticks);
     for (const n of knots) {
+      yield;
       ctx.fillStyle = mix(FELT.greens, PAPER, 0.18);
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
@@ -260,7 +271,7 @@ function cropRows(ctx: CanvasRenderingContext2D, shape: Path2D, comp: { x: numbe
  * Felt cobbles on the village square: rounded patches a shade darker than the path, each with
  * a lighter upper edge, so the square reads as paved and the lanes as plain felt.
  */
-function cobbles(ctx: CanvasRenderingContext2D, shape: Path2D, map: VillageMap, isPath: Inside, z: number): void {
+function* cobbles(ctx: CanvasRenderingContext2D, shape: Path2D, map: VillageMap, isPath: Inside, z: number): Generator<void> {
   const u = z / 32;
   const plazas = map.places.filter((p) => (p.kind === 'square' && p.id !== 'riverside' && p.rect.w > 1 && p.rect.h > 1) || p.kind === 'well');
   if (!plazas.length) return;
@@ -268,6 +279,7 @@ function cobbles(ctx: CanvasRenderingContext2D, shape: Path2D, map: VillageMap, 
   const rim = new Path2D();
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      yield;
       if (!isPath(x, y) || !plazas.some((p) => x >= p.rect.x && y >= p.rect.y && x < p.rect.x + p.rect.w && y < p.rect.y + p.rect.h)) continue;
       for (let j = 0; j < 3; j++) {
         for (let i = 0; i < 3; i++) {
@@ -297,10 +309,11 @@ function cobbles(ctx: CanvasRenderingContext2D, shape: Path2D, map: VillageMap, 
 }
 
 /** A few felt pebbles on the paths. */
-function pathPebbles(ctx: CanvasRenderingContext2D, map: VillageMap, isPath: Inside, z: number): void {
+function* pathPebbles(ctx: CanvasRenderingContext2D, map: VillageMap, isPath: Inside, z: number): Generator<void> {
   const u = z / 32;
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      yield;
       if (!isPath(x, y) || hash(x, y, 91) > 0.09) continue;
       const cx = (x + 0.25 + hash(x, y, 92) * 0.5) * z;
       const cy = (y + 0.25 + hash(x, y, 93) * 0.5) * z;
@@ -311,4 +324,3 @@ function pathPebbles(ctx: CanvasRenderingContext2D, map: VillageMap, isPath: Ins
     }
   }
 }
-

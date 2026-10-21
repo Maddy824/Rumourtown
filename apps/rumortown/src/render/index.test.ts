@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Camera, Look, RenderOptions, VillageMap, VillagerView, WorldSnapshot } from '../sim/types.js';
 import { CLOSE_ZOOM, createRenderer, fitZoom } from './index.js';
-import * as roofPainter from './roofs.js';
 import { SpriteCache } from './sprites.js';
 import * as tiles from './tiles.js';
 
@@ -26,6 +25,10 @@ function canvasStub(): HTMLCanvasElement & { blits: Blit[] } {
   };
   const context = new Proxy(state, { get: (target, key) => Reflect.get(target, key) ?? noop });
   return { width: 360, height: 640, clientWidth: 360, clientHeight: 640, style: {}, blits, getContext: () => context } as unknown as HTMLCanvasElement & { blits: Blit[] };
+}
+
+function roofImage(canvas: HTMLCanvasElement & { blits: Blit[] }): unknown {
+  return canvas.blits.find((b) => b.args.length === 4 && (b.args[2] ?? 0) > (b.args[3] ?? 0) * 2)?.image;
 }
 
 const look: Look = { body: 'round', skin: '#C98F69', hair: { style: 'short', color: '#604532' }, hat: 'cap', top: '#6B8E4E', bottom: '#3F5E8A', prop: 'none' };
@@ -122,17 +125,16 @@ describe('villager hit testing', () => {
 describe('local roof transparency', () => {
   it('keeps a vanished snapshot speaker faded for two seconds after its last sighting', () => {
     const clock = vi.spyOn(performance, 'now').mockReturnValue(100);
-    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
     const speaking = snapshot([{ ...villager('mira'), bubble: { text: 'Hello', untilTick: 11 } }]);
     const { renderer, canvas } = setup(speaking);
-    const roof = roofs.mock.results[0]?.value[0];
+    const roof = roofImage(canvas);
     expect(roof).toBeDefined();
     const quiet = snapshot([villager('mira')]);
     const opacityAt = (now: number, cur: WorldSnapshot) => {
       clock.mockReturnValue(now);
       canvas.blits.length = 0;
       renderer.render(null, cur, camera(), options);
-      return canvas.blits.find((b) => b.image === roof?.img)?.alpha;
+      return canvas.blits.find((b) => b.image === roof)?.alpha;
     };
     // Refresh the last sighting even if the simulation has not emitted a new snapshot.
     expect(opacityAt(500, speaking)).toBe(0.35);
@@ -144,15 +146,14 @@ describe('local roof transparency', () => {
 
   it('tracks recent speakers by id across reordering and refreshes their grace period', () => {
     const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
-    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
     const speaking = snapshot([{ ...villager('mira', 25, 20), bubble: { text: 'Hello', untilTick: 11 } }, villager('tom', 25, 20)]);
     const { renderer, canvas } = setup(speaking);
-    const roof = roofs.mock.results[0]?.value[0];
+    const roof = roofImage(canvas);
     const quiet = snapshot([villager('tom', 25, 20), villager('mira')]);
     clock.mockReturnValue(1600);
     canvas.blits.length = 0;
     renderer.render(null, quiet, camera(), options);
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
     quiet.villagers[1]!.bubble = { text: 'Again', untilTick: 11 };
     clock.mockReturnValue(1700);
     renderer.render(null, quiet, camera(), options);
@@ -160,44 +161,41 @@ describe('local roof transparency', () => {
     clock.mockReturnValue(3600);
     canvas.blits.length = 0;
     renderer.render(null, quiet, camera(), options);
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
     clock.mockReturnValue(3700);
     canvas.blits.length = 0;
     renderer.render(null, quiet, camera(), options);
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(1);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(1);
   });
 
   it.each(['stranger', 'selected', 'speaking'] as const)('fades a roof overlapping the %s and restores opacity for later drawing', (kind) => {
-    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
     const v = villager('mira');
     if (kind === 'speaking') v.bubble = { text: 'Hello', untilTick: 11 };
     const cur = snapshot(kind === 'stranger' ? [] : [v]);
     if (kind === 'stranger') cur.player.pos = { x: 13.5, y: 11.5 };
     const opts = { ...options, selected: kind === 'selected' ? v.id : undefined };
     const { renderer, canvas } = setup(cur, camera(), opts);
-    const roof = roofs.mock.results.flatMap((r) => r.value ?? []).find((r) => r.w > 200);
+    const roof = roofImage(canvas);
     expect(roof).toBeDefined();
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(0.35);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
     expect(canvas.getContext('2d')?.globalAlpha).toBe(1);
 
     cur.player.pos = { x: 25, y: 20 };
     v.pos = { x: 25, y: 20 };
     canvas.blits.length = 0;
     renderer.render(null, cur, camera(), opts);
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(1);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(1);
   });
 
   it.each(['ordinary', 'expired', 'empty'] as const)('keeps full opacity for an overlapping %s villager', (kind) => {
-    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
     const v = villager('mira');
     if (kind !== 'ordinary') v.bubble = { text: kind === 'empty' ? '' : 'Hello', untilTick: kind === 'expired' ? 10 : 11 };
     const { canvas } = setup(snapshot([v]));
-    const roof = roofs.mock.results.flatMap((r) => r.value ?? []).find((r) => r.w > 200);
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(1);
+    const roof = roofImage(canvas);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(1);
   });
 
   it('uses the interpolated position and fades at the far zoom too', () => {
-    const roofs = vi.spyOn(roofPainter, 'buildRoofs');
     const cur = snapshot([villager('mira', 13.5, 13)]);
     const cam = camera(fitZoom(village(), 360, 640));
     const opts = { ...options, selected: 'mira', alpha: 0 };
@@ -205,8 +203,8 @@ describe('local roof transparency', () => {
     const previous = snapshot([villager('mira')]);
     canvas.blits.length = 0;
     renderer.render(previous, cur, cam, opts);
-    const roof = roofs.mock.results.at(-1)?.value[0];
-    expect(canvas.blits.find((b) => b.image === roof?.img)?.alpha).toBe(0.35);
+    const roof = roofImage(canvas);
+    expect(canvas.blits.find((b) => b.image === roof)?.alpha).toBe(0.35);
   });
 });
 
@@ -259,7 +257,7 @@ describe('prepared zoom and sprite caches', () => {
   it('renders an unprepared inset far zoom within 4 ms, then switches to its exact layer and sprites', () => {
     const cur = snapshot(Array.from({ length: 24 }, (_, i) => villager(`villager-${i}`, 13 + i % 6, 11 + Math.floor(i / 6))));
     const { renderer, canvas, map } = setup(cur);
-    const paint = vi.spyOn(tiles, 'paintGround');
+    const paint = vi.spyOn(tiles, 'paintGroundSteps');
     const cached = vi.spyOn(SpriteCache.prototype, 'cachedVillager');
     const stranger = vi.spyOn(SpriteCache.prototype, 'cachedStranger');
     // The UI derives its far zoom from space left over after its controls.
@@ -306,7 +304,7 @@ describe('prepared zoom and sprite caches', () => {
   it('abandons a superseded zoom and discards pending preparation on resize', () => {
     const cur = snapshot([villager('mira')]);
     const { renderer, canvas, map } = setup(cur);
-    const paint = vi.spyOn(tiles, 'paintGround');
+    const paint = vi.spyOn(tiles, 'paintGroundSteps');
     renderer.render(null, cur, camera(6.1), options);
     renderer.render(null, cur, camera(6.2), options);
     drainIdle();
@@ -326,10 +324,32 @@ describe('prepared zoom and sprite caches', () => {
     expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
   });
 
+  it.each(['newer zoom', 'resize'] as const)('cancels an in-progress texture pass on %s', (cause) => {
+    const cur = snapshot([villager('mira')]);
+    const { renderer, canvas, map } = setup(cur);
+    const before = canvases.length;
+    renderer.render(null, cur, camera(31), options);
+    // One iterator step per callback: enter the ground texture pass, then interrupt it.
+    for (let i = 0; i < 30; i++) callbacks.shift()?.({ didTimeout: true, timeRemaining: () => 0 });
+    const discarded = canvases[before] as ReturnType<typeof canvasStub>;
+    expect(discarded.blits.length).toBeGreaterThan(0);
+    const painted = discarded.blits.length;
+    if (cause === 'resize') renderer.resize(360, 640, 2);
+    renderer.render(null, cur, camera(30), options);
+    drainIdle();
+    expect(discarded.blits).toHaveLength(painted);
+    canvas.blits.length = 0;
+    renderer.render(null, cur, camera(30), options);
+    const exact = canvas.blits[0]?.image as HTMLCanvasElement;
+    expect(exact).not.toBe(discarded);
+    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * 30 * (cause === 'resize' ? 2 : 1)));
+    expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
+  });
+
   it('bounds the cache while retaining close and the two most recent exact zooms', () => {
     const cur = snapshot();
     const { renderer } = setup(cur);
-    const paint = vi.spyOn(tiles, 'paintGround');
+    const paint = vi.spyOn(tiles, 'paintGroundSteps');
     for (const zoom of [6.1, 6.2, 6.3, 6.4]) {
       renderer.render(null, cur, camera(zoom), options);
       drainIdle();

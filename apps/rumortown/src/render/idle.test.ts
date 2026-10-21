@@ -15,7 +15,7 @@ describe('idle cache preparation', () => {
     queue.add(work());
     expect(steps).toEqual([]);
     callbacks.shift()?.({ didTimeout: false, timeRemaining: () => 50 });
-    expect(steps).toEqual([0, 1]);
+    expect(steps).toEqual([0]);
     while (callbacks.length) callbacks.shift()?.({ didTimeout: false, timeRemaining: () => 50 });
     expect(steps).toEqual([0, 1, 2, 3, 4]);
   });

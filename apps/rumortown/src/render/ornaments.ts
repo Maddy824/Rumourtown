@@ -10,7 +10,7 @@ export interface RoofStyle {
   shingle: 'scallop' | 'thatch' | 'slate';
 }
 
-export function shingles(ctx: CanvasRenderingContext2D, style: RoofStyle, x0: number, x1: number, band: number, z: number, seed: number): void {
+export function* shinglesSteps(ctx: CanvasRenderingContext2D, style: RoofStyle, x0: number, x1: number, band: number, z: number, seed: number): Generator<void> {
   const u = z / 32;
   const row = 0.19 * z;
   const dark = rgba(darken(style.paper, 0.42), 0.55);
@@ -19,6 +19,7 @@ export function shingles(ctx: CanvasRenderingContext2D, style: RoofStyle, x0: nu
   if (style.shingle === 'thatch') {
     ctx.lineWidth = 0.9 * u;
     for (let y = -band + 0.12 * z, r = 0; y < 0; y += row, r++) {
+      yield;
       ctx.strokeStyle = r % 2 ? dark : light;
       ctx.beginPath();
       for (let x = x0 + ((seed + r * 3) % 5) * u; x < x1; x += 2.6 * u) {
@@ -32,6 +33,7 @@ export function shingles(ctx: CanvasRenderingContext2D, style: RoofStyle, x0: nu
   const scallop = style.shingle === 'slate' ? 0.24 * z : 0.21 * z;
   ctx.lineWidth = 0.9 * u;
   for (let y = -band + 0.1 * z + row, r = 0; y < 0.01 * z; y += row, r++) {
+    yield;
     const off = r % 2 ? scallop / 2 : 0;
     ctx.strokeStyle = dark;
     ctx.beginPath();
@@ -164,7 +166,7 @@ export function wheel(ctx: CanvasRenderingContext2D, cx: number, cy: number, z: 
 }
 
 /** A front gable: a paper triangle rising from the roof with a round window, the house shape. */
-export function gable(ctx: CanvasRenderingContext2D, cx: number, top: number, w: number, h: number, style: RoofStyle, z: number, s: number): void {
+export function* gableSteps(ctx: CanvasRenderingContext2D, cx: number, top: number, w: number, h: number, style: RoofStyle, z: number, s: number): Generator<void> {
   const u = z / 32;
   const base = top + 0.42 * z;
   const p = new Path2D();
@@ -182,7 +184,7 @@ export function gable(ctx: CanvasRenderingContext2D, cx: number, top: number, w:
   ctx.restore();
   ctx.save();
   ctx.clip(p);
-  shingles(ctx, style, cx - w / 2, cx + w / 2, h + 0.42 * z, z, Math.floor(cx));
+  yield* shinglesSteps(ctx, style, cx - w / 2, cx + w / 2, h + 0.42 * z, z, Math.floor(cx));
   const g = ctx.createLinearGradient(cx - w / 2, top - h, cx + w / 2, base);
   g.addColorStop(0, rgba(PAPER, 0.16));
   g.addColorStop(1, rgba(INK, 0.14));
