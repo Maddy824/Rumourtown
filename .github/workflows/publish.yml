@@ -1,0 +1,35 @@
+name: Publish rumormind
+
+on:
+  push:
+    tags: ['rumormind@*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11
+      - run: npm ci
+      - run: npm test
+      - name: Verify the release tag matches the package version
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('packages/rumormind/package.json', 'utf8'));
+          if (process.env.GITHUB_REF_NAME !== `rumormind@${pkg.version}`) {
+            throw new Error('Release tag must match the rumormind package version.');
+          }
+          NODE
+      - name: Publish with npm trusted publishing
+        working-directory: packages/rumormind
+        run: npm publish --provenance --access public

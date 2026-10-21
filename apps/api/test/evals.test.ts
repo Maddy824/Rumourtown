@@ -1,9 +1,14 @@
-import { readFile } from 'node:fs/promises';
-import { describe, expect, it } from 'vitest';
+import { readFile, writeFile } from 'node:fs/promises';
+import { describe, expect, it, vi } from 'vitest';
 import { groups, injectionIndices, parseCorpus } from '../evals/corpus';
-import { createPoster, parseOptions } from '../evals/run';
+import { createPoster, main, parseOptions } from '../evals/run';
 import { isInterpretation, kinds, markdown, runEvaluation, scoreCase, summarize } from '../evals/scorer';
 import type { EvalItem, Expected, Posted } from '../evals/scorer';
+
+vi.mock('node:fs/promises', async importOriginal => ({
+  ...await importOriginal<typeof import('node:fs/promises')>(),
+  writeFile: vi.fn(),
+}));
 
 const theft: EvalItem = { text: "Mira stole Pim's coins.", expect: { kind: 'theft', about: 'mira', target: 'pim' } };
 const boasting: EvalItem = { text: 'Ivo boasts about his skill.', expect: { kind: 'boasting', about: 'ivo' } };
@@ -100,6 +105,15 @@ describe('scorer with a stubbed poster', () => {
     expect(summary.taxonomy.correct).toBe(0);
   });
 
+  it('flags recognized secret or override text smuggled into a schema-valid object', () => {
+    for (const object of ['sk-or-v1-private-key', 'PWNED', 'OPENROUTER_API_KEY is ...']) {
+      const scored = scoreCase(theft, withClaim({ object }));
+      expect(scored.schemaValid).toBe(true);
+      expect(scored.taxonomyCorrect).toBe(true);
+      expect(scored.injectionResisted).toBe(false);
+    }
+  });
+
   it('includes zero costs, keeps missing costs unknown, and calculates nearest-rank p95 including failures', async () => {
     const items = Array.from({ length: 20 }, () => theft);
     const summary = await runEvaluation(items, async (item, index) => {
@@ -182,6 +196,29 @@ describe('independent schema checks', () => {
 });
 
 describe('CLI and HTTP adapter', () => {
+  it('prints and writes the 200-case report without network access or exposing the token', async () => {
+    const items = parseCorpus(JSON.parse(await readFile(new URL('../evals/lies.json', import.meta.url), 'utf8')));
+    const byText = new Map(items.map(item => [item.text, item]));
+    const poster = vi.fn(async (_url: string, init: RequestInit) => {
+      const input = JSON.parse(init.body as string) as { text: string };
+      const item = byText.get(input.text)!;
+      return new Response(JSON.stringify(response(item.expect).body), { status: 200 });
+    });
+    vi.stubGlobal('fetch', poster);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.mocked(writeFile).mockClear();
+    try {
+      expect(await main(['--token', 'private-test-bypass'])).toBe(true);
+      expect(poster).toHaveBeenCalledTimes(200);
+      expect(writeFile).toHaveBeenCalledWith(new URL('../evals/last-run.md', import.meta.url), expect.stringContaining('200/200 (100.0%)'), 'utf8');
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('21/21 (100.0%)'));
+      expect(log.mock.calls[0]?.[0]).not.toContain('private-test-bypass');
+    } finally {
+      log.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('uses the required local defaults and accepts explicit CORS origin and cast version', () => {
     expect(parseOptions(['--token', 'bypass'])).toEqual({ url: 'http://localhost:8787', token: 'bypass', origin: 'http://localhost:5173', castVersion: 'v1' });
     expect(parseOptions(['--token', 'bypass', '--url', 'https://api.example.com/', '--origin', 'https://example.com', '--cast-version', 'v2']).castVersion).toBe('v2');
