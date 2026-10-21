@@ -7,6 +7,7 @@ import { BERRY, DENIM, INK, MUSTARD, PAPER, darken, lighten, mix, rgba } from '.
 import { hash, makeCanvas } from './grain.js';
 import type { Standing } from './felt.js';
 import type { Building } from './buildings.js';
+import { BODY } from './sprites.js';
 import { awning, chimney, doorway, dormer, gable, shingles, sign, tower, wheel, type RoofStyle } from './ornaments.js';
 
 function roofStyle(b: Building): RoofStyle {
@@ -43,9 +44,16 @@ export function buildRoofs(buildings: readonly Building[], z: number, s: number)
     const base = (hT - PAD * 0.35) * z;
     surf.ctx.setTransform(s, 0, 0, s, left * s, base * s);
     paintFacade(surf.ctx, b, z, s);
-    out.push({ img: surf.canvas, x: b.x * z - left, y: b.y * z - base, w: wT * z, h: hT * z, sortY: b.y + 0.05 });
+    out.push({ img: surf.canvas, x: b.x * z - left, y: b.y * z - base, w: wT * z, h: hT * z, sortY: b.y + 0.05, roof: true });
   }
   return out;
+}
+
+/** Compare the façade's drawn footprint with the figure's body, in layer pixels. */
+export function roofOverlaps(roof: Standing, x: number, y: number, zoom: number, scale = 1): boolean {
+  const size = zoom * scale;
+  return x * zoom + BODY.right * size > roof.x && x * zoom + BODY.left * size < roof.x + roof.w
+    && y * zoom + BODY.bottom * size > roof.y && y * zoom + BODY.top * size < roof.y + roof.h;
 }
 
 /** Paints a façade with its base on y = 0, spanning x = 0..b.w tiles. */
@@ -120,4 +128,3 @@ function paintFacade(ctx: CanvasRenderingContext2D, b: Building, z: number, s: n
   if (b.kind === 'smithy') sign(ctx, x0 + 0.25 * z, -band * 0.45, 'anvil', z, s);
   for (const dx of b.topDoors) doorway(ctx, (dx - b.x + 0.5) * z, z);
 }
-

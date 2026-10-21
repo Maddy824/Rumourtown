@@ -17,6 +17,8 @@ export interface Standing {
   h: number;
   /** Depth line in tiles: things whose feet are below it draw in front. */
   sortY: number;
+  /** Only roof façades fade when they overlap an important figure. */
+  roof?: true;
 }
 
 export type Ground = 'grass' | 'path' | 'water' | 'field' | 'room';
@@ -217,4 +219,3 @@ export function roundRectPath(p: Path2D, x: number, y: number, w: number, h: num
   p.arcTo(x, y, x + w, y, rr);
   p.closePath();
 }
-

@@ -340,33 +340,75 @@ function lookKey(look: Look): string {
   return `${look.body}|${look.skin}|${look.hair.style}|${look.hair.color}|${look.hat}|${look.top}|${look.bottom}|${look.apron ?? ''}|${look.prop}`;
 }
 
-/** Sprites per zoom bucket; at most three zoom levels kept. */
+/** Sprites for the two supported zooms. Composition is confined to preparation jobs. */
 export class SpriteCache {
   private buckets = new Map<string, Map<string, SpriteImage>>();
   private keys = new WeakMap<Look, string>();
+  private prepared = new Set<string>();
+
+  private bucketId(zoom: number, dpr: number): string {
+    return `${zoom.toFixed(3)}@${dpr}`;
+  }
+
+  private appearance(look: Look, core: boolean): string {
+    let key = this.keys.get(look);
+    if (key === undefined) {
+      key = lookKey(look);
+      this.keys.set(look, key);
+    }
+    return `${key}|${core ? 1 : 0}`;
+  }
+
+  private villagerKey(look: Look, facing: Facing, frame: Frame, mood: number, core: boolean): string {
+    return `${this.appearance(look, core)}|${facing}|${frame}|${facing === 'n' ? 0 : moodBucket(mood)}`;
+  }
+
+  /** A resize keeps only the two zoom/DPR buckets which can still be used. */
+  retain(zooms: readonly number[], dpr: number): void {
+    const ids = zooms.map((zoom) => this.bucketId(zoom, dpr));
+    for (const id of this.buckets.keys()) if (!ids.includes(id)) this.buckets.delete(id);
+    for (const key of this.prepared) if (!ids.some((id) => key.startsWith(`${id}:`))) this.prepared.delete(key);
+  }
+
+  ready(look: Look, core: boolean, zoom: number, dpr: number): boolean {
+    return this.prepared.has(`${this.bucketId(zoom, dpr)}:${this.appearance(look, core)}`);
+  }
+
+  /** Warm all facings, walk frames and moods before a new appearance enters the draw pass. */
+  *prepare(look: Look, core: boolean, zoom: number, dpr: number): Generator<void> {
+    if (this.ready(look, core, zoom, dpr)) return;
+    for (const facing of ['s', 'n', 'e', 'w'] as const) {
+      for (const frame of [0, 1] as const) {
+        for (const mood of facing === 'n' ? [0] : [-1, 0, 1]) {
+          this.villager(look, facing, frame, mood, core, zoom, dpr);
+          yield;
+        }
+      }
+    }
+    this.prepared.add(`${this.bucketId(zoom, dpr)}:${this.appearance(look, core)}`);
+  }
+
+  cachedVillager(look: Look, facing: Facing, frame: Frame, mood: number, core: boolean, zoom: number, dpr: number): SpriteImage | undefined {
+    return this.buckets.get(this.bucketId(zoom, dpr))?.get(this.villagerKey(look, facing, frame, mood, core));
+  }
+
+  cachedStranger(facing: Facing, frame: Frame, zoom: number, dpr: number): SpriteImage | undefined {
+    return this.buckets.get(this.bucketId(zoom, dpr))?.get(`stranger|${facing}|${frame}`);
+  }
 
   private bucket(zoom: number, dpr: number): Map<string, SpriteImage> {
-    const id = `${zoom.toFixed(3)}@${dpr}`;
+    const id = this.bucketId(zoom, dpr);
     let b = this.buckets.get(id);
     if (!b) {
       b = new Map();
       this.buckets.set(id, b);
-      if (this.buckets.size > 3) {
-        const oldest = this.buckets.keys().next().value;
-        if (oldest !== undefined) this.buckets.delete(oldest);
-      }
     }
     return b;
   }
 
   villager(look: Look, facing: Facing, frame: Frame, mood: number, core: boolean, zoom: number, dpr: number): SpriteImage {
-    let lk = this.keys.get(look);
-    if (lk === undefined) {
-      lk = lookKey(look);
-      this.keys.set(look, lk);
-    }
     const mb = facing === 'n' ? 0 : moodBucket(mood);
-    const key = `${lk}|${facing}|${frame}|${mb}|${core ? 1 : 0}`;
+    const key = this.villagerKey(look, facing, frame, mood, core);
     const b = this.bucket(zoom, dpr);
     let img = b.get(key);
     if (!img) {

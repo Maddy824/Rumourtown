@@ -4,10 +4,10 @@
  * and a paper-grain overlay go on top. A frame is a handful of blits and a few strokes.
  */
 import { TILE, type Camera, type Renderer, type RenderOptions, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
-import { computeView, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
+import { computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
 import { findBuildings, paintWalls } from './buildings.js';
 import { paintRooms } from './rooms.js';
-import { buildRoofs } from './roofs.js';
+import { buildRoofs, roofOverlaps } from './roofs.js';
 import { LAYER_MARGIN, paintGround } from './tiles.js';
 import { buildTrees } from './landmarks.js';
 import type { Standing } from './felt.js';
@@ -15,6 +15,7 @@ import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
 import { hashString, makeCanvas, makeCork, makeGrain } from './grain.js';
 import { INK, MUSTARD, PAPER, mix, rgba } from './palette.js';
+import { IdleQueue } from './idle.js';
 
 export { fitZoom } from './camera.js';
 /** The close camera: CSS pixels per tile. */
@@ -32,8 +33,6 @@ interface Layer {
 
 /** Largest ground layer in backing pixels (iOS Safari caps a canvas near 16.7M); beyond this it paints at a lower scale. */
 const MAX_LAYER_PIXELS = 12e6;
-/** A zoom must hold this many frames before a new layer is painted for it. */
-const SETTLE_FRAMES = 2;
 const GRAIN_ALPHA = 0.06;
 const WALK_FRAME_MS = 170;
 /** Positions further apart than this between snapshots are a jump, not a walk. */
@@ -48,8 +47,9 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   let sized = false;
   const buildings = findBuildings(map);
   const layers: Layer[] = [];
-  let pendingZoom = Number.NaN;
-  let pendingFrames = 0;
+  const idle = new IdleQueue();
+  let preparingSprites = false;
+  let resizePending = false;
   const sprites = new SpriteCache();
   const threads = new ThreadPainter();
   const grainTile = makeGrain(256);
@@ -94,6 +94,24 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (corkDpr !== dpr) cork = null;
     // Layers painted for another pixel density are useless now; free them.
     for (let i = layers.length - 1; i >= 0; i--) if ((layers[i] as Layer).dpr !== dpr) layers.splice(i, 1);
+    // Only called during creation/resize, never by the frame's drawing path.
+    const far = fitZoom(map, width, height);
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const z = (layers[i] as Layer).zoom;
+      if (z !== CLOSE_ZOOM && z !== far) layers.splice(i, 1);
+    }
+    idle.clear();
+    preparingSprites = false;
+    sprites.retain([CLOSE_ZOOM, far], dpr);
+    for (const zoom of far === CLOSE_ZOOM ? [CLOSE_ZOOM] : [CLOSE_ZOOM, far]) {
+      if (!layers.some((l) => l.zoom === zoom)) buildLayer(zoom);
+      for (const facing of ['s', 'n', 'e', 'w'] as const) {
+        for (const frame of [0, 1] as const) sprites.stranger(facing, frame, zoom, dpr);
+      }
+    }
+    cork = ctx.createPattern(makeCork(Math.round(256 * dpr)), 'repeat');
+    corkDpr = dpr;
+    if (current) requestSprites(current);
   }
 
   function buildLayer(zoom: number): Layer {
@@ -109,16 +127,15 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     standing.sort((a, b) => a.sortY - b.sortY);
     const layer: Layer = { zoom, dpr, scale, canvas: lc, standing };
     layers.push(layer);
-    if (layers.length > 3) layers.shift();
     return layer;
   }
 
   /** How much the chosen layer is stretched this frame: 1 unless the zoom is still moving. */
   let stretch = 1;
 
-  /** The layer to draw with; sets `stretch`. Paints a new one once the zoom settles. */
+  /** Read-only cache lookup. Intermediate zooms stretch the nearest supported layer. */
   function layerFor(zoom: number): Layer {
-    let nearest: Layer | null = null;
+    let nearest = layers[0] as Layer;
     let nearestGap = Infinity;
     stretch = 1;
     for (const l of layers) {
@@ -130,14 +147,36 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
         nearest = l;
       }
     }
-    if (Math.abs(zoom - pendingZoom) < 1e-3) pendingFrames++;
-    else {
-      pendingZoom = zoom;
-      pendingFrames = 0;
-    }
-    if (!nearest || pendingFrames >= SETTLE_FRAMES) return buildLayer(zoom);
     stretch = zoom / nearest.zoom;
     return nearest;
+  }
+
+  function spritesReady(cur: WorldSnapshot): boolean {
+    for (const layer of layers) for (const v of cur.villagers) {
+      if (!sprites.ready(v.look, v.tier === 'core', layer.zoom, dpr)) return false;
+    }
+    return true;
+  }
+
+  function* prepareSprites(): Generator<void> {
+    // The contract supplies Looks only with the first snapshot. Defer their composition,
+    // then retain the complete wardrobe at both zooms for every subsequent frame.
+    while (current && !spritesReady(current)) {
+      const snapshot = current;
+      for (const layer of layers) for (const v of snapshot.villagers) {
+        yield* sprites.prepare(v.look, v.tier === 'core', layer.zoom, dpr);
+      }
+    }
+    preparingSprites = false;
+  }
+
+  function requestSprites(cur: WorldSnapshot): boolean {
+    if (spritesReady(cur)) return true;
+    if (!preparingSprites) {
+      preparingSprites = true;
+      idle.add(prepareSprites());
+    }
+    return false;
   }
 
   function phaseOf(id: VillagerId): number {
@@ -214,10 +253,6 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   }
 
   function drawTable(camera: Camera): void {
-    if (!cork || corkDpr !== dpr) {
-      cork = ctx.createPattern(makeCork(Math.round(256 * dpr)), 'repeat');
-      corkDpr = dpr;
-    }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = cork ?? mix(MUSTARD, INK, 0.4);
@@ -282,13 +317,27 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     ctx.restore();
   }
 
-  function drawStanding(s: Standing, stretch: number, camera: Camera): void {
+  function roofAlpha(s: Standing, cur: WorldSnapshot, selected: VillagerId | undefined, zoom: number): number {
+    if (!s.roof) return 1;
+    if (roofOverlaps(s, playerX, playerY, zoom)) return 0.35;
+    for (let i = 0; i < count; i++) {
+      const v = cur.villagers[i] as WorldSnapshot['villagers'][number];
+      if (v.id !== selected && !(v.bubble?.text && v.bubble.untilTick > cur.tick)) continue;
+      if (roofOverlaps(s, fx[i] as number, fy[i] as number, zoom, v.tier === 'core' ? CORE_SCALE : 1)) return 0.35;
+    }
+    return 1;
+  }
+
+  function drawStanding(s: Standing, stretch: number, camera: Camera, cur: WorldSnapshot, selected: VillagerId | undefined, zoom: number): void {
     const x = view.ox + s.x * stretch;
     const y = view.oy + s.y * stretch;
     const w = s.w * stretch;
     const h = s.h * stretch;
     if (x > camera.width || y > camera.height || x + w < 0 || y + h < 0) return;
+    const alpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha * roofAlpha(s, cur, selected, zoom);
     ctx.drawImage(s.img, crisp(x, stretch), crisp(y, stretch), w, h);
+    ctx.globalAlpha = alpha;
   }
 
   function drawVillager(cur: WorldSnapshot, i: number, layerZoom: number, stretch: number, now: number, camera: Camera): void {
@@ -299,7 +348,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const y = view.oy + (fy[i] as number) * zoom;
     if (x < -zoom * 2 || y < -zoom || x > camera.width + zoom * 2 || y > camera.height + zoom * 2) return;
     const frame = v.moving ? (Math.floor((now + phaseOf(v.id)) / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
-    const sp = sprites.villager(v.look, v.facing, frame, v.mood, v.tier === 'core', layerZoom, dpr);
+    const sp = sprites.cachedVillager(v.look, v.facing, frame, v.mood, v.tier === 'core', layerZoom, dpr);
+    if (!sp) return;
     ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
   }
 
@@ -308,7 +358,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const x = view.ox + playerX * zoom;
     const y = view.oy + playerY * zoom;
     const frame = cur.player.moving ? (Math.floor(now / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
-    const sp = sprites.stranger(cur.player.facing, frame, layerZoom, dpr);
+    const sp = sprites.cachedStranger(cur.player.facing, frame, layerZoom, dpr);
+    if (!sp) return;
     ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
   }
 
@@ -341,12 +392,24 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   }
 
   function render(previous: WorldSnapshot | null, cur: WorldSnapshot, camera: Camera, options: RenderOptions): void {
-    if (!sized) {
-      setSize(camera.width, camera.height, window.devicePixelRatio || 1);
-      sized = true;
-    }
-    const now = performance.now();
     current = cur;
+    if (!sized) {
+      // Preserve the no-explicit-resize fallback without preparing layers inside render().
+      if (!resizePending) {
+        resizePending = true;
+        window.setTimeout(() => {
+          if (!sized) {
+            setSize(camera.width, camera.height, window.devicePixelRatio || 1);
+            sized = true;
+          }
+          resizePending = false;
+        }, 0);
+      }
+      return;
+    }
+    // Keep the last complete frame while a newly introduced Look is prepared in idle time.
+    if (!requestSprites(cur)) return;
+    const now = performance.now();
     computeView(map, camera, view);
     const zoom = view.zoom;
     const layer = layerFor(zoom);
@@ -372,7 +435,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       const vY = vi < count ? (fy[order[vi] as number] as number) : Infinity;
       const pY = playerDone ? Infinity : playerY;
       if (sY === Infinity && vY === Infinity && pY === Infinity) break;
-      if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera);
+      if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera, cur, options.selected, layer.zoom);
       else if (vY <= pY) drawVillager(cur, order[vi++] as number, layer.zoom, stretch, now, camera);
       else {
         drawPlayer(cur, layer.zoom, stretch, now);
@@ -393,7 +456,9 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     let near: VillagerId | null = null;
     let nearDist = Infinity;
     const vs = snapshot.villagers;
-    for (let i = 0; i < vs.length; i++) {
+    // Reverse the actual draw permutation, including equal-depth ties retained by the sort.
+    for (let j = vs.length - 1; j >= 0; j--) {
+      const i = rendered ? order[j] as number : j;
       const vil = vs[i] as (typeof vs)[number];
       const x = rendered ? (fx[i] as number) : vil.pos.x;
       const y = rendered ? (fy[i] as number) : vil.pos.y;
@@ -401,7 +466,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       const sx = v.ox + x * v.zoom;
       const sy = v.oy + y * v.zoom;
       if (px >= sx + BODY.left * sc && px <= sx + BODY.right * sc && py >= sy + BODY.top * sc && py <= sy + BODY.bottom * sc) {
-        // Nearest the viewer first: the sprite drawn last, lowest on screen, wins.
+        if (rendered) return vil.id;
+        // Before the first frame, use depth with later snapshot entries winning ties.
         if (y > bestDepth) {
           bestDepth = y;
           best = vil.id;
@@ -423,6 +489,9 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     }
     return best ?? near;
   }
+
+  // Paint both supported ground layers and the stranger before the first frame.
+  setSize(canvas.clientWidth || canvas.width / dpr, canvas.clientHeight || canvas.height / dpr, dpr);
 
   return {
     resize(width: number, height: number, ratio: number): void {
