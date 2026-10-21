@@ -53,7 +53,7 @@ export function shareCardData(sim: Simulation, snap: WorldSnapshot, map: Village
   const trusts = [...inspections.values()].map((i) => i.trustInStranger);
   const strangerTrust = trusts.length ? trusts.reduce((a, b) => a + b, 0) / trusts.length : null;
   const lookOf = (id: VillagerId) => snap.villagers.find((v) => v.id === id)?.look ?? sim.cast.get(id)?.look ?? 'stranger';
-  const nameOf = (id: VillagerId): string => sim.cast.get(id)?.name ?? id;
+  const nameOf = (id: VillagerId): string => sim.cast.get(id)?.name ?? (id === 'village' ? 'the village' : id);
   const confidence = (id: VillagerId, claimId: ClaimId): number | null => {
     const b = inspections.get(id)?.beliefs.find((x) => x.claimId === claimId);
     return b ? b.confidence : null;
@@ -81,12 +81,12 @@ export function shareCardData(sim: Simulation, snap: WorldSnapshot, map: Village
     }
     if (!believer) believer = [...snap.threads].reverse().find((t) => t.claimId === claim.id && t.to !== main?.listener && t.to !== claim.about)?.to ?? null;
     if (believer) ids.push(believer);
-    if (!ids.includes(claim.about)) ids.push(claim.about);
+    if (sim.cast.has(claim.about) && !ids.includes(claim.about)) ids.push(claim.about);
     for (const id of ids.slice(0, 3)) {
       let verdict: string;
       if (id === claim.about) {
         const mood = inspections.get(id)?.mood ?? 0;
-        verdict = claim.valence < 0 ? (mood < -0.35 ? 'Hurt' : mood < -0.1 ? 'Shaken' : 'Unbothered') : mood > 0.2 ? 'Pleased' : 'Unaware';
+        verdict = claim.valence === 0 ? 'Not accused' : claim.valence < 0 ? (mood < -0.35 ? 'Hurt' : mood < -0.1 ? 'Shaken' : 'Unbothered') : mood > 0.2 ? 'Pleased' : 'Unaware';
       } else {
         verdict = verdictFor(confidence(id, claim.id));
       }

@@ -19,6 +19,7 @@ export const STRANGER_ID = 'stranger';
 
 /** A display name for a villager id, the stranger or 'self'. */
 export function displayName(cast: ReadonlyMap<string, Dossier>, id: string, capital = false): string {
+  if (id === 'village') return capital ? 'The village' : 'the village';
   if (id === STRANGER_ID) return capital ? 'The stranger' : 'the stranger';
   if (id === 'self') return capital ? 'Themselves' : 'themselves';
   return cast.get(id)?.name ?? capitalise(id);

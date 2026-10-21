@@ -3,6 +3,7 @@
  * import only from here and from `rumormind`. Change this file only by agreement
  * recorded in docs/superpowers/plans.
  */
+import type { RumorMeaning } from '../../../shared/open-rumor.js';
 import type { Claim, ClaimId, CharacterId } from 'rumormind';
 
 export type VillagerId = CharacterId;
@@ -156,7 +157,8 @@ export type ClaimKind =
   | 'boasting'
   | 'kindness'
   | 'paid-debt'
-  | 'nursed';
+  | 'nursed'
+  | 'story';
 
 export type SecretKind = 'delivery' | 'gift' | 'borrow' | 'meeting' | 'practice' | 'debt' | 'nursing';
 
@@ -236,9 +238,10 @@ export interface Dossier {
 
 /* ---------------- Claims ---------------- */
 
-/** A game claim is a rumormind Claim with a kind from the fixed taxonomy and display text. */
+/** A game claim carries authored categories or an open story with explicit social meaning. */
 export interface GameClaim extends Claim {
   kind: ClaimKind;
+  meaning?: RumorMeaning;
   /** Plain sentence, e.g. "Tom stole bread from the bakery". */
   text: string;
   severity: 1 | 2 | 3;

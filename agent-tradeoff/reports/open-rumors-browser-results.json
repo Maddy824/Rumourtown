@@ -1,0 +1,176 @@
+[
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 1280,
+    "height": 800,
+    "story": "someone killed tom",
+    "mode": "mocked inference",
+    "layout": {
+      "overflow": false,
+      "button": {
+        "x": 288,
+        "y": 606,
+        "width": 120,
+        "height": 44,
+        "top": 606,
+        "right": 408,
+        "bottom": 650,
+        "left": 288
+      }
+    },
+    "decodedStory": [
+      "someone killed tom",
+      null,
+      "tom",
+      0,
+      3,
+      "Who saw what happened to Tom?"
+    ],
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 1280,
+    "height": 800,
+    "story": "The moon is made of cheese",
+    "mode": "mocked inference",
+    "layout": {
+      "overflow": false,
+      "button": {
+        "x": 288,
+        "y": 606,
+        "width": 120,
+        "height": 44,
+        "top": 606,
+        "right": 408,
+        "bottom": 650,
+        "left": 288
+      }
+    },
+    "decodedStory": [
+      "The moon is made of cheese",
+      null,
+      null,
+      0,
+      2,
+      "How could anyone check that?"
+    ],
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 360,
+    "height": 800,
+    "story": "someone killed tom",
+    "mode": "mocked inference",
+    "layout": {
+      "overflow": false,
+      "button": {
+        "x": 222,
+        "y": 643.734375,
+        "width": 120,
+        "height": 44,
+        "top": 643.734375,
+        "right": 342,
+        "bottom": 687.734375,
+        "left": 222
+      }
+    },
+    "decodedStory": [
+      "someone killed tom",
+      null,
+      "tom",
+      0,
+      3,
+      "Who saw what happened to Tom?"
+    ],
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 360,
+    "height": 800,
+    "story": "The moon is made of cheese",
+    "mode": "mocked inference",
+    "layout": {
+      "overflow": false,
+      "button": {
+        "x": 222,
+        "y": 643.734375,
+        "width": 120,
+        "height": 44,
+        "top": 643.734375,
+        "right": 342,
+        "bottom": 687.734375,
+        "left": 222
+      }
+    },
+    "decodedStory": [
+      "The moon is made of cheese",
+      null,
+      null,
+      0,
+      2,
+      "How could anyone check that?"
+    ],
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 360,
+    "height": 640,
+    "story": "someone killed tom",
+    "mode": "mocked inference",
+    "layout": {
+      "overflow": false,
+      "button": {
+        "x": 222,
+        "y": 483.734375,
+        "width": 120,
+        "height": 44,
+        "top": 483.734375,
+        "right": 342,
+        "bottom": 527.734375,
+        "left": 222
+      }
+    },
+    "decodedStory": [
+      "someone killed tom",
+      null,
+      "tom",
+      0,
+      3,
+      "Who saw what happened to Tom?"
+    ],
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5194",
+    "width": 360,
+    "height": 640,
+    "story": "The moon is made of cheese",
+    "mode": "mocked inference",
+    "layout": {
+      "overflow": false,
+      "button": {
+        "x": 222,
+        "y": 483.734375,
+        "width": 120,
+        "height": 44,
+        "top": 483.734375,
+        "right": 342,
+        "bottom": 527.734375,
+        "left": 222
+      }
+    },
+    "decodedStory": [
+      "The moon is made of cheese",
+      null,
+      null,
+      0,
+      2,
+      "How could anyone check that?"
+    ],
+    "errors": []
+  }
+]

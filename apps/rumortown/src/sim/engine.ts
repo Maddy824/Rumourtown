@@ -153,7 +153,12 @@ export function createSimulation(opts: SimulationOptions): Simulation {
   initRelationships(ctx);
 
   const registerClaim = (claim: GameClaim): void => {
-    if (!castMap.has(claim.about)) throw new Error(`unknown villager ${claim.about}`);
+    if (claim.kind === 'story') {
+      const canonical = readRegisteredClaim(claim.id, castMap);
+      if (!canonical || canonical.kind !== 'story') throw Error('Invalid story');
+      claim = canonical;
+    }
+    if (!(claim.kind === 'story' && claim.about === 'village') && !castMap.has(claim.about)) throw new Error(`unknown villager ${claim.about}`);
     // Registration is idempotent, and cannot rewrite claims already held in a ledger.
     if (claims.has(claim.id)) return;
     const alternatives = claimList.filter((c) => {

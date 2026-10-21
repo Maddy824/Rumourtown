@@ -6,7 +6,7 @@
 import { deterministicLog, tellScore, tellThreshold } from 'rumormind';
 import type { GameClaim, SpeechAct, VillagerId } from '../types.js';
 import { nameOf, type Agent, type Ctx } from './context.js';
-import { ACCUSATION_COOLDOWN, CLOSE, MAX_ACCUSATIONS_PER_DAY } from './params.js';
+import { ACCUSATION_COOLDOWN, CLOSE, MAX_ACCUSATIONS_PER_DAY, OPEN_STORY_ATTENTION } from './params.js';
 import { motivationTerms } from './motivation.js';
 import { independentSources } from './provenance.js';
 import { dayOf, percent } from './text.js';
@@ -94,6 +94,10 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
     } else {
       act = 'news';
     }
+    // Newly introduced open events compete with the many authored rumors already known.
+    // This bounded attention bonus changes willingness to tell, never belief or evidence.
+    const storyInterest = claim.kind === 'story' && !listenerKnows ? OPEN_STORY_ATTENTION.novelty + OPEN_STORY_ATTENTION.severity * claim.severity : 0;
+    utility += storyInterest;
     const motives = motivationTerms(speaker.d.character?.motives, {
       act, confidence, closeness: closenessSL,
       rival: speaker.d.rival === claim.about,
@@ -118,6 +122,7 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
       { text: listenerTerm, value: 0.4 * (0.3 * closenessSL - (listenerKnows ? 0.6 : 0) - (claim.valence < 0 ? 0.3 * closenessLT : 0)) * factor },
       { text: claim.valence < 0 ? 'a harmful story draws attention' : 'a story worth hearing', value: 0.4 * ((claim.valence < 0 ? deterministicLog(ctx.tuning.negativitySharingOdds) : 0) + 0.2 * claim.severity / 3) * factor },
     ];
+    if (storyInterest) terms.push({ text: 'a new story feels worth discussing', value: storyInterest });
     terms.push(...motives);
     if (act === 'defend') terms.push({ text: 'the truth sets the record straight', value: 0.25 });
     const uncapped = terms.reduce((sum, term) => sum + term.value, 0);

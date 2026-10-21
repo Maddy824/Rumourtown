@@ -16,8 +16,8 @@ The thread shows who told whom, in order. Faces follow the actual tellings of th
 
 ## ♧ Sharing
 
-A shared link replays the exact same days, with the same seed and whispers. Your typed words never travel in the link. Only the village rumor they become is shared.
+A shared link replays the exact same days, with the same seed and whispers. Confirmed stories keep your exact words in dialogue, research exports and replay links. Review the preview and avoid private details.
 
 ## ✉ Your typed whisper and the budget
 
-One small AI call reads your words and turns them into a village rumor. It never writes the villagers’ lines. Your words are discarded. The service stops at a fixed budget and the game keeps working: choose a ready-made rumor or set its meaning yourself.
+Your story keeps its exact wording. A small AI call can identify the actor, affected person and social meaning, and suggest a clarifying question. The event does not need to fit a fixed category. You review the wording and interpretation before sending. Confirmed stories appear in dialogue, research exports and shared replay links; avoid private details. If AI is unavailable or the budget runs out, the story remains playable with neutral meaning. Ongoing gossip runs locally.

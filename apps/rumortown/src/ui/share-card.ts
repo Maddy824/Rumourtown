@@ -305,7 +305,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
     drawGlyph(ctx, data.claim.kind, 80, 88, 62, harmful ? C.berry : '#4C6B37');
     ctx.fillStyle = C.ink;
     ctx.font = `760 34px ${FONT}`;
-    ctx.fillText(`${harmful ? 'A rumor' : 'A good word'} about ${data.claim.about}`, 146, 82, 300);
+    ctx.fillText(`${data.claim.valence === 0 ? 'A story' : harmful ? 'A rumor' : 'A good word'} about ${data.claim.about}`, 146, 82, 300);
     ctx.font = `500 24px ${FONT}`;
     ctx.fillStyle = 'rgba(46, 42, 34, 0.74)';
     ctx.fillText(KIND_LABEL[data.claim.kind] ?? 'A rumor', 146, 116, 300);

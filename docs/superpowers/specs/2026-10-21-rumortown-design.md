@@ -1,3 +1,5 @@
+> Open-story amendment: the owner replaced the fixed-taxonomy and blanket typed-text restrictions on 2026-10-21. See [the current contract](../plans/2026-10-21-open-rumors.md) for explicit confirmation, wording disclosure and free fallback. The original spec below remains historical context.
+
 # RumorTown design
 
 Status: draft for the owner's approval. Written for the builder (Codex and Claude, with the owner reviewing). Where a decision was the owner's, it says so; where it was the writer's call, it is marked **(my call)** so the owner can overrule it.

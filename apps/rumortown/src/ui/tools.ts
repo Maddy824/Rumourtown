@@ -30,6 +30,7 @@ export function createTools(ctx: {
     h('pre', null, h('code', null, 'npm run --silent agent:serve')),
     h('p', null, 'Send JSON tool calls over standard input. Tool schemas and a TypeScript adapter are included. Your agent controls the traveller; the townspeople keep their authored social rules.'),
     h('p', null, h('a', { href: `${repo}docs/agents.md`, target: '_blank', rel: 'noopener noreferrer' }, 'Read the agent guide and protocol')),
+    h('p', null, h('a', { href: `${repo}docs/open-rumors.md`, target: '_blank', rel: 'noopener noreferrer' }, 'Use open stories in your agent or experiment')),
     h('h3', null, 'Write once, reuse across the town'),
     h('p', null, 'Add stories as JSON packs for every visitor to reuse without AI calls. A local development command can ask a coding agent to draft new stories or behaviors in a separate worktree, then run the checks.'),
     h('p', null, 'Drafting uses the developer’s Codex account, separately from the game’s AI allowance. New behavior code needs review before release.'),

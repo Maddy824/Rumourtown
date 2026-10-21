@@ -163,6 +163,21 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
     latestTick = c.tick;
     // Free prose may contain first-person accounts or arbitrary grammar. Quote it;
     // never turn the stranger's account into the current speaker's eyewitness claim.
+    if (c.claim?.kind === 'story' && (CLAIM_ACTS.includes(c.act) || c.act === 'news')) {
+      const story = c.claim;
+      // A model can suggest one question; ongoing speech stays local and deterministic.
+      if (c.act === 'reactToWhisper' && story.meaning?.question) {
+        return { lineId: 'story/question', text: story.meaning.question };
+      }
+      const prefixes = c.act === 'deny' ? ['I dispute this', 'That is only a claim'] :
+        c.act === 'doubt' || c.hedged ? ['Is this really true', 'I am not convinced', 'Have you heard this'] :
+        c.act === 'defend' ? ['We should check this', 'Do we know this is true'] :
+        c.act === 'reactToWhisper' ? ['Who witnessed this', 'How do you know this', 'Can anyone confirm this'] :
+        c.speaker.traits.honesty > .65 ? ['This is still unverified', 'Someone told me this'] :
+        ['Word is going around', 'Listen to this story', 'People are saying'];
+      const lead = prefixes[Math.min(prefixes.length - 1, Math.floor(r * prefixes.length))]!;
+      return { lineId: `story/${c.act}`, text: `${lead}: “${story.text}”` };
+    }
     if (c.claim?.id.startsWith('written_') && (CLAIM_ACTS.includes(c.act) || c.act === 'news')) {
       const lead = c.act === 'deny' ? 'I dispute this story' : c.act === 'doubt' ? 'I doubt this story' :
         c.act === 'defend' ? 'Be fair about this story' : c.act === 'reactToWhisper' ? 'You are telling me' : 'The stranger said';

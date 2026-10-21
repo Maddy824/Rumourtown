@@ -224,7 +224,7 @@ export function createFakeSimulation(seed = 1, replay: Intervention[] = []): Sim
       };
     },
     registerClaim(claim) {
-      if (!cast.some((d) => d.id === claim.about)) throw new Error(`unknown villager ${claim.about}`);
+      if (!(claim.kind === 'story' && claim.about === 'village') && !cast.some((d) => d.id === claim.about)) throw new Error(`unknown villager ${claim.about}`);
       if (!claims.has(claim.id)) claims.set(claim.id, { ...claim, contradicts: [...(claim.contradicts ?? [])] });
     },
     whisper: (listener, claimId) => applyWhisper(listener, claimId),

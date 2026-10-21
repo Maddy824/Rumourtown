@@ -5,9 +5,11 @@ import { readRegisteredClaim } from '../sim/registered-claim.js';
 import * as decisionParameters from '../sim/agents/params.js';
 import { MINUTES_PER_DAY, type Intervention, type Simulation, type VillageMap } from '../sim/types.js';
 
-export const MODEL_VERSION = 'v4-night-1';
+export const MODEL_VERSION = 'v4-open-stories-1';
 export const GAME_TUNING: Tuning = { ...DEFAULT_TUNING, sourceMemoryHalfLifeTicks: 2 };
 export const SOURCES = [
+  { title: 'Source monitoring (1993)', url: 'https://pubmed.ncbi.nlm.nih.gov/8346328/', use: 'Separates source attribution from content. Open stories remain hearsay, never generated eyewitness evidence.' },
+  { title: 'Emotion shapes diffusion (2017)', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC5514704/', use: 'Political social-network evidence motivates attention to importance and social ties; our open-story attention bonus is gameplay tuning, not a fitted effect.' },
   { title: 'Gossip and reputation in everyday life (2021)', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC8487731/', use: 'Relationships between sender, receiver and target shape information sharing. Field observations, not a calibration of this village.' },
   { title: 'Gossip promotes cooperation only when it is pro-socially motivated (2022)', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC8938477/', use: 'An agent-based model separating gossip motives; its findings are conditional model results, not measured universal effects.' },
   { title: 'A mechanistic model of gossip, reputations, and cooperation (2024)', url: 'https://doi.org/10.1073/pnas.2400689121', use: 'Formal model of reputation agreement; it motivates examining agreement separately from accuracy.' },

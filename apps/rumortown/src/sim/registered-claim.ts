@@ -1,3 +1,4 @@
+import { readRumorMeaning, rumorText, type RumorMeaning } from '../../../shared/open-rumor.js';
 /** Canonical typed claims: the id carries taxonomy fields so v1 links can replay them offline. */
 import type { Dossier, GameClaim, VillagerId } from './types.js';
 
@@ -13,7 +14,7 @@ const objects = ['bread', 'loaf', 'flour', 'sack', 'tools', 'coins', 'letter', '
 /** A recorded act can only support a typed version of the same authored fact. */
 export function matchesAuthoredFact(claim: GameClaim, fact: GameClaim): boolean {
   // A player's category is not evidence that their sentence describes an authored event.
-  if (claim.id.startsWith('written_')) return false;
+  if (claim.kind === 'story' || claim.id.startsWith('written_')) return false;
   return claim.about === fact.about && claim.kind === fact.kind && claim.object === fact.object &&
     (claim.target === undefined || claim.target === fact.target);
 }
@@ -27,6 +28,7 @@ export function createRegisteredClaim(fields: ClaimFields, cast: ReadonlyMap<Vil
     ? `a ${fields.object}` : fields.object;
   const target = fields.target ? cast.get(fields.target)!.name : undefined;
   const detail: Record<GameClaim['kind'], string> = {
+    story: 'is the subject of a story',
     theft: `stole ${object ?? 'something'}${target ? ` from ${target}` : ''}`,
     cheating: `cheated ${target ?? 'someone'}${object ? ` over ${object}` : ''}`,
     romance: `has a secret romance${target ? ` with ${target}` : ''}`,
@@ -50,6 +52,7 @@ export function createRegisteredClaim(fields: ClaimFields, cast: ReadonlyMap<Vil
 
 /** Link data is untrusted. Validate bounded taxonomy fields and player-written payloads. */
 export function readRegisteredClaim(id: string, cast: ReadonlyMap<VillagerId, Dossier>): GameClaim | null {
+  if (id.startsWith('story_')) return readOpenClaim(id, cast);
   if (id.startsWith('written_')) return readWrittenClaim(id, cast);
   const parts = id.split('_');
   if (parts.length !== 6 || parts[0] !== 'typed') return null;
@@ -93,6 +96,32 @@ function readWrittenClaim(id: string, cast: ReadonlyMap<VillagerId, Dossier>): G
     if (!Array.isArray(data) || data.length !== 4 || typeof data[0] !== 'string' ||
         typeof data[1] !== 'string' || typeof data[2] !== 'string' || typeof data[3] !== 'number') return null;
     const claim = createWrittenClaim(data[0], data[1], data[2] as GameClaim['kind'], data[3] as GameClaim['severity'], cast);
+    return claim.id === id ? claim : null;
+  } catch { return null; }
+}
+
+/** Open stories retain their wording and meaning together, with no category matching. */
+export function createOpenClaim(text: string, meaning: RumorMeaning, cast: ReadonlyMap<VillagerId, Dossier>): GameClaim {
+  const clean = rumorText(text);
+  const checked = clean && readRumorMeaning(meaning, clean, [...cast.values()]);
+  if (!clean || !checked) throw Error('This story needs a valid interpretation.');
+  const data = [clean, checked.actor, checked.affected, checked.valence, checked.severity, checked.question];
+  const payload = btoa(Array.from(new TextEncoder().encode(JSON.stringify(data)), b => String.fromCharCode(b)).join(''))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return { id: `story_${payload}`, text: clean, kind: 'story', about: checked.actor ?? 'village',
+    ...(checked.affected ? { target: checked.affected } : {}), valence: checked.valence,
+    severity: checked.severity, meaning: checked, contradicts: [] };
+}
+function readOpenClaim(id: string, cast: ReadonlyMap<VillagerId, Dossier>): GameClaim | null {
+  if (!/^story_[A-Za-z0-9_-]{1,2048}$/.test(id)) return null;
+  try {
+    const encoded = id.slice(6).replace(/-/g, '+').replace(/_/g, '/');
+    const data: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(
+      atob(encoded + '='.repeat((4 - encoded.length % 4) % 4)), c => c.charCodeAt(0))));
+    if (!Array.isArray(data) || data.length !== 6 || typeof data[0] !== 'string') return null;
+    const meaning = readRumorMeaning({ actor: data[1], affected: data[2], valence: data[3], severity: data[4], question: data[5] }, data[0], [...cast.values()]);
+    if (!meaning) return null;
+    const claim = createOpenClaim(data[0], meaning, cast);
     return claim.id === id ? claim : null;
   } catch { return null; }
 }

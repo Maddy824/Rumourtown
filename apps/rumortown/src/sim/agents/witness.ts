@@ -32,9 +32,9 @@ export function tickWitnessing(ctx: Ctx): void {
     for (const c of ctx.claimList) {
       if (c.about !== actor.d.id) continue;
       // A shared story's category cannot prove that its particular event happened.
-      if (c.id.startsWith('written_')) continue;
+      if (c.kind === 'story' || c.id.startsWith('written_')) continue;
       if (c.id.startsWith('typed_') && !ctx.claimList.some(fact =>
-        !fact.id.startsWith('typed_') && !fact.id.startsWith('written_') && matchesAuthoredFact(c, fact))) continue;
+        fact.kind !== 'story' && !fact.id.startsWith('typed_') && !fact.id.startsWith('written_') && matchesAuthoredFact(c, fact))) continue;
       if (secret.confirms.includes(c.kind)) confirmed.push(c);
       else if (secret.contradicts.includes(c.kind)) contradicted.push(c);
     }

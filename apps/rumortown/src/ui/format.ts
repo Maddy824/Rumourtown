@@ -129,6 +129,7 @@ export const ENDING_TITLE: Record<Ending, string> = {
 };
 
 export const KIND_LABEL: Record<ClaimKind, string> = {
+  story: 'A story',
   theft: 'Theft',
   cheating: 'Cheating',
   romance: 'A secret romance',

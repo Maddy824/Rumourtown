@@ -6,6 +6,7 @@ import type { ClaimKind } from '../sim/types.js';
 import { svg } from './dom.js';
 
 export const GLYPHS: Record<ClaimKind, string> = {
+  story: 'M4 5h16v11H10l-5 4v-4H4zM8 9h8M8 12h5',
   // A tied sack.
   theft: 'M8.5 9.5C5.5 11.5 4.5 14.5 5 17c.6 2.6 3 3.5 7 3.5s6.4-.9 7-3.5c.5-2.5-.5-5.5-3.5-7.5M8.5 9.5h7M9.5 9.5 8 5.5c1.4-.9 2.6-.9 4 0 1.4-.9 2.6-.9 4 0l-1.5 4',
   // Tipped scales.

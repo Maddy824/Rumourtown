@@ -1,3 +1,4 @@
+import { rumorPrompt, rumorSchema, rumorText, validateRumor } from './rumor';
 import { groundedPeople, unsupportedStory } from '../../shared/whisper-grounding';
 import cast from './cast.json';
 import { blockedReason, hash, normalise } from './moderation';
@@ -207,13 +208,28 @@ export function createWorker(deps: Dependencies = {}) {
         if (ctx) usage.pending.push(task.catch(() => undefined));
         else await task;
       };
-      const isInterpret = request.method === 'POST' && ['/interpret', '/play'].includes(new URL(request.url).pathname);
+      const isInterpret = request.method === 'POST' && ['/interpret', '/play', '/rumor'].includes(new URL(request.url).pathname);
       const requestTime = (deps.now ?? Date.now)();
       try {
         const path = new URL(request.url).pathname;
-        if (request.method === 'OPTIONS' && ['/interpret', '/play', '/pubkey', '/health'].includes(path)) return new Response(null, { status: 204, headers });
+        if (request.method === 'OPTIONS' && ['/interpret', '/play', '/rumor', '/pubkey', '/health'].includes(path)) return new Response(null, { status: 204, headers });
         if (request.method === 'GET' && path === '/health') return json({ ok: true });
         if (request.method === 'GET' && path === '/pubkey') return json(publicKey(env.SIGNING_KEY_JWK));
+        if (request.method === 'POST' && path === '/rumor') {
+          await admit(request, env);
+          const input = await readInput(request);
+          if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken'].includes(key)) ||
+              typeof input.turnstileToken !== 'string' || !input.turnstileToken.trim() || input.turnstileToken.length > 2048) throw new Failure('invalid', 400);
+          const text = rumorText(input.text);
+          if (!text) throw new Failure('invalid', 400);
+          await turnstile(request, input.turnstileToken, env, deps.fetch ?? fetch);
+          usage.track = true;
+          // No raw story, generated question or annotations enter a shared server cache.
+          const result = await infer(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer,
+            [{ role: 'system', content: rumorPrompt }, { role: 'user', content: JSON.stringify({ story: text }) }],
+            rumorSchema, value => validateRumor(value, text), .3);
+          return json(result);
+        }
         if (request.method === 'POST' && path === '/play') {
           await admit(request, env);
           const input = await readInput(request);

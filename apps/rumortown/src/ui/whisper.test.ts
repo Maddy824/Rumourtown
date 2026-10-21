@@ -1,252 +1,112 @@
-import { expect, it } from 'vitest';
-import { cast } from '../content/cast/index.js';
-import type { VillagerView, WorldSnapshot } from '../sim/types.js';
-import { inReach, nearbyPeople } from './whisper.js';
-const person = (id: string, x: number): VillagerView => ({ id, name: id, pos: { x, y: 0 }, facing: 's', moving: false, activity: 'idle', tier: 'regular', look: cast[0]!.look, mood: 0 });
-it('orders people within six tiles by distance with a stable id tie break', () => {
-  const villagers = [person('far', 6.01), person('zoe', 4), person('ada', -4), person('ben', 2), person('edge', 6)];
-  const snap: WorldSnapshot = { tick: 0, dayIndex: 0, minuteOfDay: 420, villagers, player: { pos: { x: 0, y: 0 }, facing: 's', moving: false }, threads: [] };
-  expect(nearbyPeople(snap).map(v => v.id)).toEqual(['ben', 'ada', 'zoe', 'edge']);
-  expect(inReach(snap).map(v => v.id)).toEqual(['ben']);
-  expect(snap.villagers).toBe(villagers); expect(villagers[0]!.id).toBe('far');
-});
-
-// These exercise the actual form and registration path without a DOM dependency.
-import { afterEach, describe, vi } from 'vitest';
-import { castVersion } from '../content/cast/index.js';
-import { villageMap } from '../content/map/index.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { neutralMeaning } from '../../../shared/open-rumor.js';
+import { cast, castVersion } from '../content/cast/index.js';
+import type { RumorResult } from '../net/rumorFlow.js';
 import { createFakeSimulation } from '../sim/fake.js';
-import { exportRun } from '../research/model.js';
-import type { InterpretResult } from '../net/types.js';
-import { loadTurnstile } from '../net/turnstile.js';
-import { createWhisperFlow } from '../net/whisperFlow.js';
+import type { VillagerView, WorldSnapshot } from '../sim/types.js';
 import type { Layers } from './layers.js';
-import { createWhisperSheet } from './whisper.js';
-import { decodeShare, encodeShare } from './share-link.js';
+import { createWhisperSheet, inReach, nearbyPeople } from './whisper.js';
 import { sheetDocument, TestElement } from './whisper-dom.fixture.js';
-
-vi.mock('../net/turnstile.js', () => ({ loadTurnstile: vi.fn(() => ({
-  getToken: vi.fn(async () => 'test-token'), warm: vi.fn(async () => {}), render: vi.fn(), destroy: vi.fn(),
-})) }));
+import { decodeShare, encodeShare } from './share-link.js';
 vi.mock('./faces.js', () => ({ faceImg: () => document.createElement('img') }));
-
-const privateText = 'My private sentence about a honey stash';
+const person = (id: string, x: number): VillagerView => ({ id, name: id, pos: { x, y: 0 }, facing: 's', moving: false, activity: 'idle', tier: 'regular', look: cast[0]!.look, mood: 0 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
-function sheet(result?: InterpretResult) {
+const interpreted: RumorResult = { source: 'ai', note: 'AI helped understand this story.',
+  meaning: { actor: null, affected: 'tom', valence: 0, severity: 3, question: 'Who last saw Tom alive?' } };
+function sheet(result: RumorResult = interpreted) {
   vi.stubGlobal('document', sheetDocument());
   vi.stubEnv('VITE_API_BASE_URL', ''); vi.stubEnv('VITE_TURNSTILE_SITE_KEY', '');
-  const sim = createFakeSimulation(731);
-  const snapshot = sim.snapshot();
-  snapshot.player.pos = { x: 0, y: 0 };
-  snapshot.villagers = [person('mira', 1), person('tom', 2)];
+  const sim = createFakeSimulation(731), snapshot = sim.snapshot();
+  snapshot.player.pos = { x: 0, y: 0 }; snapshot.villagers = [person('mira', 1), person('tom', 2)];
   const whispered: string[] = [];
-  const line = result?.ok ? 'Say it plainer.' : "The town's gossip is resting. Try a ready-made rumor.";
-  const start = vi.fn(async () => result!);
-  const flow = result ? { start, state: result.ok && 'claim' in result
-    ? { status: 'done' as const, result } : { status: 'resting' as const, result: result as Exclude<InterpretResult, { claim: unknown }>, line } } : undefined;
-  const sheet = createWhisperSheet({ sim: () => sim, snapshot: () => snapshot, isPhone: () => false, reducedMotion: () => true,
-    flow, layers: { open() {}, closed() {} } as unknown as Layers,
-    whisper: (_listener, claimId) => { whispered.push(claimId); return true; }, walkTo() {}, onOpenChange() {} });
-  sheet.open({ listener: 'mira' });
-  const root = sheet.el as unknown as TestElement;
-  const typed = root.querySelector('textarea')!;
-  typed.value = privateText; typed.dispatchEvent(new Event('input'));
-  return { sheet, sim, root, whispered, start, submit: async () => {
+  const start = vi.fn(async () => result);
+  const ui = createWhisperSheet({ sim: () => sim, snapshot: () => snapshot, isPhone: () => false, reducedMotion: () => true,
+    flow: { start }, layers: { open() {}, closed() {} } as unknown as Layers,
+    whisper: (_listener, id) => { whispered.push(id); return true; }, walkTo() {}, onOpenChange() {} });
+  ui.open({ listener: 'mira' });
+  const root = ui.el as unknown as TestElement;
+  const write = (text: string) => { root.querySelector('textarea')!.value = text; root.querySelector('textarea')!.dispatchEvent(new Event('input')); };
+  write('someone killed tom');
+  return { ui, sim, root, start, whispered, write, submit: async () => {
     root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
     await new Promise(resolve => setTimeout(resolve, 0));
   } };
 }
-const verified = { ok: true, claim: { kind: 'theft', about: 'tom', object: 'bread', severity: 3, valence: -1, confidence: .9 }, castVersion, issuedAt: 1, sig: 'already-verified-by-flow' } as const;
-
-describe('whisper confirmation and privacy', () => {
-  it.each([undefined, verified])('never replaces an unknown killer with a default story, online or offline', async result => {
-    const ui = sheet(result);
-    const typed = ui.root.querySelector('textarea')!;
-    typed.value = 'someone killed tom'; typed.dispatchEvent(new Event('input'));
-    await ui.submit(); await ui.submit();
-    expect(ui.whispered).toHaveLength(0);
-    expect(ui.start).not.toHaveBeenCalled();
-    expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
-    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toContain("Death rumors aren't supported yet");
-    expect(ui.root.querySelectorAll('button').find(b => b.attrs.get('type') === 'submit')!.disabled).toBe(true);
-    // Selecting an explicit library story recovers the form without reinterpreting rejected prose.
-    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
-    await ui.submit();
-    expect(ui.whispered).toHaveLength(1);
+it('orders nearby listeners by distance and excludes sleeping people', () => {
+  const snap = { player: { pos: { x: 0, y: 0 } }, villagers: [person('far', 7), person('tom', 2), { ...person('mira', 1), activity: 'sleep' }] } as WorldSnapshot;
+  expect(nearbyPeople(snap).map(v => v.id)).toEqual(['mira', 'tom']);
+  expect(inReach(snap).map(v => v.id)).toEqual(['tom']);
+});
+describe('open story confirmation', () => {
+  it('preserves the exact claim, discloses sharing, and registers only after confirmation', async () => {
+    const view = sheet(); await view.submit();
+    expect(view.root.querySelector('.whisper-confirmation')!.textContent).toContain('will hear exactly: “someone killed tom”');
+    expect(view.root.querySelector('.whisper-confirmation')!.textContent).toContain('Actor: Unknown or not stated. Affected: Tom');
+    expect(view.root.querySelector('.whisper-confirmation')!.textContent).toContain('research exports and shared replay links');
+    expect(view.whispered).toHaveLength(0);
+    expect([...view.sim.claims.values()].some(c => c.kind === 'story')).toBe(false);
+    await view.submit();
+    const claim = view.sim.claims.get(view.whispered[0]!)!;
+    expect(claim).toMatchObject({ text: 'someone killed tom', about: 'village', target: 'tom', valence: 0, kind: 'story' });
+    const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: castVersion, interventions: [{ tick: 0, listener: 'mira', claimId: claim.id }] }));
+    expect(shared?.interventions[0]?.claimId).toBe(claim.id);
+    expect(view.start).toHaveBeenCalledTimes(1);
   });
-  it('does not turn a refusal into a default manual rumor on repeated submission', async () => {
-    const ui = sheet({ ok: true, unsupported: 'unclear' });
-    await ui.submit(); await ui.submit();
-    expect(ui.whispered).toHaveLength(0);
-    expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(true);
-    expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
-    expect(ui.start).toHaveBeenCalledTimes(1);
-    const typed = ui.root.querySelector('textarea')!;
-    typed.value = 'Tom stole bread'; typed.dispatchEvent(new Event('input'));
-    await ui.submit();
-    expect(ui.start).toHaveBeenCalledTimes(2);
+  it('can remove uncertain assignments without changing the story or making another request', async () => {
+    const view = sheet(); await view.submit();
+    view.root.querySelectorAll('button').find(b => b.textContent === 'Leave people unassigned')!.dispatchEvent(new Event('click'));
+    await view.submit();
+    expect(view.sim.claims.get(view.whispered[0]!)?.meaning).toEqual(neutralMeaning());
+    expect(view.start).toHaveBeenCalledTimes(1);
   });
-
-  it('confirms a verified claim before registering and whispering it', async () => {
-    const ui = sheet(verified);
-    await ui.submit();
-    const card = ui.root.querySelector('.whisper-confirmation')!;
-    expect(card.hidden).toBe(false);
-    expect(card.textContent).toContain('Mira will hear: Tom stole bread');
-    expect(ui.root.querySelector('form')!.textContent).toContain('Whisper it');
-    expect(ui.whispered).toEqual([]);
-    expect(ui.sim.claims.has('typed_theft_tom_none_bread_3')).toBe(false);
-    await ui.submit();
-    expect(ui.whispered).toEqual(['typed_theft_tom_none_bread_3']);
-    expect(ui.start).toHaveBeenCalledTimes(1);
-    expect(ui.sim.claims.get(ui.whispered[0]!)?.text).toBe('Tom stole bread');
+  it('shows reputation and importance before accepting an AI interpretation and lets the player reset them', async () => {
+    const view = sheet({ source: 'ai', meaning: { actor: 'tom', affected: null, valence: -1, severity: 3, question: '' }, note: 'AI' });
+    view.write('Tom invented a machine'); await view.submit();
+    const preview = view.root.querySelector('.whisper-confirmation')!;
+    expect(preview.textContent).toContain('May harm Tom’s reputation. Importance: very serious.');
+    expect(view.whispered).toHaveLength(0);
+    view.root.querySelectorAll('button').find(b => b.textContent === 'Leave people unassigned')!.dispatchEvent(new Event('click'));
+    expect(preview.textContent).toContain('No reputation judgment. Importance: serious.');
+    await view.submit();
+    expect(view.sim.claims.get(view.whispered[0]!)?.valence).toBe(0);
   });
-  it('prefills the manual selects when the player changes the interpretation', async () => {
-    const ui = sheet(verified); await ui.submit();
-    ui.root.querySelector('.whisper-confirmation')!.querySelector('button')!.dispatchEvent(new Event('click'));
-    expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(false);
-    expect(ui.root.querySelector('.story-meaning')!.querySelectorAll<TestElement>('select').map(s => s.value)).toEqual(['tom', 'theft', '3']);
-    await ui.submit();
-    expect(ui.start).toHaveBeenCalledTimes(1);
-    expect(ui.whispered).toHaveLength(0);
-    await ui.submit();
-    expect(ui.whispered[0]).toBe('typed_theft_tom_none_none_3');
+  it('invalidates the preview on text edits and never whispers stale text', async () => {
+    const view = sheet({ source: 'neutral', meaning: neutralMeaning(), note: 'No AI' });
+    await view.submit(); view.write('The moon is made of cheese');
+    await view.submit(); expect(view.whispered).toHaveLength(0);
+    await view.submit(); expect(view.sim.claims.get(view.whispered[0]!)?.text).toBe('The moon is made of cheese');
   });
-  it.each([
-    [{ ok: false, reason: 'budget' }, "The town's gossip is resting. Try a ready-made rumor."],
-  ] as const)('keeps manual choices available for %o', async (result, line) => {
-    const ui = sheet(result); await ui.submit();
-    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toBe(line);
-    expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(false);
-    expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
-    await ui.submit();
-    expect(ui.whispered).toHaveLength(0);
-    await ui.submit();
-    expect(ui.whispered).toHaveLength(1);
-    expect(ui.start).toHaveBeenCalledTimes(1);
+  it('lets the player continue locally while inference is pending and ignores the late reply', async () => {
+    const view = sheet(); let complete!: (r: RumorResult) => void;
+    view.start.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    await view.submit();
+    view.root.querySelectorAll('button').find(b => b.textContent === 'Continue without AI')!.dispatchEvent(new Event('click'));
+    await view.submit(); expect(view.whispered).toHaveLength(1);
+    complete(interpreted); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(view.sim.claims.get(view.whispered[0]!)?.meaning).toEqual(neutralMeaning());
   });
-  it('keeps local categorisation usable without settings and leaves no prose in a share or research export', async () => {
-    const ui = sheet();
-    expect(ui.root.querySelector('.story-meaning')!.hidden).toBe(false);
-    expect(ui.root.textContent).toContain('Your words are only read to understand the rumor; the village repeats the rumor, not your words.');
-    await ui.submit();
-    expect(ui.whispered).toHaveLength(0);
-    await ui.submit();
-    const encoded = encodeShare({ v: 1, seed: 731, cast: castVersion,
-      interventions: [{ tick: 0, listener: 'mira', claimId: ui.whispered[0]! }] });
-    const decoded = decodeShare(encoded)!;
-    expect(JSON.stringify(decoded)).not.toContain(privateText);
-    expect(ui.whispered[0]).toMatch(/^typed_/);
-    expect(JSON.stringify([...ui.sim.claims.values()])).not.toContain(privateText);
-    expect(JSON.stringify(exportRun(ui.sim, 731, castVersion, villageMap))).not.toContain(privateText);
-  });
-  it('drops an in-flight result when the sheet is closed', async () => {
-    let complete!: (result: InterpretResult) => void;
-    const ui = sheet(verified);
-    ui.start.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
-    await ui.submit();
-    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toBe("Checking you're human…");
-    ui.sheet.close(); complete(verified);
+  it('drops an in-flight result on close', async () => {
+    const view = sheet(); let complete!: (r: RumorResult) => void;
+    view.start.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    await view.submit(); view.ui.close(); complete(interpreted);
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(ui.whispered).toEqual([]);
-    expect(ui.sim.claims.has('typed_theft_tom_none_bread_3')).toBe(false);
-    expect(ui.sheet.isOpen()).toBe(false);
-    expect(ui.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
+    expect(view.whispered).toHaveLength(0);
+    expect(view.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
   });
-  it('uses a fresh Turnstile container when a configured sheet is reopened', async () => {
-    const ui = sheet(); ui.sheet.destroy();
-    vi.stubEnv('VITE_API_BASE_URL', 'https://api.test');
-    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', 'public-site-key');
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ reason: 'model' }, { status: 503 })));
-    vi.mocked(loadTurnstile).mockClear();
-    const snapshot = ui.sim.snapshot(); snapshot.player.pos = { x: 0, y: 0 }; snapshot.villagers = [person('mira', 1)];
-    const configured = createWhisperSheet({ sim: () => ui.sim, snapshot: () => snapshot, isPhone: () => false, reducedMotion: () => true,
-      layers: { open() {}, closed() {} } as unknown as Layers, whisper: () => true, walkTo() {}, onOpenChange() {} });
-    const root = configured.el as unknown as TestElement;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      configured.open();
-      const typed = root.querySelector('textarea')!;
-      typed.value = privateText; typed.dispatchEvent(new Event('input'));
-      root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-      await new Promise(resolve => setTimeout(resolve, 0));
-      expect(vi.mocked(loadTurnstile).mock.calls[attempt]?.[1]).toBe(root.querySelector('.whisper-challenge'));
-      configured.close();
-      expect(vi.mocked(loadTurnstile).mock.results[attempt]?.value.destroy).toHaveBeenCalledTimes(1);
-    }
-    expect(loadTurnstile).toHaveBeenCalledTimes(2);
+  it('allows an explicit library choice to replace pending typed input without inference or mutation while browsing', async () => {
+    const view = sheet(); const size = view.sim.claims.size;
+    view.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
+    expect(view.sim.claims.size).toBe(size); expect(view.root.querySelector('textarea')!.value).toBe('');
+    await view.submit();
+    expect(view.start).not.toHaveBeenCalled();
+    expect(view.sim.claims.get(view.whispered[0]!)?.text).toBe('Tom leaves a blue ribbon on Rosa’s doorstep every evening');
   });
-  it('bounds the human check to twelve seconds first and six seconds afterward', async () => {
-    vi.useFakeTimers();
-    try {
-      const fetcher = vi.fn();
-      const flow = createWhisperFlow({ baseUrl: 'https://api.test', castVersion,
-        turnstile: { getToken: () => new Promise(() => {}) }, fetch: fetcher });
-      const pending = flow.start(privateText);
-      await vi.advanceTimersByTimeAsync(11_999);
-      expect(flow.state.status).toBe('checking');
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await pending).toEqual({ ok: false, reason: 'turnstile' });
-      expect(flow.state).toMatchObject({ status: 'resting', line: "Couldn't check you're human. Try again." });
-
-      const retry = flow.start(privateText);
-      await vi.advanceTimersByTimeAsync(5_999);
-      expect(flow.state.status).toBe('checking');
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await retry).toEqual({ ok: false, reason: 'turnstile' });
-      expect(fetcher).not.toHaveBeenCalled();
-    } finally { vi.useRealTimers(); }
+  it('prevents telling an accusation to its own actor and allows neutral correction', async () => {
+    const view = sheet({ source: 'ai', meaning: { actor: 'tom', affected: 'mira', valence: -1, severity: 2, question: '' }, note: 'AI' });
+    view.write('Tom stole from Mira');
+    view.root.querySelectorAll<TestElement>('input').find(input => input.value === 'tom')!.dispatchEvent(new Event('change'));
+    await view.submit(); await view.submit(); expect(view.whispered).toHaveLength(0);
+    view.root.querySelectorAll('button').find(b => b.textContent === 'Leave people unassigned')!.dispatchEvent(new Event('click'));
+    await view.submit(); expect(view.whispered).toHaveLength(1);
   });
-});
-
-describe('reusable rumor library', () => {
-  it('only registers a selected library story on whisper, without interpreting stale typed input', async () => {
-    const ui = sheet(verified);
-    const count = ui.sim.claims.size;
-    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
-    expect(ui.root.querySelector('textarea')!.value).toBe('');
-    expect(ui.sim.claims.size).toBe(count);
-    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toContain('No AI credits used');
-    await ui.submit();
-    expect(ui.start).not.toHaveBeenCalled();
-    expect(ui.whispered).toHaveLength(1);
-    expect(ui.sim.claims.get(ui.whispered[0]!)?.text).toBe('Tom leaves a blue ribbon on Rosa’s doorstep every evening');
-    expect(ui.whispered[0]).toMatch(/^written_/);
-  });
-  it('clears a library selection when the player writes a different rumor', async () => {
-    const ui = sheet(verified);
-    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
-    const typed = ui.root.querySelector('textarea')!;
-    typed.value = privateText; typed.dispatchEvent(new Event('input'));
-    await ui.submit();
-    expect(ui.start).toHaveBeenCalledExactlyOnceWith(privateText);
-    expect(ui.whispered).toHaveLength(0);
-  });
-  it('prevents telling a library rumor to its own subject', async () => {
-    const ui = sheet(verified);
-    ui.root.querySelector('.rumor-library-use')!.dispatchEvent(new Event('click'));
-    ui.root.querySelector('.whisper-who')!.querySelectorAll<TestElement>('input').find(input => input.value === 'tom')!
-      .dispatchEvent(new Event('change'));
-    await ui.submit();
-    expect(ui.whispered).toHaveLength(0);
-    expect(ui.root.querySelector('.whisper-feedback')!.textContent).toContain('Choose a story about someone else');
-    expect(ui.start).not.toHaveBeenCalled();
-  });
-});
-
-it('shows an in-range sleeping resident as Asleep with no listener radio', () => {
-  vi.stubGlobal('document', sheetDocument());
-  vi.stubGlobal('window', { setTimeout, clearTimeout, matchMedia: () => ({ matches: true }) });
-  const sim = createFakeSimulation(731), snapshot = sim.snapshot();
-  snapshot.villagers = [{ ...person('mira', 1), activity: 'sleep' }];
-  snapshot.player.pos = { x: 0, y: 0 };
-  const whisper = createWhisperSheet({ sim: () => sim, snapshot: () => snapshot,
-    isPhone: () => true, reducedMotion: () => true, layers: { open() {}, closed() {} } as unknown as Layers,
-    whisper: () => false, walkTo() {}, onOpenChange() {} });
-  whisper.open({ listener: 'mira' });
-  const root = whisper.el as unknown as TestElement;
-  expect(root.querySelector('.walk-to')!.textContent).toBe('Asleep');
-  expect(root.querySelector('.walk-to')!.disabled).toBe(true);
-  expect(root.querySelectorAll('input')).toHaveLength(0);
-  expect(root.querySelectorAll('button').find(b => b.attrs.get('type') === 'submit')!.disabled).toBe(true);
-  whisper.destroy();
 });

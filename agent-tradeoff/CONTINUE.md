@@ -28,7 +28,11 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 
 A task is "committed" when `git log --oneline -30` shows its number prefix and `git status --short` shows nothing of it left. A task is "BLOCKED on commit" when its report says so and its files are still in the working tree: verify and commit them yourself; that is the common case, because the sandbox often cannot write `.git`.
 
-### Latest owner follow-up (2026-10-21)
+### Latest owner follow-up (2026-10-22)
+
+Open-ended stories replace the actual UI's twelve-category interpretation and death refusal. Exact wording becomes a canonical `story_` claim after preview/disclosure, with semantic AI annotations or neutral free fallback; typed stories bypass the old local classifier. `/rumor` shares the unchanged inference ledger and caps. Rumors never create eyewitness evidence or world-state deaths. Developer agents gain `whisperStory`. Research model is `v4-open-stories-1`; authored replay hash is unchanged. See [implementation and release report](reports/open-rumors-report.md), [independent review](reports/open-rumors-review.md), and [developer guide](../docs/open-rumors.md). Release verification in progress.
+
+### Previous owner follow-ups (2026-10-21)
 
 Whisper grounding follow-up is live in code commit `fa276db`: `someone killed tom` must never become an unrelated kindness. The browser and API now reject death rumors explicitly; remote claims require grounded people and sufficient confidence, including cache hits. Refusals cannot silently become default manual rumors, and manual choices require confirmation. Raw-input privacy and simulation mechanics remain unchanged. See [validation and release report](reports/whisper-grounding-report.md). This does not add death mechanics or unrestricted narrative interpretation.
 
@@ -43,7 +47,7 @@ Manual landing entry and the subsequent music/play polish are published. Code co
 - Determinism in `apps/rumortown/src/sim/**` and `packages/rumormind/**`: no `Math.random`, `Date`, `performance.now`; seeded draws and stable iteration only.
 - Copy: sentence case, plain words, no all-caps labels, no middle dots, no arrows in buttons, no exclamation marks.
 - Phone first: 360 px wide must work with no horizontal scroll; nothing may overlap the Whisper postbox.
-- Typed text never reaches links, logs, bubbles, the API cache or the share card; only the interpreted claim does.
+- Owner-authorized open stories: confirmed wording may enter dialogue, research exports and replay links after an explicit preview/disclosure. Unsent text and raw prose must never enter server logs or shared API caches. The share-card image still uses glyphs and names. See `docs/superpowers/plans/2026-10-21-open-rumors.md`.
 - Money boundaries in `apps/api` are not to be loosened: reservation before dispatch, settlement after, daily and lifetime caps, fail closed.
 - The renderer's close zoom is 40 CSS px per tile; UI anchors must use `project`/`unproject`, never the `TILE` constant.
 

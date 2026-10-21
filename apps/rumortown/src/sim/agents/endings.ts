@@ -66,6 +66,9 @@ function judgeClaim(ctx: Ctx, sc: StrangerClaim): Verdict {
   if (sc.heardBy.size < 2) {
     return { ending: 'died', summary: `${firstName} heard the stranger's story about ${subject} and kept it to ${reflexive(first)}; it went no further.` };
   }
+  if (claim.kind === 'story' && claim.valence === 0 && main && main.ledger.confidence(claim.id) > 0.6) {
+    return { ending: 'quiet', summary: `${main.d.name} still believes the story: “${claim.text}”. It remains unverified.` };
+  }
   if (main && main.ledger.confidence(claim.id) > 0.6) {
     return { ending: 'grudge', summary: `${main.d.name} still believes ${claim.text}; nobody proved otherwise, and ${main.d.pronouns.subject} holds it against ${subject}.` };
   }

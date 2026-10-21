@@ -118,3 +118,6 @@ export const IMPORTANCE = {
   sawWhisper: 3,
   bystander: 4,
 } as const;
+
+/** Gameplay attention tuning for new open stories, not calibrated human coefficients. */
+export const OPEN_STORY_ATTENTION = { novelty: 0.12, severity: 0.06 } as const;

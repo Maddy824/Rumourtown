@@ -3,7 +3,8 @@ import { cast, claims, castVersion } from '../content/cast/index.js';
 import { villageMap } from '../content/map/index.js';
 import { exportRun, MODEL_VERSION } from '../research/model.js';
 import { createSimulation } from '../sim/engine.js';
-import { createWrittenClaim } from '../sim/registered-claim.js';
+import { neutralMeaning } from '../../../shared/open-rumor.js';
+import { createOpenClaim, createWrittenClaim } from '../sim/registered-claim.js';
 import { createTalk } from '../sim/talk/index.js';
 import { createMover, createWorld } from '../sim/world/index.js';
 import { MINUTES_PER_DAY, type GameClaim } from '../sim/types.js';
@@ -14,6 +15,7 @@ const id = { type: 'string', minLength: 1, maxLength: 64 };
 const ticks = { type: 'integer', minimum: 1, maximum: AGENT_LIMITS.stepsPerCall };
 const schema = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 export const AGENT_TOOLS = [
+  { name: 'whisperStory', description: 'Publish an open story with exact wording and neutral meaning. No fixed categories or inference credits. The story enters dialogue and research exports.', inputSchema: schema({ listener: id, text: { type: 'string', minLength: 1, maxLength: 100 } }) },
   { name: 'observe', description: 'See the traveller and people within six tiles and line of sight. Does not advance time.', inputSchema: schema({}) },
   { name: 'move', description: 'Choose a reachable place. Starts a path; use wait to walk it.', inputSchema: schema({ placeId: id }) },
   { name: 'approach', description: 'Follow a currently visible person for at most ticks minutes. Reports whether whisper range was reached.', inputSchema: schema({ villagerId: id, ticks }) },
@@ -69,13 +71,13 @@ export function createAgentEnvironment(seed = 731) {
       }
     } else if (tool === 'wait') {
       for (let i = 0; i < (args.ticks as number) && sim.tick < AGENT_LIMITS.ticks; i++) sim.step();
-    } else if (tool === 'whisper') {
+    } else if (tool === 'whisper' || tool === 'whisperStory') {
       const listener = sim.snapshot().villagers.find(v => v.id === args.listener);
       if (!listener || listener.activity === 'sleep' || listener.id === args.about || world.distance(sim.snapshot().player.pos, listener.pos) > 2) return fail('Choose an awake listener within two tiles who is not the subject.');
       let claim: GameClaim;
       try {
-        if (typeof args.text !== 'string' || typeof args.about !== 'string') return fail('Invalid whisper text or subject.');
-        claim = createWrittenClaim(args.text, args.about, args.kind as GameClaim['kind'], args.severity as GameClaim['severity'], sim.cast);
+        if (typeof args.text !== 'string' || tool === 'whisper' && typeof args.about !== 'string') return fail('Invalid whisper text or subject.');
+        claim = tool === 'whisperStory' ? createOpenClaim(args.text, neutralMeaning(), sim.cast) : createWrittenClaim(args.text, args.about as string, args.kind as GameClaim['kind'], args.severity as GameClaim['severity'], sim.cast);
       } catch { return fail('Use 1–100 characters, a cast member, a supported kind and severity 1, 2 or 3.'); }
       sim.registerClaim(claim);
       if (!sim.whisper(listener.id, claim.id)) return fail('The whisper was refused.');

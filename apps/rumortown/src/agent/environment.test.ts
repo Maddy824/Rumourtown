@@ -17,6 +17,7 @@ describe('local agent environment', { timeout: 20_000 }, () => {
     }
     expect(listener).toBeDefined();
     expect(env.call('whisper', { listener, text: 'Tom brought bread for Ada.', about: 'tom', kind: 'kindness', severity: 1 }).ok).toBe(true);
+    expect(env.call('whisperStory', { listener, text: 'someone killed tom' }).ok).toBe(true);
     env.call('wait', { ticks: 120 });
     const replay = replayAgentRun(env.replay());
     expect(replay.observe()).toEqual(env.observe());
