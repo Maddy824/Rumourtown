@@ -67,6 +67,30 @@ export function ollama(options: TransportOptions & { baseUrl?: string } = {}): P
   } };
 }
 
+/**
+ * mlx-lm's OpenAI-compatible server (`python -m mlx_lm.server`). The model name is a Hugging Face id or
+ * a local fused-model path, so base and fine-tuned students run on one engine at one precision.
+ * It has no schema-constrained decoding, so structured strategies are refused rather than run unfairly.
+ */
+export function mlx(options: TransportOptions & { baseUrl?: string } = {}): Provider {
+  const base = (options.baseUrl ?? process.env.MLX_BASE_URL ?? 'http://127.0.0.1:8765').replace(/\/$/, '');
+  return { name: 'mlx', async generate(request) {
+    if (request.format) throw new ProviderError('mlx provider has no constrained decoding');
+    const start = performance.now();
+    const data = await post(`${base}/v1/chat/completions`, { model: request.model, messages: request.messages,
+      temperature: request.temperature ?? 0, max_tokens: request.maxTokens ?? 192, seed: request.seed ?? 1, stream: false,
+      // Same switch as Ollama's think:false; templates without the variable ignore it.
+      chat_template_kwargs: { enable_thinking: false } }, options);
+    const raw = data.choices?.[0]?.message?.content;
+    if (typeof raw !== 'string') throw new ProviderError('Invalid mlx completion');
+    const text = raw.replace(/^\s*(?:<think>[\s\S]*?)?<\/think>\s*/, '');
+    const latencyMs = performance.now() - start;
+    const outputTokens = count(data.usage?.completion_tokens);
+    return { text, model: request.model, provider: 'mlx', latencyMs, inputTokens: count(data.usage?.prompt_tokens), outputTokens,
+      tokensPerSecond: outputTokens !== null && latencyMs > 0 ? outputTokens * 1000 / latencyMs : null, costUsd: 0, memoryBytes: null };
+  } };
+}
+
 export const ACCOUNT = 'a37c517b6f93de94eee5d64f3dcd49ae';
 export async function readWranglerToken(path = join(homedir(), 'Library/Preferences/.wrangler/config/default.toml')): Promise<string> {
   let config: string;
@@ -119,5 +143,6 @@ export function mock(replies: string[] | ((request: Request, index: number) => s
 export function providerFor(model: string): { provider: Provider; model: string } {
   if (model.startsWith('cf:')) return { provider: workersAI(), model: model.slice(3) };
   if (model.startsWith('mock:')) return { provider: mock(), model: model.slice(5) };
+  if (model.startsWith('mlx:')) return { provider: mlx(), model: model.slice(4) };
   return { provider: ollama(), model: model.replace(/^ollama:/, '') };
 }
