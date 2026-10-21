@@ -2,11 +2,13 @@
 
 RumorTown is a browser game about a village of 24 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
 
-Whisper to Mira that Tom stole bread, turn on “Who told whom”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Rewind the timeline or share the run with a link.
+Whisper to Mira that Tom stole bread, turn on “Who told whom”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Open “Explore” to travel by paths, cross the river at the bridge and watch conversations around the village. Hold WASD or an arrow key to walk. Each villager has a private worry, an ambition and social motives. Rewind the timeline or share the run with a link.
+
+The “Notebook” exports synthetic observations as JSON/CSV and compares three-day runs across one or five seeds with an assumption removed. See the [research model, evidence and limitations](docs/research-model.md).
 
 Built by [Madhav Sunil](https://github.com/Maddy824).
 
-![RumorTown's felt village, with villagers talking beside the bakery, fields and river.](docs/images/village.png)
+![RumorTown's felt village, with villagers talking beside the bakery, fields and river.](docs/images/village-v2.png)
 
 ## Run locally
 
@@ -80,9 +82,9 @@ Measured 21 October 2026 on Apple M4 Max, macOS arm64, Node 25.8.2; seed 731. Ea
 
 | Workload | Median | p95 | Total | Game-minutes/second |
 |---|---:|---:|---:|---:|
-| 24 villagers, 2,700 ticks | 0.1531 ms | 0.4688 ms | 526.8 ms | 5,126 |
-| 60 villagers, 2,700 ticks | 2.0292 ms | 24.8933 ms | 17,355.9 ms | 156 |
-| A*, 1,000 reachable pairs | 0.0065 ms | 0.0315 ms | 10.2 ms | — |
-| Belief update, 100,000 calls | 0.0002 ms | 0.0005 ms | 29.2 ms | — |
+| 24 villagers, 2,700 ticks | 0.1453 ms | 0.6107 ms | 576.7 ms | 4,682 |
+| 60 villagers, 2,700 ticks | 1.1707 ms | 22.5489 ms | 13,250.3 ms | 204 |
+| A*, 1,000 reachable pairs | 0.0115 ms | 0.0667 ms | 19.2 ms | — |
+| Belief update, 100,000 calls | 0.0002 ms | 0.0005 ms | 28.7 ms | — |
 
 Run `npm run bench`. [Method and full results](bench/results.md). The synthetic 60-villager stress test has slower tail ticks; the shipped cast has 24 villagers.

@@ -15,18 +15,22 @@ function centre(tile: Vec2): Vec2 {
   return { x: tile.x + 0.5, y: tile.y + 0.5 };
 }
 
-function breadthFirstLength(map: VillageMap, from: Vec2, to: Vec2): number | null {
+function independentRouteCost(map: VillageMap, from: Vec2, to: Vec2): number | null {
   const world = createWorld(map);
-  const queue = [{ ...from, distance: 0 }];
-  const visited = new Set([`${from.x},${from.y}`]);
-  for (let head = 0; head < queue.length; head++) {
-    const current = queue[head]!;
-    if (current.x === to.x && current.y === to.y) return current.distance;
+  const queue = [{ ...from, cost: 0 }];
+  const costs = new Map([[`${from.x},${from.y}`, 0]]);
+  while (queue.length) {
+    queue.sort((a, b) => a.cost - b.cost);
+    const current = queue.shift()!;
+    if (current.x === to.x && current.y === to.y) return current.cost;
     for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]] as const) {
       const x = current.x + dx, y = current.y + dy, key = `${x},${y}`;
-      if (visited.has(key) || !world.isWalkable(x, y)) continue;
-      visited.add(key);
-      queue.push({ x, y, distance: current.distance + 1 });
+      if (!world.isWalkable(x, y)) continue;
+      const tile = map.tiles[y * map.width + x];
+      const cost = current.cost + (tile === 'grass' ? 4 : tile === 'field' ? 3 : 1);
+      if (cost >= (costs.get(key) ?? Infinity)) continue;
+      costs.set(key, cost);
+      queue.push({ x, y, cost });
     }
   }
   return null;
@@ -200,12 +204,25 @@ describe('world queries', () => {
     expect(previous).toEqual(to);
   });
 
-  it('matches independent breadth-first shortest distances across the real map', () => {
+  it('matches independent Dijkstra costs across the real map', () => {
     const world = createWorld(villageMap);
     const from = world.place('square').door;
     for (const place of villageMap.places) {
-      expect(world.findPath(from, place.door)?.length ?? null).toBe(breadthFirstLength(villageMap, from, place.door));
+      const path = world.findPath(from, place.door);
+      const cost = path?.reduce((sum, p) => {
+        const tile = villageMap.tiles[p.y * villageMap.width + p.x];
+        return sum + (tile === 'grass' ? 4 : tile === 'field' ? 3 : 1);
+      }, 0) ?? null;
+      expect(cost).toBe(independentRouteCost(villageMap, from, place.door));
     }
+  });
+
+  it('takes a longer paved lane instead of cutting across a lawn', () => {
+    const map = emptyMap(8, 4);
+    for (let x = 0; x < 8; x++) setTile(map, x, 2, 'path');
+    const path = createWorld(map).findPath({ x: 0, y: 1 }, { x: 7, y: 1 })!;
+    expect(path.length).toBeGreaterThan(7);
+    expect(path.filter(p => map.tiles[p.y * map.width + p.x] === 'path').length).toBeGreaterThanOrEqual(7);
   });
 
   it('excludes the starting tile, includes the target, and normalises world positions', () => {

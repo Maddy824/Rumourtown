@@ -3,14 +3,16 @@
  * string share links carry. Pure data; nothing here touches the simulation's rng.
  */
 import type { Dossier, GameClaim } from '../../sim/types.js';
+import { characters } from './characters.js';
+import type { CastId } from './ids.js';
 import { background } from './background.js';
 import { claims as readyMadeClaims } from './claims.js';
 import { core } from './core.js';
 import { regulars } from './regulars.js';
 
-export const castVersion = 'v1';
+export const castVersion = 'v2';
 
-export const cast: Dossier[] = [...core, ...regulars, ...background];
+export const cast: Dossier[] = [...core, ...regulars, ...background].map(d => ({ ...d, character: characters[d.id as CastId] }));
 
 export const claims: GameClaim[] = readyMadeClaims;
 

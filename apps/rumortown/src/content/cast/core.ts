@@ -82,7 +82,7 @@ export const core: DossierDraft[] = [
     schedule: day([
       [0, 'home-tom', 'rest'],
       [15, 'bakery', 'errand'],
-      [45, 'home-ada', 'secret'],
+      [40, 'home-ada', 'secret'],
       [110, 'square', 'work'],
       [300, 'home-tom', 'eat'],
       [345, 'square', 'work'],

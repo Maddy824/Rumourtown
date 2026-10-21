@@ -2254,3 +2254,62 @@ button.chain-actor:hover span {
     transition-duration: 1ms !important;
   }
 }
+
+/* Travel atlas and research notebook. The village keeps moving under the atlas. */
+.field-guide {
+  position: absolute;
+  z-index: 82;
+  inset: max(16px, var(--safe-t)) max(16px, calc((100% - 920px) / 2)) max(16px, var(--safe-b));
+  display: flex;
+  min-width: 0;
+}
+.guide-paper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  border-radius: 8px;
+  background: var(--grain), var(--paper);
+  color: var(--ink);
+  box-shadow: var(--lift-card);
+}
+.guide-paper h2 { margin: 0; font-size: 24px; }
+.guide-tabs { display: flex; gap: 8px; padding: 0 18px 12px; border-bottom: 1px solid var(--stitch); }
+.guide-tabs [aria-pressed='true'] { background: var(--mustard); }
+.guide-body { padding: 8px 24px 24px; overflow: auto; overscroll-behavior: contain; min-height: 0; }
+.guide-body p { line-height: 1.5; }
+.guide-intro { font-size: 24px; font-weight: 750; margin: 12px 0 4px; }
+.guide-body h3 { margin: 24px 0 10px; font-size: 18px; }
+.atlas-map { display: block; width: 100%; max-height: 48vh; border: 4px solid #74674f; border-radius: 4px; cursor: crosshair; }
+.atlas-map [data-villager] { cursor: pointer; }
+.guide-location { font-weight: 650; }
+.travel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; }
+.travel-grid button { min-height: 44px; border: 1px solid var(--stitch); }
+.guide-conversations { padding-left: 20px; }
+.guide-conversations li { margin: 14px 0; }
+.guide-conversations p { margin: 3px 0; }
+.guide-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.guide-body label { display: block; font-weight: 650; margin: 16px 0 6px; }
+.guide-body select { display: block; max-width: 100%; min-height: 44px; padding: 8px; color: var(--ink); background: var(--paper); border: 1px solid var(--ink-soft); border-radius: 4px; font: inherit; }
+.guide-status { min-height: 24px; }
+.experiment-results { overflow: auto; }
+.experiment-results table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.experiment-results th, .experiment-results td { text-align: left; padding: 8px; border-bottom: 1px solid var(--stitch); }
+.experiment-results caption { text-align: left; font-weight: 700; margin-bottom: 8px; }
+.guide-sources { padding-left: 20px; }
+.guide-sources li { margin: 16px 0; }
+.guide-sources p { margin: 4px 0; }
+.guide-sources a { color: #72412d; text-decoration: underline; }
+.movement-hint { position: absolute; z-index: 39; left: 50%; bottom: 144px; translate: -50% 0; max-width: min(440px, calc(100% - 32px)); width: max-content; padding: 8px 14px; border-radius: 4px; color: var(--ink); background: var(--paper); box-shadow: var(--lift-pinned); font-size: 13px; text-align: center; pointer-events: none; }
+.rt[data-layout='desk'] .pins { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 170px); }
+.rt[data-layout='phone'] .field-guide { inset: max(8px, var(--safe-t)) 8px max(8px, var(--safe-b)); }
+.rt[data-layout='phone'] .guide-body { padding: 4px 14px 20px; }
+.rt[data-layout='phone'] .guide-paper h2 { font-size: 20px; }
+.rt[data-layout='phone'] .guide-intro { font-size: 21px; }
+.rt[data-layout='phone'] .movement-hint { bottom: 110px; }
+.rt[data-layout='phone'] .prompt { display: none; }
+.guide-people-list { margin-top: 22px; }
+.guide-people-list summary { cursor: pointer; font-weight: 700; padding: 12px 0; }
+.guide-people { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.guide-people li { padding: 8px 0; border-bottom: 1px solid var(--stitch); }
+.guide-people span { display: block; font-size: 13px; color: var(--ink-soft); margin-top: 5px; }

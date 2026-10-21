@@ -31,6 +31,7 @@ export interface TagContext {
   onClosed: () => void;
   /** Open another villager's tag, from a face in a chain or a relation. */
   onSelect: (id: VillagerId) => void;
+  onVisit?: (id: VillagerId) => void;
 }
 
 export interface TagPlacement {
@@ -197,7 +198,15 @@ export function createTag(ctx: TagContext): Tag {
         h('span', { class: 'bar-label' }, 'Trusts you'),
         h('span', { class: 'bar bar-trust', role: 'img', 'aria-label': `Trusts you ${percent(ins.trustInStranger)}`, style: `--v: ${clamp(ins.trustInStranger, 0, 1).toFixed(3)}` }),
         h('span', { class: 'tag-trust-n' }, percent(ins.trustInStranger))));
-    replaceTagBody(body, [beliefsEl(ins), relationsEl(ins), moodsEl(ins, now), decisionsEl(ins)], nameEl);
+    const dossier = sim().cast.get(ins.id);
+    const character = dossier?.character;
+    const portrait = character ? section('A life of my own', [
+      h('p', null, character.aspiration),
+      h('p', null, h('strong', null, 'What weighs on me: '), character.worry),
+      h('p', { class: 'empty' }, character.habit),
+      ctx.onVisit ? h('button', { type: 'button', class: 'button button-quiet', 'data-tag-control': 'visit', onclick: () => ctx.onVisit?.(ins.id) }, 'Walk over and whisper') : null,
+    ]) : null;
+    replaceTagBody(body, [...(portrait ? [portrait] : []), beliefsEl(ins), relationsEl(ins), moodsEl(ins, now), decisionsEl(ins)], nameEl);
   };
 
   const api: Tag = {

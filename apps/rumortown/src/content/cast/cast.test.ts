@@ -100,7 +100,18 @@ describe('roster', () => {
 
   it('has unique ids and the cast version', () => {
     expect(new Set(cast.map((d) => d.id)).size).toBe(cast.length);
-    expect(castVersion).toBe('v1');
+    expect(castVersion).toBe('v2');
+  });
+
+  it('gives all 24 people distinct inner lives and bounded authored motives', () => {
+    expect(new Set(cast.map(d => d.character?.aspiration)).size).toBe(24);
+    for (const d of cast) {
+      expect(d.character?.worry.length, d.id).toBeGreaterThan(20);
+      expect(d.character?.habit.length, d.id).toBeGreaterThan(20);
+      for (const value of Object.values(d.character!.motives)) {
+        expect(value).toBeGreaterThanOrEqual(0); expect(value).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
   it('puts every villager in two of the four communities', () => {

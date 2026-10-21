@@ -43,5 +43,6 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 06 | Library publish preparation | done; package build, dry run and Node example verified |
 | 07 | Accessibility pass | done; keyboard/mobile Chrome and contrast verified |
 | 08 | Launch copy | done; titles, post, clip storyboard and GIF plan prepared |
+| 09 | Interactive village and research observations | done; live atlas, travel, richer cast, river, exports and comparisons verified |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.

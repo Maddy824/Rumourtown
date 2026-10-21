@@ -8,6 +8,7 @@ import { BERRY, FELT, INK, MUSTARD, PAPER, darken, mix, rgba } from './palette.j
 import { hash, seeded } from './grain.js';
 import { components, traceContours, type Inside } from './regions.js';
 import { feltPieceSteps, fibreFieldSteps, groundOf, mottleSteps, placeAt, roundRectPath, sampler, type Ground } from './felt.js';
+import { paintRiver } from './water.js';
 import { bridge, treeShadowsSteps, well } from './landmarks.js';
 
 /** Tiles of felt sheet beyond the map edge, seen only at the far zoom. */
@@ -46,15 +47,10 @@ export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap
   if (u >= 0.35) yield* fibreFieldSteps(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 26, 12);
   if (u >= 0.5) yield* grassDetails(ctx, map, g, k, z);
 
-  const isWater: Inside = (x, y) => g(x, y) === 'water';
   const isField: Inside = (x, y) => g(x, y) === 'field';
   const isPath: Inside = (x, y) => g(x, y) === 'path';
 
-  const water = traceContours(W, H, isWater, 2);
-  if (water.length) {
-    yield* feltPieceSteps(ctx, water, isWater, map, z, s, { fill: FELT.water, light: FELT.waterLight, dark: FELT.waterDark, thread: FELT.waterThread, radius: 9, lift: 0.9, fibres: 18, stitch: true, fuzz: true, seed: 21 });
-    if (u >= 0.4) yield* waterMarks(ctx, map, isWater, k, z);
-  }
+  yield* paintRiver(ctx, map, z);
 
   const fieldComps = components(W, H, isField);
   for (let i = 0; i < fieldComps.length; i++) {
@@ -163,33 +159,6 @@ function* grassDetails(ctx: CanvasRenderingContext2D, map: VillageMap, g: (x: nu
     ctx.arc(n.x, n.y, 1.35 * u, 0, Math.PI * 2);
     ctx.fill();
   }
-}
-
-/** Short stitched wave marks on the river: two or three stitches on a gentle arc. */
-function* waterMarks(ctx: CanvasRenderingContext2D, map: VillageMap, isWater: Inside, k: (x: number, y: number) => TileKind, z: number): Generator<void> {
-  const u = z / 32;
-  const p = new Path2D();
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
-      yield;
-      if (!isWater(x, y) || k(x, y) === 'bridge') continue;
-      const marks = hash(x, y, 81) < 0.55 ? 1 : 2;
-      for (let m = 0; m < marks; m++) {
-        const cx = (x + 0.25 + hash(x, y, 82 + m) * 0.5) * z;
-        const cy = (y + 0.22 + (m * 0.45 + hash(x, y, 84 + m) * 0.3)) * z;
-        const w = (6 + hash(x, y, 86 + m) * 4) * u;
-        p.moveTo(cx - w / 2, cy);
-        p.quadraticCurveTo(cx, cy + 2.4 * u, cx + w / 2, cy);
-      }
-    }
-  }
-  ctx.save();
-  ctx.setLineDash([2.6 * u, 1.9 * u]);
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 1.15 * u;
-  ctx.strokeStyle = rgba(FELT.waterThread, 0.85);
-  ctx.stroke(p);
-  ctx.restore();
 }
 
 /** Crop rows across a field: raised felt strips of wheat (with stalk stitches) or greens (with knots). */

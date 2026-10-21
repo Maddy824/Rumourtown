@@ -64,7 +64,7 @@ function seedKnowledge(ctx: Ctx, agent: Agent): void {
 export function createSimulation(opts: SimulationOptions): Simulation {
   const rng = createRng(opts.seed);
   // `forget` runs once per day at dusk, so its half-life unit here is days: two, per the spec.
-  const tuning: Tuning = { ...DEFAULT_TUNING, sourceMemoryHalfLifeTicks: 2 };
+  const tuning: Tuning = { ...DEFAULT_TUNING, sourceMemoryHalfLifeTicks: 2, ...opts.tuning };
   const world = opts.world;
   const makeMover = moverFactory(world);
   const claims = new Map<ClaimId, GameClaim>();

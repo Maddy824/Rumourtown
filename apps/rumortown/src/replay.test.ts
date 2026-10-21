@@ -32,7 +32,7 @@ describe('integrated village replay', () => {
     expect(walking.events(0)).toEqual(idle.events(0));
   });
   it('pins seed 731 with one whisper at tick 60 after 900 ticks', async () => {
-    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v1',
+    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v2',
       interventions: [{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }] }))!;
     const sim = make(state.interventions);
     runTo(sim, 59);
@@ -47,7 +47,7 @@ describe('integrated village replay', () => {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(sim.events(0))));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
     console.log(`Replay SHA-256: ${hash}`);
-    expect(hash).toBe('96b3b00e49f8703f5360d43dcda137466c42bbbdc45be8386ce9e8e2e234f983');
+    expect(hash).toBe('2b87d54c36d5823230d99b58eb1f296c40b024de93e5681e41a87e061a81e020');
     const replay = make(state.interventions);
     runTo(replay, 900);
     expect(replay.events(0)).toEqual(sim.events(0));
@@ -75,7 +75,7 @@ describe('integrated village replay', () => {
   it('restores typed claims only at their whisper tick and retains them through a share link', () => {
     const sim = make();
     const claim = createRegisteredClaim({ kind: 'theft', about: 'tom', object: 'bread', severity: 2, valence: -1 }, sim.cast);
-    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v1',
+    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v2',
       interventions: [{ tick: 60, listener: 'mira', claimId: claim.id }] }))!;
     const replay = make(state.interventions);
     runTo(replay, 59);

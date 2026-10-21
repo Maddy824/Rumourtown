@@ -7,6 +7,7 @@ import { deterministicLog, tellScore, tellThreshold } from 'rumormind';
 import type { GameClaim, SpeechAct, VillagerId } from '../types.js';
 import { nameOf, type Agent, type Ctx } from './context.js';
 import { ACCUSATION_COOLDOWN, CLOSE, MAX_ACCUSATIONS_PER_DAY } from './params.js';
+import { motivationTerms } from './motivation.js';
 import { independentSources } from './provenance.js';
 import { dayOf, percent } from './text.js';
 
@@ -93,7 +94,12 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
     } else {
       act = 'news';
     }
-    utility = Math.min(TELL_CAP, utility);
+    const motives = motivationTerms(speaker.d.character?.motives, {
+      act, confidence, closeness: closenessSL,
+      rival: speaker.d.rival === claim.about,
+      firsthand: speaker.ledger.beliefs.get(claim.id)?.provenance.some(p => p.kind === 'saw') ?? false,
+    });
+    utility = Math.max(0, Math.min(TELL_CAP, utility + motives.reduce((sum, term) => sum + term.value, 0)));
     if (best && utility <= best.utility) continue;
     const listenerName = nameOf(ctx, l, true);
     const listenerTerm =
@@ -112,6 +118,7 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
       { text: listenerTerm, value: 0.4 * (0.3 * closenessSL - (listenerKnows ? 0.6 : 0) - (claim.valence < 0 ? 0.3 * closenessLT : 0)) * factor },
       { text: claim.valence < 0 ? 'a harmful story draws attention' : 'a story worth hearing', value: 0.4 * ((claim.valence < 0 ? deterministicLog(ctx.tuning.negativitySharingOdds) : 0) + 0.2 * claim.severity / 3) * factor },
     ];
+    terms.push(...motives);
     if (act === 'defend') terms.push({ text: 'the truth sets the record straight', value: 0.25 });
     const uncapped = terms.reduce((sum, term) => sum + term.value, 0);
     if (uncapped > TELL_CAP) for (const term of terms) term.value *= TELL_CAP / uncapped;

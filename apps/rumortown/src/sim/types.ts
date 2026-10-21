@@ -81,7 +81,7 @@ export interface WorldApi {
   /** Optional world-owned movement implementation. */
   createMover?(start: Vec2): Mover;
   isWalkable(x: number, y: number): boolean;
-  /** 4-connected A* on integer tiles. Excludes `from`, includes `to`. Null when unreachable. */
+  /** 4-connected, terrain-weighted A* on integer tiles. Excludes `from`, includes `to`. Null when unreachable. */
   findPath(from: Vec2, to: Vec2): Vec2[] | null;
   /** True when no wall or tree tile lies between the two tile centres. */
   lineOfSight(a: Vec2, b: Vec2): boolean;
@@ -192,6 +192,14 @@ export interface ScheduleEntry {
   activity: Activity;
 }
 
+export interface SocialCharacter {
+  aspiration: string;
+  worry: string;
+  habit: string;
+  /** Authored tendencies, not measured personality scores. Each is 0..1. */
+  motives: { protect: number; bond: number; status: number; verify: number };
+}
+
 export interface Dossier {
   id: VillagerId;
   name: string;
@@ -204,6 +212,7 @@ export interface Dossier {
   home: PlaceId;
   workplace: PlaceId;
   traits: Traits;
+  character?: SocialCharacter;
   closeTo: VillagerId[];
   rival?: VillagerId;
   secrets: Secret[];
@@ -296,7 +305,7 @@ export interface Intervention {
 export type Ending = 'reconciled' | 'exposed' | 'split' | 'grudge' | 'died' | 'quiet';
 
 export type SimEvent =
-  | { kind: 'line'; tick: Tick; speaker: VillagerId; listeners: VillagerId[]; act: SpeechAct; text: string; lineId: string; claimId?: ClaimId }
+  | { kind: 'line'; tick: Tick; speaker: VillagerId; listeners: VillagerId[]; act: SpeechAct; text: string; lineId: string; claimId?: ClaimId; at?: Vec2; placeId?: PlaceId }
   | { kind: 'belief'; tick: Tick; villager: VillagerId; claimId: ClaimId; before: number; after: number; source: VillagerId | 'stranger' | 'self'; independent: boolean }
   | { kind: 'witness'; tick: Tick; villager: VillagerId; what: string; subject?: VillagerId; secretId?: string }
   | { kind: 'action'; tick: Tick; villager: VillagerId; action: string; why: string }
@@ -407,6 +416,8 @@ export interface SimulationOptions {
   /** Replayed at their ticks. */
   interventions?: Intervention[];
   days?: number;
+  /** Explicit experimental overrides; defaults are used for ordinary play. */
+  tuning?: Partial<import('rumormind').Tuning>;
 }
 
 /* ---------------- Rendering ---------------- */

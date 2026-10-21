@@ -99,7 +99,11 @@ export function createWorld(map: VillageMap): WorldApi {
           const nx = x + (direction === 1 ? -1 : direction === 2 ? 1 : 0);
           const ny = y + (direction === 0 ? -1 : direction === 3 ? 1 : 0);
           if (!isWalkable(nx, ny)) continue;
-          const next = ny * width + nx, cost = entry.cost + 1;
+          // Prefer lanes to trampling gardens. All costs remain >= 1, so the
+          // Manhattan heuristic is admissible. Grass remains accessible for visits.
+          const terrain = map.tiles[ny * width + nx];
+          const stepCost = terrain === 'grass' ? 4 : terrain === 'field' ? 3 : 1;
+          const next = ny * width + nx, cost = entry.cost + stepCost;
           if (closed[next] || cost >= costs[next]!) continue;
           costs[next] = cost;
           parents[next] = current;

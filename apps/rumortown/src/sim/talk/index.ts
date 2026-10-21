@@ -134,6 +134,8 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
       if (!eligible(cs.set, c)) continue;
       const lines = cs.lines.filter((l) => canFill(l.needs, c) && !namesSomeoneHere(l, c)
         && !(knownNews && l.needs & NEEDS.claim)
+        // A claim-backed telling must voice that fact, rather than unrelated village chatter.
+        && !(c.act === 'news' && c.claim && !knownNews && !(l.needs & NEEDS.claim))
         && fillLine(l.template, c, castById).length <= MAX_LINE_LENGTH);
       if (lines.length > 0) found.push({ set: cs, score: specificity(cs.set), lines });
     }

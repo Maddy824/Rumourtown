@@ -110,7 +110,7 @@ describe('createSimulation', () => {
     const events = sim.events(from);
     const decided = events.find((e) => e.kind === 'action' && e.villager === 'mira' && e.action === 'confront Tom');
     expect(decided).toBeDefined();
-    if (decided && decided.kind === 'action') expect(decided.why).toContain('Ada is a friend and was wronged');
+    if (decided && decided.kind === 'action') expect(decided.why).toMatch(/Ada is a friend and was wronged|heard it from \d+ people separately/);
     const accusation = events.find((e) => e.kind === 'line' && e.act === 'accuse' && e.speaker === 'mira' && e.listeners.includes('tom'));
     expect(accusation).toBeDefined();
     // Tom answers in the next line and feels it.

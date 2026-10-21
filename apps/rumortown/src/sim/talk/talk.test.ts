@@ -396,6 +396,17 @@ describe('selection', () => {
     expect(talk.say(key({ act: 'news', listener: ben, claim: stole }), () => 0).text).toBe('New to you: Tom stole bread from the bakery.');
   });
 
+  it('voices the claim being transferred even when the speaker has more specific everyday news', () => {
+    const talk = createTalkEngine(village, { bank: [
+      { speaker: 'mira', act: 'news', lines: ['The river is high today.'] },
+      { act: 'news', valence: -1, lines: ['Word is {claim}.'] },
+    ] });
+    const spoken = talk.say(key({ act: 'news', speaker: mira, listener: ben, claim: stole }), () => 0);
+    expect(spoken.text).toBe('Word is Tom stole bread from the bakery.');
+    expect(talk.say(key({ act: 'news', speaker: mira, listener: ben, claim: undefined, tick: 1 }), () => 0).text)
+      .toBe('The river is high today.');
+  });
+
   it('reacts to a whisper by trust: sceptical below 0.4, neutral to 0.6, receptive above', () => {
     const talk = createTalkEngine(cast);
     const whisper = (trust: number | undefined, confidence: number) =>

@@ -15,11 +15,12 @@ export interface DayEndContext {
   reducedMotion: () => boolean;
   onContinue: () => void;
   onShare: (opener: Element | null) => void;
+  onNewVillage: () => void;
 }
 
 export interface DayEndCard {
   readonly el: HTMLElement;
-  show(ev: DayEndEvent, trust: number | null, reflection?: { dare: string; paragraphs: string[]; checks: CheckItem[] }): void;
+  show(ev: DayEndEvent, trust: number | null, reflection?: { dare: string; paragraphs: string[]; checks: CheckItem[]; finished?: boolean }): void;
   hide(): void;
   isOpen(): boolean;
 }
@@ -34,14 +35,19 @@ export function createDayEnd(ctx: DayEndContext): DayEndCard {
   const trust = h('p', { class: 'dayend-trust' }, h('span', null, 'The stranger’s word, on average'), trustBar, trustN);
   const keepGoing = h('button', { class: 'button button-primary', type: 'button', onclick: () => api.hide() }, 'Keep going');
   const share = h('button', { class: 'button button-quiet', type: 'button', onclick: () => ctx.onShare(share) }, 'Pin to the board');
+  const newVillage = h('button', { class: 'button button-primary', type: 'button', hidden: true, onclick: () => ctx.onNewVillage() }, 'New village');
   const el = h('section', { class: 'card dayend', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-dayend-title', hidden: true },
-    h('div', { class: 'card-paper card-index' }, title, ending, summary, trust, reflection, h('div', { class: 'card-actions' }, keepGoing, share)));
+    h('div', { class: 'card-paper card-index' }, title, ending, summary, trust, reflection, h('div', { class: 'card-actions' }, keepGoing, share, newVillage)));
 
   let open = false;
 
   const api: DayEndCard = {
     el,
     show(ev, avgTrust, content) {
+      const finished = content?.finished ?? false;
+      newVillage.hidden = !finished;
+      keepGoing.textContent = finished ? 'Back to the village' : 'Keep going';
+      keepGoing.className = `button ${finished ? 'button-quiet' : 'button-primary'}`;
       title.textContent = `End of day ${ev.dayIndex + 1}`;
       ending.textContent = ENDING_TITLE[ev.ending] ?? 'The day is done';
       ending.dataset.ending = ev.ending;
@@ -79,7 +85,7 @@ export function createDayEnd(ctx: DayEndContext): DayEndCard {
         reveal(el);
         ctx.layers.open({ id: 'dayend', el, modal: true, close: () => api.hide() });
       }
-      keepGoing.focus({ preventScroll: true });
+      (finished ? newVillage : keepGoing).focus({ preventScroll: true });
     },
     hide() {
       if (!open) return;

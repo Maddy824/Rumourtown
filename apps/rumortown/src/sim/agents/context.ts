@@ -166,6 +166,13 @@ export interface Ctx {
 }
 
 export const emit = (ctx: Ctx, ev: SimEvent): void => {
+  if (ev.kind === 'line') {
+    const speaker = ctx.byId.get(ev.speaker);
+    if (speaker) {
+      ctx.events.push({ ...ev, at: { ...speaker.mover.pos }, placeId: ctx.world.placeAt(speaker.mover.pos)?.id });
+      return;
+    }
+  }
   ctx.events.push(ev);
 };
 

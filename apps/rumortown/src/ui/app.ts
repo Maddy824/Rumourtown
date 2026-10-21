@@ -3,7 +3,7 @@
  * The simulation steps at 2.5 game-minutes a second at 1× (5 at 2×, 20 at 8×, none when paused); the
  * renderer draws every animation frame, blending the previous and current snapshots.
  */
-import type { ClaimId } from 'rumormind';
+import type { Tuning, ClaimId } from 'rumormind';
 import { readRegisteredClaim } from '../sim/registered-claim.js';
 import {
   DAY_START_MINUTE,
@@ -21,6 +21,7 @@ import {
 } from '../sim/types.js';
 import { createBubbles } from './bubbles.js';
 import { createCameraRig } from './camera.js';
+import { createFieldGuide } from './field-guide.js';
 import { createDayEnd } from './day-end.js';
 import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js';
 import { clamp, h, svg } from './dom.js';
@@ -28,6 +29,7 @@ import { clockText, tickLabel } from './format.js';
 import { dialArt, postboxArt } from './icons.js';
 import { createLayers } from './layers.js';
 import { advanceTicks } from './loop.js';
+import { newVillageUrl } from './new-village.js';
 import { createShare } from './share.js';
 import { readShareFromLocation, writeShareToLocation } from './share-link.js';
 import { createStory } from './story.js';
@@ -38,7 +40,7 @@ import { createWhisperSheet, inReach } from './whisper.js';
 
 export interface AppDeps {
   /** Builds a fresh run. The timeline calls this again with the same seed and whispers to rewind. */
-  createSim: (seed: number, interventions: Intervention[]) => Simulation;
+  createSim: (seed: number, interventions: Intervention[], tuning?: Partial<Tuning>) => Simulation;
   createRenderer: (canvas: HTMLCanvasElement, map: VillageMap) => Renderer;
   map: VillageMap;
   /** Written into share links; a link made for another cast version starts fresh. Default 'v1'. */
@@ -154,7 +156,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const villagers = h('details', { class: 'villager-index', 'aria-label': 'Villagers' },
     h('summary', null, 'Meet the villagers'),
     h('ul', null, [...sim.cast.values()].map(d => h('li', null,
-      h('button', { type: 'button', class: 'button button-quiet', onclick: (ev: Event) => openTag(d.id, true, ev.currentTarget as Element) }, `${d.name}, ${d.role}`)))));
+      h('button', { type: 'button', class: 'button button-quiet', onclick: () => { villagers.open = false; openTag(d.id, true, villagers.querySelector('summary')); } }, `${d.name}, ${d.role}`)))));
 
   const dial = dialArt();
   const timeText = h('span', { class: 'clock-time' });
@@ -163,14 +165,16 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false' }, 'Who told whom');
   const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Story so far');
   const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Pin to the board');
-  const pins = h('nav', { class: 'pins', 'aria-label': 'Board' }, threadsBtn, storyBtn, shareBtn);
+  const exploreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Explore');
+  const researchBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Notebook');
+  const pins = h('nav', { class: 'pins', 'aria-label': 'Board' }, exploreBtn, researchBtn, threadsBtn, storyBtn, shareBtn);
   const threadsNote = h('p', { class: 'threads-note', hidden: true }, 'Each red thread is one telling.');
   const dareNote = h('details', { class: 'dare-note', open: true },
     h('summary', null, 'Your dare'), h('p', null, reflection.dare.text));
   const top = h('header', { class: 'rt-top' }, clock, pins, threadsNote, dareNote);
 
   const postbox = h('button', { class: 'postbox', type: 'button', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper'));
-  const prompt = h('p', { class: 'prompt', hidden: interventions.length > 0 }, 'Whisper something to someone.');
+  const prompt = h('p', { class: 'prompt', hidden: interventions.length > 0 }, 'Click to walk. Meet someone. Leave a whisper.');
 
   const toast = h('p', { class: 'toast', role: 'status', hidden: true });
   const rewindText = h('span', { class: 'rewind-text' });
@@ -193,7 +197,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let rewindToken = 0;
   let cursor = { tick: 0, seen: 0 };
   let follow: { id: VillagerId; whisper: boolean } | null = null;
+  const heldKeys = new Map<string, Vec2>();
   let keyTarget: { tile: Vec2; at: number } | null = null;
+  let destination: { pos: Vec2; label: string } | null = null;
   let markerAt: { pos: Vec2; until: number } | null = null;
   let insets = { top: 64, bottom: 96 };
   let lastPausedNote = 0;
@@ -256,6 +262,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     layers,
     onClosed: () => undefined,
     onSelect: (id) => openTag(id, true),
+    onVisit: (id) => { tag.close(); walkToVillager(id); },
   });
 
   const closeSheetsForPhone = (except: string): void => {
@@ -343,18 +350,36 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       syncScrim();
     },
     onShare: (opener) => share.open(opener),
+    onNewVillage: () => {
+      const candidate = randomSeed();
+      const nextSeed = candidate === seed ? (seed + 1) >>> 0 : candidate;
+      window.history.pushState(null, '', newVillageUrl(window.location.href, nextSeed, castVersion));
+      // A hash change alone leaves the existing app mounted; load the fresh run explicitly.
+      window.location.reload();
+    },
   });
 
+  const guide = createFieldGuide({
+    sim: () => sim, snapshot: () => cur, map, seed, castVersion, layers, make: deps.createSim,
+    walkTo: point => walkTo(point), inspect: id => openTag(id, true),
+    onOpenChange: (open, mode) => {
+      heldKeys.clear();
+      if (open && mode === 'research') hold('notebook'); else release('notebook');
+      syncScrim();
+    },
+  });
+  const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'You are the traveller in gold. Click a path to walk, or open Explore.');
   const bottom = h('div', { class: 'rt-bottom' }, postbox, prompt, time.bar, time.tab);
-  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, rewind, toast, live, actionLive);
+  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, movementHint, rewind, toast, live, actionLive);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
-    scrim.hidden = !(whisper.isOpen() || share.isOpen() || dayEnd.isOpen());
-    scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() ? 'true' : 'false';
+    scrim.hidden = !(whisper.isOpen() || share.isOpen() || dayEnd.isOpen() || guide.isOpen());
+    scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() ? 'true' : 'false';
   }
   scrim.addEventListener('click', () => {
-    if (share.isOpen()) share.close();
+    if (guide.isOpen()) guide.close();
+    else if (share.isOpen()) share.close();
     else if (whisper.isOpen()) whisper.close();
   });
 
@@ -400,11 +425,19 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function walkTo(point: Vec2): void {
     if (rewinding) return;
-    const tile = nearestWalkable(tileOf(point));
+    const requested = tileOf(point);
+    const kind = map.tiles[requested.y * map.width + requested.x];
+    if (kind === 'water') { say('The river is deep. Cross at the bridge.'); return; }
+    const tile = nearestWalkable(requested);
     if (!tile) return;
     follow = null;
+    heldKeys.clear();
     keyTarget = null;
+    const place = map.places.find(p => p.door.x === tile.x && p.door.y === tile.y);
+    destination = { pos: { x: tile.x + .5, y: tile.y + .5 }, label: place?.name ?? 'your chosen spot' };
+    movementHint.textContent = `Walking to ${destination.label}.`;
     sim.movePlayer(tile);
+    cur = sim.snapshot();
     markerAt = { pos: { x: tile.x + 0.5, y: tile.y + 0.5 }, until: performance.now() + 1400 };
     if (effectiveRate() === 0) notePaused();
   }
@@ -412,7 +445,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function walkToVillager(id: VillagerId): void {
     const v = cur.villagers.find((x) => x.id === id);
     if (!v || rewinding) return;
+    heldKeys.clear();
+    destination = null;
     follow = { id, whisper: true };
+    movementHint.textContent = `Walking to ${v.name}.`;
     keyTarget = null;
     sim.movePlayer(tileOf(v.pos));
     if (effectiveRate() === 0) notePaused();
@@ -453,6 +489,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (!base) return;
     const next = { x: base.x + dir.x, y: base.y + dir.y };
     if (!walkable(next)) return;
+    destination = null;
     keyTarget = { tile: next, at: now };
     follow = null;
     sim.movePlayer(next);
@@ -541,6 +578,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function showDayEnd(ev: DayEndEvent): void {
     actionLive.textContent = `End of day ${ev.dayIndex + 1}. ${ev.summary}`;
+    guide.close();
     hold('dayend');
     hideToast();
     closeSheetsForPhone('');
@@ -549,6 +587,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const dareResult = `${reflection.dare.text} ${evaluateDare(sim, reflection.dare, ev)}`;
     dareNote.querySelector('p')!.textContent = dareResult;
     dayEnd.show(ev, whispered ? averageTrust() : null, {
+      finished: sim.tick >= runTicks,
       dare: dareResult,
       paragraphs: ev.dayIndex === 2 ? reflectionParagraphs(sim, ev) : [],
       checks: reflection.checks,
@@ -609,6 +648,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     prev = cur;
     acc = 0;
     follow = null;
+    heldKeys.clear();
+    destination = null;
     keyTarget = null;
     story.reset(resyncEvents());
     bubbles.clear();
@@ -619,6 +660,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   /* ---------------- Input ---------------- */
 
+  exploreBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('explore', exploreBtn); });
+  researchBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('research', researchBtn); });
   threadsBtn.addEventListener('click', () => {
     threadsOn = !threadsOn;
     threadsBtn.setAttribute('aria-pressed', String(threadsOn));
@@ -678,6 +721,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const dir = KEY_DIRS[ev.key];
     if (dir) {
       ev.preventDefault();
+      heldKeys.set(ev.key.toLowerCase(), dir);
       stepKey(dir);
       return;
     }
@@ -689,7 +733,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       setSpeed(speed === 0 ? lastPlaying : 0);
     }
   };
+  const onKeyUp = (ev: KeyboardEvent): void => { heldKeys.delete(ev.key.toLowerCase()); };
+  const clearKeys = (): void => { heldKeys.clear(); };
   document.addEventListener('keydown', onKey);
+  document.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', clearKeys);
 
   const onHash = (): void => {
     if (window.location.hash.replace(/^#/, '') !== written) window.location.reload();
@@ -790,6 +838,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
         if (stepOnce()) break;
       }
     }
+    if (heldKeys.size && !layers.anyModal() && effectiveRate() > 0) stepKey([...heldKeys.values()].at(-1)!);
+    if (destination && !cur.player.moving) {
+      const arrived = Math.hypot(cur.player.pos.x - destination.pos.x, cur.player.pos.y - destination.pos.y) < .7;
+      movementHint.textContent = arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.';
+      destination = null;
+    }
+    guide.update();
     const alpha = clamp(acc, 0, 1);
 
     positions.clear();
@@ -882,9 +937,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       return p ? renderer.project(p, rig.camera) : null;
     },
     destroy() {
+      guide.destroy();
       whisper.destroy();
       window.cancelAnimationFrame(rafId);
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', clearKeys);
       window.removeEventListener('hashchange', onHash);
       window.removeEventListener('resize', onResize);
       phoneQuery.removeEventListener('change', applyLayout);

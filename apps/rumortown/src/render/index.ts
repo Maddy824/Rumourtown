@@ -14,6 +14,7 @@ import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
 import { hashString, makeCork, makeGrain } from './grain.js';
 import { INK, MUSTARD, PAPER, mix, rgba } from './palette.js';
+import { drawCurrent } from './water.js';
 import { IdleQueue } from './idle.js';
 
 export { fitZoom } from './camera.js';
@@ -394,6 +395,23 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const frame = cur.player.moving ? (Math.floor(now / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
     const sp = sprites.cachedStranger(cur.player.facing, frame, layerZoom, dpr);
     if (!sp) return;
+    // A persistent gold footprint makes the controllable traveller easy to find.
+    ctx.save();
+    ctx.fillStyle = MUSTARD;
+    ctx.strokeStyle = PAPER;
+    ctx.lineWidth = Math.max(1, zoom * .045);
+    ctx.beginPath();
+    ctx.ellipse(x, y, zoom * .38, zoom * .16, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    if (zoom >= 14) {
+      ctx.font = `700 ${Math.max(10, zoom * .33)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = PAPER; ctx.fillStyle = INK;
+      ctx.strokeText('You', x, y - sp.ay * stretch - 6);
+      ctx.fillText('You', x, y - sp.ay * stretch - 6);
+    }
+    ctx.restore();
     ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
   }
 
@@ -465,6 +483,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const mapBottom = view.oy + map.height * zoom;
     if (view.ox > 0.5 || view.oy > 0.5 || mapRight < camera.width - 0.5 || mapBottom < camera.height - 0.5) drawTable(camera);
     drawGround(layer, stretch, camera);
+    drawCurrent(ctx, map, camera, view.ox, view.oy, options.reducedMotion ? 0 : now / 1000);
     if (options.selected) drawSelection(cur, options.selected);
 
     // Depth-sorted pass: trees and roofs from the layer, villagers and the stranger.

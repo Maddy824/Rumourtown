@@ -1,0 +1,204 @@
+/** The travel atlas and observation notebook share a keyboard-accessible paper surface. */
+import type { Simulation, Vec2, VillageMap, WorldSnapshot } from '../sim/types.js';
+import { CONDITIONS, eventsCsv, exportRun, observe, pairedExperiment, SOURCES, type Condition, type Factory } from '../research/model.js';
+import { h, svg } from './dom.js';
+import { closeIcon } from './icons.js';
+import type { Layers } from './layers.js';
+import { activityText, tickClock } from './format.js';
+
+type Mode = 'explore' | 'research';
+const colours: Record<string, string> = { grass: '#87936a', path: '#d5bc8b', water: '#2c7480', bridge: '#ae8052', field: '#9c9b52', floor: '#eee0bf', door: '#b49062', wall: '#705b50', tree: '#46694b', well: '#575e61' };
+
+export function createFieldGuide(ctx: {
+  sim: () => Simulation; snapshot: () => WorldSnapshot; map: VillageMap;
+  seed: number; castVersion: string; layers: Layers; make: Factory;
+  walkTo: (point: Vec2) => void; inspect: (id: string) => void;
+  onOpenChange: (open: boolean, mode: Mode) => void;
+}) {
+  const heading = h('h2', { id: 'rt-guide-title', tabindex: '-1' }, 'Explore the village');
+  const close = h('button', { class: 'close', type: 'button', 'aria-label': 'Close village guide', onclick: () => api.close() }, closeIcon());
+  const tabs = h('div', { class: 'guide-tabs', role: 'group', 'aria-label': 'Village guide' });
+  const exploreTab = h('button', { class: 'button button-quiet', type: 'button', onclick: () => setMode('explore') }, 'Explore');
+  const researchTab = h('button', { class: 'button button-quiet', type: 'button', onclick: () => setMode('research') }, 'Research notebook');
+  tabs.append(exploreTab, researchTab);
+
+  const mapEl = svg('svg', { class: 'atlas-map', viewBox: `0 0 ${ctx.map.width * 10} ${ctx.map.height * 10}`, role: 'img', 'aria-label': 'Live village map. Use the destination buttons below to travel by keyboard.' });
+  // Run-length rows keep the static map small; live markers are updated in place.
+  for (let y = 0; y < ctx.map.height; y++) for (let x = 0; x < ctx.map.width;) {
+    const tile = ctx.map.tiles[y * ctx.map.width + x]!;
+    let end = x + 1;
+    while (end < ctx.map.width && ctx.map.tiles[y * ctx.map.width + end] === tile) end++;
+    mapEl.append(svg('rect', { x: x * 10, y: y * 10, width: (end - x) * 10, height: 10, fill: colours[tile] ?? colours.grass }));
+    x = end;
+  }
+  const markers = new Map<string, { group: SVGGElement; dot: SVGCircleElement; title: SVGTitleElement }>();
+  for (const d of ctx.sim().cast.values()) {
+    const title = svg('title', null, d.name);
+    const dot = svg('circle', { r: 4, fill: '#faf1dc', stroke: '#382f29', 'stroke-width': 1 });
+    const group = svg('g', { 'data-villager': d.id }, dot, svg('text', { y: -6, 'text-anchor': 'middle', fill: '#241e1a', 'font-size': 7, 'font-weight': 700, 'paint-order': 'stroke', stroke: '#f5e9d2', 'stroke-width': 2 }, d.name), title);
+    markers.set(d.id, { group, dot, title }); mapEl.append(group);
+  }
+  const player = svg('g', null, svg('circle', { r: 5, fill: '#f1b942', stroke: '#382f29', 'stroke-width': 2 }), svg('text', { y: -8, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#241e1a', 'paint-order': 'stroke', stroke: '#fff1ce', 'stroke-width': 2 }, 'You'));
+  mapEl.append(player);
+  const whereabouts = h('p', { class: 'guide-location' });
+  const travel = h('div', { class: 'travel-grid' });
+  for (const place of ctx.map.places.filter(p => p.kind !== 'home' && p.id !== 'well')) {
+    travel.append(h('button', { type: 'button', class: 'button button-quiet', onclick: () => { api.close(); ctx.walkTo(place.door); } }, place.name));
+  }
+  const peopleList = h('ul', { class: 'guide-people' });
+  const peopleStatus = new Map<string, HTMLElement>();
+  for (const d of ctx.sim().cast.values()) {
+    const status = h('span'); peopleStatus.set(d.id, status);
+    peopleList.append(h('li', null,
+      h('button', { type: 'button', class: 'text-button', onclick: () => { api.close(); ctx.inspect(d.id); } }, `${d.name}, ${d.role}`), status));
+  }
+  const conversations = h('ul', { class: 'guide-conversations' });
+  const explore = h('div', { class: 'guide-body' },
+    h('p', { class: 'guide-intro' }, 'A village in motion'),
+    h('p', null, 'Tap the map or choose a destination to walk there. Tap a person to meet them. Gold is you; red marks someone speaking.'),
+    mapEl, whereabouts,
+    h('h3', null, 'Where would you like to go?'), travel,
+    h('details', { class: 'guide-people-list' }, h('summary', null, `Meet all ${ctx.sim().cast.size} people`), peopleList),
+    h('h3', null, 'Conversations around the village'), conversations,
+    h('p', { class: 'empty' }, 'Click the ground to walk. Hold W, A, S, D or an arrow key to keep moving. Enter meets someone nearby; Space pauses time. Water and walls block walking. The bridge is the only river crossing.'));
+
+  const metrics = h('p', { class: 'guide-metrics' });
+  const noteStatus = h('p', { class: 'guide-status', role: 'status', 'aria-live': 'polite' });
+  const results = h('div', { class: 'experiment-results' });
+  const condition = h('select', { id: 'rt-experiment-condition' }, Object.entries(CONDITIONS).map(([value, item]) => h('option', { value }, item.label)));
+  const count = h('select', { id: 'rt-experiment-count' }, h('option', { value: '1' }, 'This seed'), h('option', { value: '5' }, 'Five consecutive seeds'));
+  const run = h('button', { type: 'button', class: 'button button-primary', onclick: () => void experiment() }, 'Compare three days');
+  const cancel = h('button', { type: 'button', class: 'button button-quiet', hidden: true, onclick: () => { job++; resetJob('Comparison cancelled.'); } }, 'Cancel comparison');
+  const downloadResult = h('button', { type: 'button', class: 'button button-quiet', hidden: true, onclick: () => download('experiment.json', JSON.stringify(lastResult, null, 2), 'application/json') }, 'Download comparison');
+  const research = h('div', { class: 'guide-body', hidden: true },
+    h('p', { class: 'guide-intro' }, 'Watch a story become a belief'),
+    h('p', null, 'This is a research-informed, synthetic world for exploring hypotheses. Its characters and coefficients are authored. It has not been calibrated or validated against human behaviour.'),
+    metrics,
+    h('h3', null, 'Save your observations'),
+    h('p', null, 'JSON includes the seed, inputs, map, character motives, parameters, beliefs, relationships and event log. Spoken lines record their location. CSV contains the event table.'),
+    h('div', { class: 'guide-actions' },
+      h('button', { type: 'button', class: 'button button-quiet', onclick: () => download('observation.json', JSON.stringify(exportRun(ctx.sim(), ctx.seed, ctx.castVersion, ctx.map), null, 2), 'application/json') }, 'Download run JSON'),
+      h('button', { type: 'button', class: 'button button-quiet', onclick: () => download('events.csv', eventsCsv(ctx.sim()), 'text/csv') }, 'Download events CSV')),
+    h('h3', null, 'Change one assumption'),
+    h('p', null, 'Run the same inputs for three days with one rule changed. The ordinary village stays where you left it. Several seeds help reveal how much results vary.'),
+    h('label', { for: 'rt-experiment-condition' }, 'Compare ordinary rules with'), condition,
+    h('label', { for: 'rt-experiment-count' }, 'Seed sample'), count,
+    h('div', { class: 'guide-actions' }, run, cancel, downloadResult), noteStatus, results,
+    h('p', { class: 'empty' }, 'Harmful beliefs means negative claims held above 50% confidence, whether true or false. Claim tellings counts spoken lines carrying a claim, including corrections. These are simulated outcomes, not human effect sizes. Paired seeds do not keep random draws aligned after runs diverge.'),
+    h('h3', null, 'Research behind the rules'),
+    h('ul', { class: 'guide-sources' }, SOURCES.map(source => h('li', null, h('a', { href: source.url, target: '_blank', rel: 'noopener noreferrer' }, source.title), h('p', null, source.use)))),
+    h('p', null, 'The model also tracks source credibility, repetition, first-hand evidence, affinity bias, corrections and fading source memory. Exact weights and their limitations are documented in docs/research-model.md in the repository.'));
+
+  const el = h('section', { class: 'field-guide', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-guide-title', hidden: true },
+    h('div', { class: 'guide-paper' }, h('header', { class: 'sheet-head' }, heading, close), tabs, explore, research));
+  let mode: Mode = 'explore';
+  let open = false;
+  let lastTick = -1;
+  let job = 0;
+  let destroyed = false;
+  let lastResult: unknown = null;
+
+  function download(suffix: string, content: string, mime: string): void {
+    const url = URL.createObjectURL(new Blob([content], { type: mime }));
+    const a = h('a', { href: url, download: `rumortown-${ctx.seed}-${suffix}` });
+    document.body.append(a); a.click(); a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function resetJob(message: string): void {
+    run.disabled = false; condition.disabled = false; count.disabled = false; cancel.hidden = true;
+    noteStatus.textContent = message;
+  }
+  async function experiment(): Promise<void> {
+    const token = ++job;
+    run.disabled = true; condition.disabled = true; count.disabled = true; cancel.hidden = false; downloadResult.hidden = true;
+    results.replaceChildren();
+    const selected = condition.value as Condition;
+    const setup = exportRun(ctx.sim(), ctx.seed, ctx.castVersion, ctx.map);
+    try {
+      const result = await pairedExperiment(ctx.make, ctx.seed, ctx.sim().interventions(), selected, Number(count.value), (done, total) => {
+        if (token === job && !destroyed) noteStatus.textContent = `Comparing villages… ${Math.round(done / total * 100)}%`;
+      }, () => destroyed || token !== job);
+      if (!result || destroyed || token !== job) return;
+      lastResult = { setup, experiment: result };
+      const table = h('table', null, h('caption', null, 'At the end of three days'),
+        h('thead', null, h('tr', null, ['Seed', 'Rules', 'Harmful beliefs', 'Claim tellings', 'Trust in you'].map(label => h('th', { scope: 'col' }, label)))),
+        h('tbody', null, result.runs.flatMap(row => ([['Ordinary', row.baseline], ['Changed', row.comparison]] as const).map(([label, data]) =>
+          h('tr', null, h('td', null, row.seed), h('td', null, label), h('td', null, data.harmfulBeliefs), h('td', null, data.claimTellings), h('td', null, `${Math.round(data.meanTrustInStranger * 100)}%`))))));
+      results.append(table); downloadResult.hidden = false;
+      resetJob(`Comparison finished for ${result.runs.length} seed${result.runs.length === 1 ? '' : 's'}.`);
+    } catch {
+      if (token === job && !destroyed) resetJob('The comparison could not finish. Your village is unchanged.');
+    }
+  }
+  function placeName(pos: Vec2): string {
+    let best: VillageMap['places'][number] | undefined;
+    for (const p of ctx.map.places) if (pos.x >= p.rect.x && pos.x < p.rect.x + p.rect.w && pos.y >= p.rect.y && pos.y < p.rect.y + p.rect.h && (!best || p.rect.w * p.rect.h < best.rect.w * best.rect.h)) best = p;
+    return best?.name ?? (pos.x >= 39 ? 'Riverside lane' : 'Village lanes');
+  }
+  function setMode(next: Mode): void {
+    mode = next;
+    explore.hidden = next !== 'explore'; research.hidden = next !== 'research';
+    exploreTab.setAttribute('aria-pressed', String(next === 'explore'));
+    researchTab.setAttribute('aria-pressed', String(next === 'research'));
+    (next === 'explore' ? explore : research).scrollTop = 0;
+    heading.textContent = next === 'explore' ? 'Explore the village' : 'Research notebook';
+    if (open) { ctx.onOpenChange(true, next); lastTick = -1; api.update(); }
+  }
+  mapEl.addEventListener('click', ev => {
+    const target = ev.target as Element;
+    const id = target.closest('[data-villager]')?.getAttribute('data-villager');
+    if (id) { api.close(); ctx.inspect(id); return; }
+    const transform = mapEl.getScreenCTM();
+    if (!transform) return;
+    const point = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(transform.inverse());
+    const tile = { x: Math.floor(point.x / 10), y: Math.floor(point.y / 10) };
+    const kind = ctx.map.tiles[tile.y * ctx.map.width + tile.x];
+    if (!kind || ['water', 'wall', 'tree', 'well'].includes(kind)) return;
+    api.close(); ctx.walkTo(tile);
+  });
+  const api = {
+    el,
+    show(next: Mode, opener: Element): void {
+      open = true; setMode(next); el.hidden = false;
+      // Reset after revealing: hidden panes retain their old scroll position in Chrome.
+      (next === 'explore' ? explore : research).scrollTop = 0;
+      ctx.layers.open({ id: 'guide', el, modal: true, close: () => api.close() }, opener);
+      heading.focus({ preventScroll: true });
+    },
+    close(): void {
+      if (!open) return;
+      open = false; el.hidden = true;
+      ctx.layers.closed('guide'); ctx.onOpenChange(false, mode);
+    },
+    isOpen: () => open,
+    update(): void {
+      const snapshot = ctx.snapshot();
+      if (!open || snapshot.tick === lastTick) return;
+      lastTick = snapshot.tick;
+      if (mode === 'research') {
+        const m = observe(ctx.sim());
+        metrics.textContent = `Seed ${ctx.seed}. ${m.harmfulBeliefs} harmful beliefs across ${m.harmfulBelievers} people. ${m.claimTellings} claim tellings so far.`;
+        return;
+      }
+      player.setAttribute('transform', `translate(${snapshot.player.pos.x * 10} ${snapshot.player.pos.y * 10})`);
+      whereabouts.textContent = `You are at ${placeName(snapshot.player.pos)}. ${snapshot.villagers.filter(v => v.moving).length} villagers are on the move.`;
+      for (const v of snapshot.villagers) {
+        const marker = markers.get(v.id); if (!marker) continue;
+        marker.group.setAttribute('transform', `translate(${v.pos.x * 10} ${v.pos.y * 10})`);
+        marker.dot.setAttribute('fill', v.bubble ? '#b34a40' : '#faf1dc');
+        const status = `${v.moving ? 'Walking' : activityText(v.activity)}, ${placeName(v.pos)}`;
+        marker.title.textContent = `${v.name}: ${status}`;
+        const row = peopleStatus.get(v.id); if (row) row.textContent = status;
+      }
+      // Preserve focus while someone uses a live conversation's control.
+      if (conversations.contains(document.activeElement)) return;
+      const lines = ctx.sim().events(Math.max(0, snapshot.tick - 8)).filter(e => e.kind === 'line').slice(-5);
+      conversations.replaceChildren(...lines.map(line => h('li', null,
+        h('button', { type: 'button', class: 'text-button', onclick: () => { api.close(); ctx.inspect(line.speaker); } }, `${ctx.sim().cast.get(line.speaker)?.name ?? line.speaker} at ${line.at ? placeName(line.at) : 'the village'}, ${tickClock(line.tick)}`),
+        h('p', null, line.text))));
+      if (!lines.length) conversations.append(h('li', null, 'A quiet moment. People are getting on with their day.'));
+    },
+    destroy(): void { destroyed = true; job++; api.close(); },
+  };
+  return api;
+}

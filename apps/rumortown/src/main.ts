@@ -17,9 +17,9 @@ const world = { ...createWorld(villageMap), createMover };
 export const deps: AppDeps = {
   map: fake ? createFakeMap() : villageMap,
   castVersion,
-  createSim: (seed, interventions) => fake
+  createSim: (seed, interventions, tuning) => fake
     ? createFakeSimulation(seed, interventions)
-    : createSimulation({ seed, world, cast, claims, talk: createTalk(cast), interventions }),
+    : createSimulation({ seed, world, cast, claims, talk: createTalk(cast), interventions, tuning }),
   createRenderer: createStubRenderer,
   whisperClient: import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_TURNSTILE_SITE_KEY
     ? { baseUrl: import.meta.env.VITE_API_BASE_URL, siteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY }
