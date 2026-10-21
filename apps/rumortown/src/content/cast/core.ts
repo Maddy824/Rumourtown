@@ -33,7 +33,7 @@ export const core: DossierDraft[] = [
     schedule: day([
       [0, 'home-mira', 'rest'],
       [10, 'bakery', 'work'],
-      [285, 'shop', 'secret'],
+      [280, 'shop', 'secret'],
       [330, 'bakery', 'eat'],
       [360, 'bakery', 'work'],
       [570, 'well', 'errand'],
@@ -82,7 +82,7 @@ export const core: DossierDraft[] = [
     schedule: day([
       [0, 'home-tom', 'rest'],
       [15, 'bakery', 'errand'],
-      [50, 'home-ada', 'secret'],
+      [45, 'home-ada', 'secret'],
       [110, 'square', 'work'],
       [300, 'home-tom', 'eat'],
       [345, 'square', 'work'],
@@ -133,8 +133,8 @@ export const core: DossierDraft[] = [
       [10, 'riverside', 'work'],
       [130, 'bakery', 'errand'],
       [170, 'riverside', 'work'],
-      [300, 'inn', 'eat'],
-      [330, 'smithy', 'secret'],
+      [250, 'inn', 'eat'],
+      [315, 'smithy', 'secret'],
       [375, 'square', 'visit'],
       [600, 'inn', 'talk'],
       [840, 'home-ben', 'rest'],
@@ -154,7 +154,7 @@ export const core: DossierDraft[] = [
     knows: [{ claimId: 'ben-borrowed-tools', confidence: 0.98 }],
   },
   {
-    // Ill this week: she keeps to her house, so her day has no errand and no evening out.
+    // Ill this week: she keeps to her house and receives visitors at home.
     id: 'ada',
     name: 'Ada',
     pronouns: she,
@@ -186,6 +186,7 @@ export const core: DossierDraft[] = [
       [360, 'home-ada', 'rest'],
       [450, 'home-ada', 'secret'],
       [540, 'home-ada', 'work'],
+      [600, 'home-ada', 'visit'], // Tom calls on his neighbour until 660.
       [660, 'home-ada', 'sleep'],
     ]),
     look: {
@@ -238,7 +239,7 @@ export const core: DossierDraft[] = [
       [175, 'bridge', 'talk'],
       [240, 'inn', 'work'],
       [360, 'inn', 'eat'],
-      [420, 'home-ada', 'secret'],
+      [400, 'home-ada', 'secret'],
       [525, 'inn', 'work'],
       [840, 'home-rosa', 'rest'],
     ]),

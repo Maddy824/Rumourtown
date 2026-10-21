@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MINUTES_PER_DAY, type ClaimKind, type Dossier, type Secret } from '../../sim/types.js';
+import { createWorld } from '../../sim/world/index.js';
+import { villageMap } from '../map/index.js';
 import { cast, castVersion, claims } from './index.js';
 
 // Copied verbatim from the global constraints on purpose, so the data is checked against the
@@ -217,11 +219,15 @@ describe('schedules', () => {
         (e) => e.activity === 'eat' && e.start >= 240 && e.start <= 400 && ['bakery', 'inn', d.home].includes(e.place),
       );
       expect(meal, `${d.id} eats at midday`).toBe(true);
-      // Ada is ill this week and stays in; people come to her instead.
-      if (d.id !== 'ada') {
-        expect(d.schedule.some((e) => e.activity === 'errand' || e.activity === 'visit'), `${d.id} goes out`).toBe(true);
-      }
+      expect(d.schedule.some((e) => e.activity === 'errand' || e.activity === 'visit'), `${d.id} has an errand or visit`).toBe(true);
     }
+  });
+
+  it('lets Ada receive Tom at home while she is ill', () => {
+    const ada = villager('ada');
+    expect(ada.schedule.every((entry) => entry.place === ada.home)).toBe(true);
+    expect(coveringEntry(ada, ada.home, [600, 660])?.activity).toBe('visit');
+    expect(coveringEntry(villager('tom'), ada.home, [600, 660])?.activity).toBe('visit');
   });
 
   it('sends sociable villagers to the inn, square or chapel in the evening', () => {
@@ -253,13 +259,43 @@ describe('secrets', () => {
     }
   });
 
-  it('places every window inside a schedule entry at the same place, with time to walk there', () => {
+  it('places every window inside a schedule entry at the same place', () => {
     for (const { owner, secret } of allSecrets) {
       const entry = coveringEntry(owner, secret.place, secret.window);
       expect(entry, `${secret.id} at ${secret.place} ${secret.window.join('-')}`).toBeDefined();
-      if (entry && entry.place !== owner.schedule[0]?.place) {
-        expect(secret.window[0] - entry.start, `${secret.id} walking time`).toBeGreaterThanOrEqual(15);
+    }
+  });
+
+  it('allows real A* walking time at one tile per minute plus five minutes before every secret', () => {
+    const world = createWorld(villageMap);
+    for (const { owner, secret } of allSecrets) {
+      const entryIndex = intervals(owner).findIndex(
+        (entry) => entry.place === secret.place && entry.start <= secret.window[0] && secret.window[1] <= entry.end,
+      );
+      expect(entryIndex, secret.id).toBeGreaterThanOrEqual(0);
+      const entry = owner.schedule[entryIndex]!;
+      const previous = owner.schedule[entryIndex - 1];
+      let walkingMinutes = 0;
+      // An activity change in the same place needs no journey. Otherwise allow the longest
+      // route between authored standing spots, since spotFor can choose any of them.
+      if (previous && previous.place !== entry.place) {
+        const from = world.place(previous.place);
+        const to = world.place(entry.place);
+        expect(from.spots.length, previous.place).toBeGreaterThan(0);
+        expect(to.spots.length, entry.place).toBeGreaterThan(0);
+        for (const start of from.spots) {
+          for (const end of to.spots) {
+            const path = world.findPath(start, end);
+            expect(path, `${secret.id}: ${previous.place} to ${entry.place}`).not.toBeNull();
+            // findPath excludes the origin and includes the destination: length is steps.
+            walkingMinutes = Math.max(walkingMinutes, path!.length);
+          }
+        }
       }
+      expect.soft(
+        secret.window[0] - entry.start,
+        `${secret.id}: ${previous?.place ?? entry.place} to ${entry.place}, ${walkingMinutes} walking minutes + 5 spare`,
+      ).toBeGreaterThanOrEqual(walkingMinutes + 5);
     }
   });
 
@@ -290,6 +326,16 @@ describe('secrets', () => {
       for (const c of confirmed) {
         for (const h of contradicted) expect(c.contradicts, `${secret.id}: ${c.id} vs ${h.id}`).toContain(h.id);
       }
+    }
+  });
+
+  it('keeps wheel repair and nervous rehearsal neutral about fraud and boasting', () => {
+    // A repaired wheel does not prove it was sold cracked; nerves do not disprove a boast.
+    for (const id of ['ivo-mends-hals-wheel', 'otto-rehearses-sermon']) {
+      const secret = allSecrets.find(({ secret }) => secret.id === id)?.secret;
+      expect(secret, id).toBeDefined();
+      expect(secret?.confirms, id).toEqual([]);
+      expect(secret?.contradicts, id).toEqual([]);
     }
   });
 });
