@@ -10,9 +10,9 @@ export type PlaceId = string;
 /** One tick is one game-minute. */
 export type Tick = number;
 
-/** A day runs 07:00 to 22:00. */
-export const DAY_START_MINUTE = 7 * 60;
-export const MINUTES_PER_DAY = 15 * 60;
+/** A full day runs from 06:00 to the following dawn. */
+export const DAY_START_MINUTE = 6 * 60;
+export const MINUTES_PER_DAY = 24 * 60;
 /** CSS pixels per tile at the close camera. */
 export const TILE = 32;
 
@@ -162,6 +162,8 @@ export type SecretKind = 'delivery' | 'gift' | 'borrow' | 'meeting' | 'practice'
 
 /** A witnessable private act. These are the facts lies collide with. */
 export interface Secret {
+  /** Only awake villagers on an authored night routine can witness this act. */
+  nightOnly?: boolean;
   id: string;
   kind: SecretKind;
   /** Plain English, usable in the story log and as an alternative explanation. */
@@ -188,6 +190,10 @@ export type Activity =
   | 'talk';
 
 export interface ScheduleEntry {
+  /** Optional weekdays, 0..6, in the repeating authored week. */
+  days?: number[];
+  /** Night duties take priority over daytime needs and social pursuits. */
+  night?: boolean;
   /** Minutes since day start. Entries sorted ascending; the first starts at 0. */
   start: number;
   place: PlaceId;

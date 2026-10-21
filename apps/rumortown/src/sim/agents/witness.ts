@@ -24,7 +24,7 @@ export function tickWitnessing(ctx: Ctx): void {
   const day = dayOf(ctx.tick);
   for (const actor of ctx.agents) {
     const secret = activeSecret(actor, minute);
-    if (!secret || !atPlace(ctx, actor, secret.place)) continue;
+    if (!secret || isAsleep(actor) || !atPlace(ctx, actor, secret.place)) continue;
     // The act is private business; the view says "errand" so the UI does not give it away.
     if (actor.conversation === null) actor.activity = 'errand';
     const confirmed: GameClaim[] = [];
@@ -39,6 +39,7 @@ export function tickWitnessing(ctx: Ctx): void {
     const key = `${secret.id}|${day}`;
     for (const w of ctx.agents) {
       if (w === actor || isAsleep(w) || w.witnessed.has(key)) continue;
+      if (secret.nightOnly && !w.d.schedule[w.entryIndex]?.night) continue;
       const d = dist(ctx, w, actor);
       if (d > WITNESS_RANGE || !ctx.world.lineOfSight(w.mover.pos, actor.mover.pos)) continue;
       w.witnessed.add(key);

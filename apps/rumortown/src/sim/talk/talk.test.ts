@@ -318,7 +318,7 @@ describe('selection', () => {
     }
   });
 
-  it('keeps the winning set when exhausted and releases each line after exactly 900 ticks', () => {
+  it('keeps the winning set when exhausted and releases each line after exactly 1440 ticks', () => {
     const bank: LineSet[] = [
       { act: 'greet', speaker: 'mira', lines: ['One.', 'Two.'] },
       { act: 'greet', lines: ['Three.'] },
@@ -328,9 +328,9 @@ describe('selection', () => {
     expect(talk.say(key({ act: 'greet', tick: 1 }), () => 0).text).toBe('Two.');
     // Both used: rng can pick either, including the most recent, inside the winning set.
     expect(talk.say(key({ act: 'greet', tick: 2 }), () => 0.9).text).toBe('Two.');
-    expect(talk.say(key({ act: 'greet', tick: 899 }), () => 0.9).text).toBe('Two.');
-    expect(talk.say(key({ act: 'greet', tick: 900 }), () => 0.9).text).toBe('One.');
-    expect(LINE_COOLDOWN_TICKS).toBe(900);
+    expect(talk.say(key({ act: 'greet', tick: 1439 }), () => 0.9).text).toBe('Two.');
+    expect(talk.say(key({ act: 'greet', tick: 1440 }), () => 0.9).text).toBe('One.');
+    expect(LINE_COOLDOWN_TICKS).toBe(1440);
   });
 
   it('chooses tied sets uniformly before choosing a fresh line, and remembers speakers separately', () => {

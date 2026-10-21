@@ -51,10 +51,22 @@ describe('local agent environment', { timeout: 20_000 }, () => {
     expect(env.call('move', { placeId: 'square' }).ok).toBe(false);
     expect(env.call('observe').ok).toBe(true);
   });
+  it('rejects a nearby sleeping listener before registering an unrecorded claim', () => {
+    const env = createAgentEnvironment(731);
+    env.call('move', { placeId: 'home-mira' });
+    while (env.observe().tick < 1020) env.call('wait', { ticks: Math.min(120, 1020 - env.observe().tick) });
+    const before = env.research();
+    const actions = env.replay();
+    const result = env.call('whisper', { listener: 'mira', text: 'Tom brought bread for Ada.', about: 'tom', kind: 'kindness', severity: 1 });
+    expect(result.ok).toBe(false);
+    expect(env.research()).toEqual(before);
+    expect(env.replay()).toEqual(actions);
+    expect(replayAgentRun(actions).research()).toEqual(before);
+  });
   it('stops at three days and rejects incompatible replays', () => {
     const env = createAgentEnvironment();
-    for (let i = 0; i < 23; i++) env.call('wait', { ticks: 120 });
-    expect(env.observe()).toMatchObject({ tick: 2700, done: true });
+    for (let i = 0; i < Math.ceil(AGENT_LIMITS.ticks / AGENT_LIMITS.stepsPerCall); i++) env.call('wait', { ticks: 120 });
+    expect(env.observe()).toMatchObject({ tick: 4320, done: true });
     expect(env.call('wait', { ticks: 1 }).ok).toBe(false);
     expect(() => replayAgentRun({ ...env.replay(), modelVersion: 'other' })).toThrow();
     expect(() => createAgentEnvironment(-1)).toThrow();

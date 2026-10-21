@@ -76,31 +76,31 @@ function confrontation(ctx: Ctx, publicAnswer: boolean, agreeable = 0.2) {
 }
 
 describe('round 1 regressions', () => {
-  it('ends each day after exactly 900 steps, with the completed index, and stops after the requested days', () => {
+  it('ends each day after exactly 1440 steps, with the completed index, and stops after the requested days', () => {
     const cast = createFakeCast(1).slice(0, 1);
     cast[0]!.schedule = [{ start: 0, place: 'square', activity: 'sleep' }];
     const sim = createSimulation({ seed: 1, cast, claims: [], world: createWorld(createFakeMap()), talk, days: 2 });
     for (let i = 0; i < MINUTES_PER_DAY - 1; i++) sim.step();
-    expect(sim.tick).toBe(899);
+    expect(sim.tick).toBe(1439);
     expect(sim.events(0).filter((e) => e.kind === 'day-end')).toEqual([]);
     sim.step();
-    expect(sim.events(900).find((e) => e.kind === 'day-end')).toMatchObject({ tick: 900, dayIndex: 0 });
+    expect(sim.events(1440).find((e) => e.kind === 'day-end')).toMatchObject({ tick: 1440, dayIndex: 0 });
     for (let i = 0; i < MINUTES_PER_DAY; i++) sim.step();
     expect(sim.events(0).filter((e) => e.kind === 'day-end')).toEqual([
-      expect.objectContaining({ tick: 900, dayIndex: 0 }), expect.objectContaining({ tick: 1800, dayIndex: 1 }),
+      expect.objectContaining({ tick: 1440, dayIndex: 0 }), expect.objectContaining({ tick: 2880, dayIndex: 1 }),
     ]);
     sim.step();
-    expect(sim.tick).toBe(1800);
+    expect(sim.tick).toBe(2880);
     expect(sim.inspect(cast[0]!.id).decisions.some((d) => d.action === 'reflect')).toBe(true);
   });
 
   it('seeds participants as first-hand and other dossier knowledge as hearsay with the authored strength', () => {
     const sim = createSimulation({ seed: 1, cast: authoredCast, claims: authoredClaims, world: createWorld(createFakeMap()), talk });
-    expect(sim.inspect('ada').beliefs.find((b) => b.claimId === 'tom-brought-bread-to-ada')!.chain).toEqual(['Ada saw it at 07:00']);
-    expect(sim.inspect('rosa').beliefs.find((b) => b.claimId === 'jonah-rosa-planning-fair')!.chain).toEqual(['Rosa saw it at 07:00']);
+    expect(sim.inspect('ada').beliefs.find((b) => b.claimId === 'tom-brought-bread-to-ada')!.chain).toEqual(['Ada saw it at 06:00']);
+    expect(sim.inspect('rosa').beliefs.find((b) => b.claimId === 'jonah-rosa-planning-fair')!.chain).toEqual(['Rosa saw it at 06:00']);
     for (const [id, claimId, confidence] of [['nell', 'rosa-nursed-ada', 0.7], ['otto', 'dag-fills-poor-box', 0.7], ['jonah', 'pim-gave-flour-for-fair', 0.8]] as const) {
       const actual = sim.inspect(id).beliefs.find((b) => b.claimId === claimId)!;
-      expect(actual.chain).toEqual([`Villager told ${sim.cast.get(id)!.name} at 07:00`]);
+      expect(actual.chain).toEqual([`Villager told ${sim.cast.get(id)!.name} at 06:00`]);
       expect(actual.confidence).toBeCloseTo(sigmoid(0.6 * confidence));
     }
   });
@@ -153,7 +153,7 @@ describe('round 1 regressions', () => {
     ctx.tick = 121; expect(accusationOpen(ctx, harmful.id, 'tom')).toBe(true);
     ctx.accusations.push(accusation({ tick: 121 }), accusation({ tick: 241 }));
     ctx.tick = 500; expect(accusationOpen(ctx, harmful.id, 'tom')).toBe(false);
-    ctx.tick = 901; expect(accusationOpen(ctx, harmful.id, 'tom')).toBe(true);
+    ctx.tick = 1441; expect(accusationOpen(ctx, harmful.id, 'tom')).toBe(true);
   });
 
   it('an honest accused explains the innocent alternative only in private', () => {
@@ -247,7 +247,7 @@ describe('round 1 regressions', () => {
     expect(ctx.rel.trust('rosa', 'ben')).toBeCloseTo(initial - 0.2);
     expect(rec.accuserExposed).toBe(true);
     expect(sc.correctedFirsthand).toEqual(new Set(['mira', 'ada']));
-    ctx.tick = 901; exposeStranger(ctx, harmful, ada);
+    ctx.tick = 1441; exposeStranger(ctx, harmful, ada);
     expect(ctx.rel.trust('ada', 'stranger')).toBe(0);
   });
 
@@ -258,12 +258,12 @@ describe('round 1 regressions', () => {
     mira.ledger.see(harmful, ctx.claims, 5); // Acquired after the telling, within the same step.
     ctx.tick = 7; hearFromStranger(ctx, mira, harmful);
     ctx.tick = 10; hearFrom(ctx, ada, rosa, harmful, false);
-    const expected = ['The stranger told Mira at 07:01', 'Mira told Ada at 07:05'];
+    const expected = ['The stranger told Mira at 06:01', 'Mira told Ada at 06:05'];
     expect(chainFor(ctx, ada, harmful.id)).toEqual(expected);
-    expect(chainFor(ctx, rosa, harmful.id)).toEqual([...expected, 'Ada told Rosa at 07:10']);
-    expect(chainFor(ctx, mira, harmful.id)).toContain('Mira saw it at 07:05');
+    expect(chainFor(ctx, rosa, harmful.id)).toEqual([...expected, 'Ada told Rosa at 06:10']);
+    expect(chainFor(ctx, mira, harmful.id)).toContain('Mira saw it at 06:05');
     ctx.tick = 11; hearFrom(ctx, mira, ada, harmful, false);
-    expect(chainFor(ctx, ada, harmful.id)).toEqual([...expected, 'Mira saw it at 07:05', 'The stranger told Mira at 07:07', 'Mira told Ada at 07:11']);
+    expect(chainFor(ctx, ada, harmful.id)).toEqual([...expected, 'Mira saw it at 06:05', 'The stranger told Mira at 06:07', 'Mira told Ada at 06:11']);
   });
 
   it('hearsay alternatives do not expose the stranger, while a public first-hand account does', () => {
@@ -318,7 +318,7 @@ describe('round 1 regressions', () => {
   });
 
   it('keeps a reflection inspectable for every villager, including quiet days and person-free memories', () => {
-    const ctx = fixture(['mira', 'tom']); ctx.tick = 900;
+    const ctx = fixture(['mira', 'tom']); ctx.tick = 1440;
     remember(ctx, agent(ctx, 'mira'), 8, 'A stranger lied', 'The stranger’s stories do not hold up');
     for (const a of ctx.agents) reflect(ctx, a);
     expect(inspectAgent(ctx, agent(ctx, 'mira')).decisions[0]!.why).toBe('The stranger’s stories do not hold up');
@@ -478,17 +478,17 @@ it.each([['fallback', createMover], ['world', worldMover]] as const)('uses the %
 });
 
 
-it.each(['fallback', 'world'] as const)('runs a deterministic 900-tick rumor day with 24 villagers using the %s mover within 1.5 seconds', (moverKind) => {
+it.each(['fallback', 'world'] as const)('runs a deterministic 1440-tick rumor day with 24 villagers using the %s mover within 1.5 seconds', (moverKind) => {
   const options = () => ({ seed: 11, cast: createFakeCast(11), claims: [harmful, truth], talk, days: 1,
     world: moverKind === 'world' ? { ...createWorld(createFakeMap()), createMover: worldMover } : createWorld(createFakeMap()),
     interventions: [1, 2, 3].map((tick) => ({ tick, listener: 'mira', claimId: harmful.id })),
   });
   const sim = createSimulation(options()); const start = performance.now();
-  for (let i = 0; i < 900; i++) sim.step();
+  for (let i = 0; i < 1440; i++) sim.step();
   const elapsed = performance.now() - start;
-  expect(elapsed).toBeLessThan(1500); expect(sim.tick).toBe(900);
-  expect(sim.events(900).find((event) => event.kind === 'day-end')).toMatchObject({ tick: 900, dayIndex: 0 });
-  const replay = createSimulation(options()); for (let i = 0; i < 900; i++) replay.step();
+  expect(elapsed).toBeLessThan(1500); expect(sim.tick).toBe(1440);
+  expect(sim.events(1440).find((event) => event.kind === 'day-end')).toMatchObject({ tick: 1440, dayIndex: 0 });
+  const replay = createSimulation(options()); for (let i = 0; i < 1440; i++) replay.step();
   expect(replay.events(0)).toEqual(sim.events(0)); expect(replay.snapshot()).toEqual(sim.snapshot());
-  console.log(`900 ticks, 24 villagers, rumor, ${moverKind} mover: ${elapsed.toFixed(0)} ms`);
+  console.log(`1440 ticks, 24 villagers, rumor, ${moverKind} mover: ${elapsed.toFixed(0)} ms`);
 });

@@ -27,6 +27,11 @@ interface Candidate {
 const PEOPLE_KINDS: ReadonlySet<GoalKind> = new Set(['approach', 'gossip', 'confront', 'apologize', 'reconcile']);
 
 export function decide(ctx: Ctx, agent: Agent): void {
+  const routine = entryOf(agent);
+  if (routine.activity === 'sleep' || routine.night) {
+    if (agent.goal.kind !== 'schedule' || (!agent.mover.moving && !atPlace(ctx, agent, routine.place))) followSchedule(ctx, agent);
+    return;
+  }
   const cands: Candidate[] = [];
   const g = agent.goal;
   const t = agent.d.traits;

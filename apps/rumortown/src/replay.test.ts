@@ -23,7 +23,7 @@ const runTo = (sim: ReturnType<typeof make>, tick: number): void => {
 describe('integrated village replay', { timeout: 20_000 }, () => {
   it('keeps NPC events identical when the player follows a different walking path', () => {
     const idle = make(), walking = make();
-    for (let t = 0; t < 900; t++) {
+    for (let t = 0; t < 1440; t++) {
       if (t % 3 === 0) {
         const mira = walking.snapshot().villagers.find(v => v.id === 'mira')!;
         walking.movePlayer({ x: Math.floor(mira.pos.x), y: Math.floor(mira.pos.y) });
@@ -33,8 +33,8 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     expect(walking.snapshot().player.pos).not.toEqual(idle.snapshot().player.pos);
     expect(walking.events(0)).toEqual(idle.events(0));
   });
-  it('pins seed 731 with one whisper at tick 60 after 900 ticks', async () => {
-    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v3',
+  it('pins seed 731 with one whisper at tick 60 after 1440 ticks', async () => {
+    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v4',
       interventions: [{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }] }))!;
     const sim = make(state.interventions);
     runTo(sim, 59);
@@ -42,16 +42,16 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     sim.step();
     expect(sim.interventions()).toEqual(state.interventions);
     expect(sim.events(60).find((e) => e.kind === 'whisper')?.tick).toBe(60);
-    runTo(sim, 900);
+    runTo(sim, 1440);
     expect(sim.snapshot().villagers.map((v) => v.id)).toEqual(cast.map((d) => d.id));
     expect(sim.events(0).some((e) => e.kind === 'line' && ['gossip', 'defend', 'accuse'].includes(e.act))).toBe(true);
     expect(sim.events(0).filter((e) => e.kind === 'day-end')).toHaveLength(1);
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(sim.events(0))));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
     console.log(`Replay SHA-256: ${hash}`);
-    expect(hash).toBe('bfe954cc3d9d87c9fd6b6b11e786cdf7ddb22dc784b87615352365144f1d126e');
+    expect(hash).toBe('6137d96970f7a28e05e2fb37b57b9495274d1c256208d084818a336332994184');
     const replay = make(state.interventions);
-    runTo(replay, 900);
+    runTo(replay, 1440);
     expect(replay.events(0)).toEqual(sim.events(0));
   });
 
@@ -77,7 +77,7 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
   it('restores typed claims only at their whisper tick and retains them through a share link', () => {
     const sim = make();
     const claim = createRegisteredClaim({ kind: 'theft', about: 'tom', object: 'bread', severity: 2, valence: -1 }, sim.cast);
-    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v3',
+    const state = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v4',
       interventions: [{ tick: 60, listener: 'mira', claimId: claim.id }] }))!;
     const replay = make(state.interventions);
     runTo(replay, 59);
@@ -92,9 +92,9 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     const live = make([anchor]);
     live.registerClaim(claim);
     expect(live.whisper('mira', claim.id)).toBe(true);
-    runTo(live, 900);
+    runTo(live, 1440);
     const fromLink = make([anchor, { tick: 0, listener: 'mira', claimId: claim.id }]);
-    runTo(fromLink, 900);
+    runTo(fromLink, 1440);
     expect(fromLink.events(0)).toEqual(live.events(0));
   });
 
@@ -115,8 +115,8 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     expect(reached).toBe(true);
     expect(live.whisper('mira', 'tom-stole-bread')).toBe(true);
     const replay = make(live.interventions());
-    runTo(live, 900);
-    runTo(replay, 900);
+    runTo(live, 1440);
+    runTo(replay, 1440);
     expect(replay.events(0)).toEqual(live.events(0));
   });
 
@@ -126,9 +126,9 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     const claim = createWrittenClaim('Tom keeps a secret stash of honey behind the mill.', 'tom', 'hoarding', 2, live.cast);
     live.registerClaim(claim);
     expect(live.whisper('mira', claim.id)).toBe(true);
-    const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v3', interventions: live.interventions() }))!;
+    const shared = decodeShare(encodeShare({ v: 1, seed: 731, cast: 'v4', interventions: live.interventions() }))!;
     const replay = make(shared.interventions);
-    runTo(live, 900); runTo(replay, 900);
+    runTo(live, 1440); runTo(replay, 1440);
     expect(replay.claims.get(claim.id)?.text).toBe(claim.text);
     expect(replay.events(0)).toEqual(live.events(0));
     expect(replay.events(0).some(e => e.kind === 'line' && e.claimId === claim.id)).toBe(true);
@@ -137,9 +137,9 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
 
   it('keeps the stand-in replay and evening card available', () => {
     const sim = createFakeSimulation(731, [{ tick: 60, listener: 'mira', claimId: 'stole' }]);
-    runTo(sim, 900);
+    runTo(sim, 1440);
     expect(sim.interventions()).toEqual([{ tick: 60, listener: 'mira', claimId: 'stole' }]);
-    expect(sim.events(900).some((e) => e.kind === 'day-end')).toBe(true);
+    expect(sim.events(1440).some((e) => e.kind === 'day-end')).toBe(true);
   });
 
   it('makes all twelve new residents active participants with ties across the river', () => {
@@ -148,7 +148,7 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     const start = new Map(sim.snapshot().villagers.map(v => [v.id, v.pos]));
     runTo(sim, 600);
     for (const v of sim.snapshot().villagers.filter(v => added.has(v.id))) expect(v.pos, v.id).not.toEqual(start.get(v.id));
-    runTo(sim, 900);
+    runTo(sim, 1440);
     const lines = sim.events(0).filter(e => e.kind === 'line');
     expect(new Set(lines.filter(e => added.has(e.speaker)).map(e => e.speaker))).toEqual(added);
     expect(lines.filter(e => e.listeners.some(id => added.has(id) !== added.has(e.speaker))).length).toBeGreaterThan(100);
@@ -170,10 +170,10 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     for (let seed = 1; seed <= 20; seed++) {
       const sim = createSimulation({ seed, cast, claims, world: { ...createWorld(villageMap), createMover },
         talk: createTalk(cast), interventions: [{ tick: 130, listener: 'mira', claimId: 'tom-stole-bread' }] });
-      runTo(sim, 2700);
+      runTo(sim, 4320);
       const lines = sim.events(0).filter(e => e.kind === 'line');
       const passing = lines.filter(e => e.claimId === 'tom-stole-bread' && ['gossip', 'warn', 'confide', 'agree'].includes(e.act));
-      if (passing.some(e => e.tick <= 900)) firstDaySpread++;
+      if (passing.some(e => e.tick <= 1440)) firstDaySpread++;
       if (lines.some(e => ['accuse', 'defend'].includes(e.act) &&
         (e.claimId === 'tom-stole-bread' || claims.find(c => c.id === e.claimId)?.contradicts?.includes('tom-stole-bread')))) drama++;
       transmissions += passing.length;
@@ -183,10 +183,10 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     expect(transmissions).toBeLessThan(10000);
   }, 180000);
 
-  it('reaches the third evening with authored reflection and a dare result', () => {
+  it('reaches the third dawn with authored reflection and a dare result', () => {
     const sim = make([{ tick: 60, listener: 'mira', claimId: 'tom-stole-bread' }]);
     const reflection = runReflection(731);
-    runTo(sim, 2700);
+    runTo(sim, 4320);
     const endings = sim.events(0).filter((e) => e.kind === 'day-end');
     expect(endings).toHaveLength(3);
     const final = endings[2]!;
@@ -195,6 +195,6 @@ describe('integrated village replay', { timeout: 20_000 }, () => {
     expect(reflectionParagraphs(sim, final).length).toBeLessThanOrEqual(5);
     expect(evaluateDare(sim, reflection.dare, final)).toMatch(/^Dare (met|missed this run)\.$/);
     sim.step();
-    expect(sim.tick).toBe(2700);
+    expect(sim.tick).toBe(4320);
   });
 });

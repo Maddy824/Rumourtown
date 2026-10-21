@@ -186,6 +186,8 @@ export const relKey = (from: string, to: string): string => `${from}|${to}`;
 
 export const nameOf = (ctx: Ctx, id: string, capital = false): string => displayName(ctx.castMap, id, capital);
 
+export const isUnavailable = (a: Agent): boolean => isAsleep(a) || a.d.schedule[a.entryIndex]?.activity === 'sleep' || (a.mover.moving && a.d.schedule[a.entryIndex]?.night === true);
+
 export const isAsleep = (a: Agent): boolean => a.activity === 'sleep';
 
 export const strangerClaimOf = (ctx: Ctx, claimId: ClaimId): StrangerClaim | undefined =>

@@ -3,14 +3,14 @@
  * tick, from greet to farewell. Each line is the speaker's best act by utility; claims spoken are
  * heard by everyone present; an accusation forces the accused's answer and the bystanders' sides.
  */
-import type { Activity, GameClaim, LineKey, SpeechAct, VillagerId } from '../types.js';
+import { DAY_START_MINUTE, type Activity, type GameClaim, type LineKey, type SpeechAct, type VillagerId } from '../types.js';
 import {
   addMood,
   agentOf,
   dist,
   emit,
   harmfulClaimsAbout,
-  isAsleep,
+  isUnavailable,
   nameOf,
   recordDecision,
   strangerClaimOf,
@@ -129,7 +129,7 @@ function enter(conv: Conversation, agent: Agent): void {
 }
 
 export function joinConversation(ctx: Ctx, conv: Conversation, agent: Agent): boolean {
-  if (conv.ended || agent.conversation !== null || isAsleep(agent) || conv.members.length >= MAX_GROUP || conv.members.some((id) => {
+  if (conv.ended || agent.conversation !== null || isUnavailable(agent) || conv.members.length >= MAX_GROUP || conv.members.some((id) => {
     const member = agentOf(ctx, id);
     return !member || dist(ctx, agent, member) > TALK_RANGE;
   })) return false;
@@ -365,7 +365,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
   if (line.decideSide) conv = { ...conv, accusation: line.decideSide.accusation };
   const speaker = agentOf(ctx, line.speaker);
   const listener = agentOf(ctx, line.listener);
-  if (!speaker || !listener) return;
+  if (!speaker || !listener || isUnavailable(speaker) || isUnavailable(listener)) return;
   const claim = line.claimId !== undefined ? ctx.claims.get(line.claimId) : undefined;
   const subject = claim ? ctx.castMap.get(claim.about) : undefined;
   const originId = claim ? speaker.ledger.rememberedOrigin(claim.id) : undefined;
@@ -381,7 +381,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
     if (src) key.source = src;
   }
   if (line.act === 'smalltalk') {
-    if (conv.topic === null) conv.topic = ctx.talk.pickTopic(speaker.d, listener.d, 420 + minuteOfDay(ctx.tick), ctx.rng);
+    if (conv.topic === null) conv.topic = ctx.talk.pickTopic(speaker.d, listener.d, (DAY_START_MINUTE + minuteOfDay(ctx.tick)) % 1440, ctx.rng);
     key.topic = conv.topic;
   }
   const spoken = ctx.talk.say(key, ctx.rng);
@@ -463,7 +463,7 @@ function audienceOf(ctx: Ctx, conv: Conversation, speaker: Agent, listener?: Age
       audience.push(a.d.id);
       continue;
     }
-    if (!isPublic || isAsleep(a)) continue;
+    if (!isPublic || isUnavailable(a)) continue;
     const hearsSpeaker = dist(ctx, a, speaker) <= PUBLIC_RANGE && ctx.world.lineOfSight(a.mover.pos, speaker.mover.pos);
     const hearsAccusation = accusation && listener && dist(ctx, a, listener) <= PUBLIC_RANGE && ctx.world.lineOfSight(a.mover.pos, listener.mover.pos);
     if (hearsSpeaker || hearsAccusation) audience.push(a.d.id);
@@ -475,7 +475,7 @@ function audienceOf(ctx: Ctx, conv: Conversation, speaker: Agent, listener?: Age
 function isPublicAround(ctx: Ctx, conv: Conversation, a: Agent, b: Agent): boolean {
   if (conv.members.length > 2) return true;
   for (const o of ctx.agents) {
-    if (o === a || o === b || isAsleep(o)) continue;
+    if (o === a || o === b || isUnavailable(o)) continue;
     if (dist(ctx, o, a) <= PUBLIC_RANGE || dist(ctx, o, b) <= PUBLIC_RANGE) return true;
   }
   return false;
@@ -661,12 +661,12 @@ function tryStartConversations(ctx: Ctx): void {
   const n = ctx.agents.length;
   for (let i = 0; i < n; i++) {
     const a = ctx.agents[i]!;
-    if (a.conversation !== null || isAsleep(a) || ctx.tick < a.talkCooldownUntil) continue;
+    if (a.conversation !== null || isUnavailable(a) || ctx.tick < a.talkCooldownUntil) continue;
 
     // On purpose: someone they walked up to.
     if (a.goal.target !== undefined && (INTENT_KINDS.has(a.goal.kind) || a.goal.kind === 'approach')) {
       const t = agentOf(ctx, a.goal.target);
-      if (t && !isAsleep(t) && dist(ctx, a, t) <= TALK_RANGE) {
+      if (t && !isUnavailable(t) && dist(ctx, a, t) <= TALK_RANGE) {
         if (t.conversation !== null) {
           const conv = ctx.conversations.find((c) => c.id === t.conversation && !c.ended);
           if (conv && conv.members.length < MAX_GROUP) {
@@ -683,7 +683,7 @@ function tryStartConversations(ctx: Ctx): void {
     let started = false;
     for (let j = i + 1; j < n && !started; j++) {
       const b = ctx.agents[j]!;
-      if (b.conversation !== null || isAsleep(b) || ctx.tick < b.talkCooldownUntil) continue;
+      if (b.conversation !== null || isUnavailable(b) || ctx.tick < b.talkCooldownUntil) continue;
       if (dist(ctx, a, b) > TALK_RANGE) continue;
       const last = a.lastTalk.get(b.d.id);
       if (last !== undefined && ctx.tick - last < PAIR_COOLDOWN) continue;

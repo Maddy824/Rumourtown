@@ -14,6 +14,7 @@ export function resetNeeds(agent: Agent): void {
 }
 
 export function tickNeeds(ctx: Ctx, agent: Agent): void {
+  if (agent.d.schedule[agent.entryIndex]?.activity === 'sleep' && agent.activity !== 'sleep') agent.needs.rest = 0;
   for (const n of NEEDS) agent.needs[n] = Math.max(0, agent.needs[n] - NEED_DECAY[n]);
   if (!agent.mover.moving) {
     const here = ctx.world.placeAt(agent.mover.pos);

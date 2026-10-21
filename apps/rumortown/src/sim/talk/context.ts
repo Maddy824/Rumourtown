@@ -81,9 +81,9 @@ export function daypartOf(minuteOfDay: number): Daypart {
   return 'evening';
 }
 
-/** Tick 0 is 07:00 on day one. */
+/** Tick 0 is 06:00 on day one. */
 export function minuteOfDayAt(tick: number): number {
-  return DAY_START_MINUTE + (((Math.floor(tick) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY);
+  return (DAY_START_MINUTE + (((Math.floor(tick) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY)) % MINUTES_PER_DAY;
 }
 
 export function stanceOf(trust: number): WhisperStance {

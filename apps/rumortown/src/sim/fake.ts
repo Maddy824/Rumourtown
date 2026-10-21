@@ -201,7 +201,7 @@ export function createFakeSimulation(seed = 1, replay: Intervention[] = []): Sim
       return {
         tick,
         dayIndex: Math.floor(tick / MINUTES_PER_DAY),
-        minuteOfDay: DAY_START_MINUTE + (tick % MINUTES_PER_DAY),
+        minuteOfDay: (DAY_START_MINUTE + (tick % MINUTES_PER_DAY)) % MINUTES_PER_DAY,
         villagers: bodies.map((b) => ({ ...b.view, pos: { ...b.view.pos }, bubble: b.view.bubble ? { ...b.view.bubble } : undefined })),
         player: { pos: { ...player.pos }, facing: player.facing, moving: player.moving },
         threads: threads.slice(-40),

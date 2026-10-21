@@ -4,7 +4,7 @@
  * Selection: the sets for the act are filtered to those that may be used (speaker, voice, valence,
  * hedging, listener relation, who the claim is about, topic, whisper stance, mood, first-hand), then the
  * most specific wins: speaker > voice > valence > hedged > listener relation > the finer fields. Within
- * a winning set a line is picked with rng among those this speaker has not said in the last 900 ticks.
+ * a winning set a line is picked with rng among those this speaker has not said in the last full simulated day.
  * If that set is exhausted, rng picks from all its lines. Tied sets are chosen uniformly first.
  *
  * Every `say` and `pickTopic` call draws exactly one rng value, so editing the line bank never shifts

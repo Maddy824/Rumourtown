@@ -166,16 +166,16 @@ describe('createSimulation', () => {
     expect(replay.inspect('mira').beliefs).toEqual(live.inspect('mira').beliefs);
   });
 
-  it('runs 900 ticks with 24 villagers in under 1.5 seconds and ends the day with a verdict', () => {
+  it('runs 1440 ticks with 24 villagers in under 1.5 seconds and ends the day with a verdict', () => {
     const sim = make(1);
     const t0 = performance.now();
-    run(sim, 900);
+    run(sim, 1440);
     const elapsed = performance.now() - t0;
     expect(elapsed).toBeLessThan(1500);
-    const dayEnd = sim.events(900).find((e) => e.kind === 'day-end');
+    const dayEnd = sim.events(1440).find((e) => e.kind === 'day-end');
     expect(dayEnd).toBeDefined();
     if (dayEnd && dayEnd.kind === 'day-end') {
-      expect(dayEnd.tick).toBe(900);
+      expect(dayEnd.tick).toBe(1440);
       expect(dayEnd.dayIndex).toBe(0);
       expect(dayEnd.ending).toBe('quiet');
       expect(dayEnd.summary.length).toBeGreaterThan(20);
@@ -186,13 +186,13 @@ describe('createSimulation', () => {
     expect(lines.some((e) => e.kind === 'line' && e.act === 'farewell')).toBe(true);
     const snap = sim.snapshot();
     expect(snap.villagers).toHaveLength(24);
-    expect(snap.minuteOfDay).toBe(7 * 60);
+    expect(snap.minuteOfDay).toBe(6 * 60);
     expect(snap.threads.length).toBeLessThanOrEqual(60);
     const mira = sim.inspect('mira');
     expect(mira.decisions.length).toBeGreaterThan(0);
     expect(mira.decisions.length).toBeLessThanOrEqual(5);
     expect(mira.relations).toHaveLength(23);
     // eslint-disable-next-line no-console
-    console.log(`900 ticks, 24 villagers: ${elapsed.toFixed(0)} ms, ${sim.events(0).length} events`);
+    console.log(`1440 ticks, 24 villagers: ${elapsed.toFixed(0)} ms, ${sim.events(0).length} events`);
   });
 });

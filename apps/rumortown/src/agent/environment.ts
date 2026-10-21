@@ -6,9 +6,9 @@ import { createSimulation } from '../sim/engine.js';
 import { createWrittenClaim } from '../sim/registered-claim.js';
 import { createTalk } from '../sim/talk/index.js';
 import { createMover, createWorld } from '../sim/world/index.js';
-import type { GameClaim } from '../sim/types.js';
+import { MINUTES_PER_DAY, type GameClaim } from '../sim/types.js';
 
-export const AGENT_LIMITS = { ticks: 2700, stepsPerCall: 120, actions: 2000, viewRadius: 6 } as const;
+export const AGENT_LIMITS = { ticks: 3 * MINUTES_PER_DAY, stepsPerCall: 120, actions: 2000, viewRadius: 6 } as const;
 const kinds = ['theft', 'cheating', 'romance', 'lying', 'broken-promise', 'insult', 'hoarding', 'shirking', 'boasting', 'kindness', 'paid-debt', 'nursed'];
 const id = { type: 'string', minLength: 1, maxLength: 64 };
 const ticks = { type: 'integer', minimum: 1, maximum: AGENT_LIMITS.stepsPerCall };
@@ -36,7 +36,7 @@ export function createAgentEnvironment(seed = 731) {
     return copy({ tick: sim.tick, done: sim.tick >= AGENT_LIMITS.ticks, actionsRemaining: AGENT_LIMITS.actions - actions.length,
       player: s.player, creditsUsedUsd: 0,
       nearby: s.villagers.filter(v => world.distance(v.pos, s.player.pos) <= AGENT_LIMITS.viewRadius && world.lineOfSight(s.player.pos, v.pos))
-        .map(v => ({ id: v.id, name: v.name, pos: v.pos, activity: v.activity, canWhisper: world.distance(v.pos, s.player.pos) <= 2,
+        .map(v => ({ id: v.id, name: v.name, pos: v.pos, activity: v.activity, canWhisper: v.activity !== 'sleep' && world.distance(v.pos, s.player.pos) <= 2,
           ...(v.bubble ? { speech: v.bubble.text } : {}) })),
     });
   }
@@ -71,7 +71,7 @@ export function createAgentEnvironment(seed = 731) {
       for (let i = 0; i < (args.ticks as number) && sim.tick < AGENT_LIMITS.ticks; i++) sim.step();
     } else if (tool === 'whisper') {
       const listener = sim.snapshot().villagers.find(v => v.id === args.listener);
-      if (!listener || listener.id === args.about || world.distance(sim.snapshot().player.pos, listener.pos) > 2) return fail('Choose a listener within two tiles who is not the subject.');
+      if (!listener || listener.activity === 'sleep' || listener.id === args.about || world.distance(sim.snapshot().player.pos, listener.pos) > 2) return fail('Choose an awake listener within two tiles who is not the subject.');
       let claim: GameClaim;
       try {
         if (typeof args.text !== 'string' || typeof args.about !== 'string') return fail('Invalid whisper text or subject.');

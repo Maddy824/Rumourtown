@@ -3,9 +3,9 @@ import { DEFAULT_TUNING, type Tuning } from 'rumormind';
 import { MOTIVE_WEIGHTS } from '../sim/agents/motivation.js';
 import { readRegisteredClaim } from '../sim/registered-claim.js';
 import * as decisionParameters from '../sim/agents/params.js';
-import type { Intervention, Simulation, VillageMap } from '../sim/types.js';
+import { MINUTES_PER_DAY, type Intervention, type Simulation, type VillageMap } from '../sim/types.js';
 
-export const MODEL_VERSION = 'v3-neighbourhoods-1';
+export const MODEL_VERSION = 'v4-night-1';
 export const GAME_TUNING: Tuning = { ...DEFAULT_TUNING, sourceMemoryHalfLifeTicks: 2 };
 export const SOURCES = [
   { title: 'Gossip and reputation in everyday life (2021)', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC8487731/', use: 'Relationships between sender, receiver and target shape information sharing. Field observations, not a calibration of this village.' },
@@ -50,7 +50,7 @@ export function exportRun(sim: Simulation, seed: number, castVersion: string, ma
   return {
     schema: 'rumortown-observation/1', modelVersion: MODEL_VERSION,
     purpose: 'Exploratory synthetic social simulation; not a validated predictor of people.',
-    seed, castVersion, tick: sim.tick, tickUnit: 'one game minute; 900 minutes per simulated day',
+    seed, castVersion, tick: sim.tick, tickUnit: 'one game minute; 1440 minutes per simulated day',
     tuning: GAME_TUNING, decisionParameters, motiveWeights: MOTIVE_WEIGHTS,
     spatialRules: { neighbours: 4, terrainCosts: { path: 1, floor: 1, door: 1, bridge: 1, grass: 4, field: 3 }, blocked: ['water', 'wall', 'tree', 'well'] },
     replayInputs: { initialClaims, days: 3 },
@@ -78,13 +78,13 @@ export async function pairedExperiment(make: Factory, seed: number, intervention
     const baseline = make(runSeed, interventions.slice());
     const comparison = make(runSeed, condition === 'no-whispers' ? [] : interventions.slice(), CONDITIONS[condition].tuning);
     const series = [];
-    for (let tick = 0; tick <= 2700; tick++) {
+    for (let tick = 0; tick <= (3 * MINUTES_PER_DAY); tick++) {
       if (cancelled()) return null;
-      if (tick % 90 === 0) series.push({ tick, baseline: observe(baseline), comparison: observe(comparison) });
-      if (tick === 2700) break;
+      if (tick % (MINUTES_PER_DAY / 10) === 0) series.push({ tick, baseline: observe(baseline), comparison: observe(comparison) });
+      if (tick === (3 * MINUTES_PER_DAY)) break;
       baseline.step(); comparison.step();
       if (tick % 60 === 0) {
-        progress(i * 2700 + tick, total * 2700);
+        progress(i * (3 * MINUTES_PER_DAY) + tick, total * (3 * MINUTES_PER_DAY));
         await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
     }
@@ -92,7 +92,7 @@ export async function pairedExperiment(make: Factory, seed: number, intervention
       baselineEndings: baseline.events(0).filter(e => e.kind === 'day-end'),
       comparisonEndings: comparison.events(0).filter(e => e.kind === 'day-end') });
   }
-  progress(total * 2700, total * 2700);
+  progress(total * (3 * MINUTES_PER_DAY), total * (3 * MINUTES_PER_DAY));
   return { schema: 'rumortown-paired-experiment/1', modelVersion: MODEL_VERSION, condition, interventions,
     baselineTuning: GAME_TUNING, comparisonTuning: { ...GAME_TUNING, ...CONDITIONS[condition].tuning },
     note: 'Synthetic sensitivity results, not estimates of human behaviour. Seed pairing does not preserve draw alignment after divergence.', runs };

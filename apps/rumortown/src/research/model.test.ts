@@ -44,7 +44,7 @@ describe('research observations', () => {
     expect(row.baseline).toEqual(row.comparison);
     expect(row.series).toHaveLength(31);
     for (const point of row.series) expect(point.baseline).toEqual(point.comparison);
-    expect(row.baseline.tick).toBe(2700);
+    expect(row.baseline.tick).toBe(4320);
     expect(await pairedExperiment(make, 731, [], 'no-familiarity', 1, () => undefined, () => true)).toBeNull();
   }, 15000);
 });

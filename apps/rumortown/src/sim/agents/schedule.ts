@@ -3,14 +3,16 @@ import type { Activity, Place, PlaceId, ScheduleEntry, Vec2 } from '../types.js'
 import { tileOf, visibleActivity, type Agent, type Ctx, type Goal } from './context.js';
 import { leaveConversation } from './conversation.js';
 import { TALK_RANGE } from './params.js';
-import { minuteOfDay } from './text.js';
+import { dayOf, minuteOfDay } from './text.js';
 
 const FALLBACK_ENTRY: ScheduleEntry = { start: 0, place: '', activity: 'idle' };
 
-export function currentEntryIndex(schedule: readonly ScheduleEntry[], minute: number): number {
+export function currentEntryIndex(schedule: readonly ScheduleEntry[], minute: number, day = 0): number {
   let idx = 0;
   for (let i = 0; i < schedule.length; i++) {
-    if (schedule[i]!.start <= minute) idx = i;
+    if (schedule[i]!.start <= minute) {
+      if (!schedule[i]!.days || schedule[i]!.days!.includes(day % 7)) idx = i;
+    }
     else break;
   }
   return idx;
@@ -133,9 +135,14 @@ export function followSchedule(ctx: Ctx, agent: Agent): boolean {
 
 /** At each entry's start, villagers on their routine head for the new place. */
 export function updateSchedule(ctx: Ctx, agent: Agent): void {
-  const idx = currentEntryIndex(agent.d.schedule, minuteOfDay(ctx.tick));
+  const idx = currentEntryIndex(agent.d.schedule, minuteOfDay(ctx.tick), dayOf(ctx.tick));
   if (idx === agent.entryIndex) return;
   agent.entryIndex = idx;
+  const entry = entryOf(agent);
+  if (entry.activity === 'sleep' || entry.night) {
+    agent.goal = { kind: 'schedule', since: ctx.tick };
+    agent.bubble = undefined;
+  }
   if (agent.conversation !== null) {
     const conv = ctx.conversations.find((c) => c.id === agent.conversation && !c.ended);
     agent.goal = { kind: 'schedule', since: ctx.tick };
