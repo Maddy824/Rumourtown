@@ -25,3 +25,6 @@ Owner feedback: "it's very fast right now; I need a slower look at how one rumou
 11. The share link records the start tick (`start` in `ShareState`, bump to v2 with v1 still readable, start 0), so a friend sees the same days from the same moment; interventions keep absolute ticks.
 12. The clock, the daylight tint (`render/daylight.ts`), the arrival sky and the district banner all follow the village clock, so a visitor at 19:00 arrives into golden light and one at 21:00 into dusk with windows glowing. Day boundaries are unchanged (day ends at 22:00, next day starts at 07:00); the run still lasts three village days from the start.
 13. A small line in the clock's tooltip and in How it works: "The village keeps your clock."
+
+## E. Adopt the renderer's new close tile (from task 20)
+14. The renderer now draws the close zoom at 40 CSS px per tile while `TILE` in the contract stays 32 and the UI still assumes 32 for bubble, label and tag anchors. Use the renderer's `project`/`unproject` for every anchor (never the constant), and add a test that a bubble anchored to a villager at the close zoom lands within 4 px of the projected head position. If a renderer accessor for the current tile size is needed, add it as an additive optional field on the Renderer interface and say so.
