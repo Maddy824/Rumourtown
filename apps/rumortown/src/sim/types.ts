@@ -225,7 +225,7 @@ export interface GameClaim extends Claim {
   severity: 1 | 2 | 3;
   object?: string;
   target?: VillagerId;
-  /** The innocent explanation this claim is usually confused with, if any. */
+  /** Set on an innocent claim: the harmful claim it is the alternative explanation for. */
   alternativeOf?: ClaimId;
 }
 
