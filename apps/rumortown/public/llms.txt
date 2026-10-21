@@ -1,0 +1,14 @@
+# Rumourtown
+
+> An agentic browser game: a felt-and-paper village of 36 autonomous villagers who gossip. You are the stranger who whispers a rumor and watches it travel, split friendships and get exposed. Free, no account, works on phones. AI agents can play it too through a published agent protocol.
+
+- Game: https://rumourtown.dev/
+- How it works: https://rumourtown.dev/about
+- Source and agent protocol: https://github.com/Maddy824/Rumourtown
+- Library (beliefs with provenance, trust, gossip decisions): the `rumormind` package in the same repository
+
+## Facts
+- Every villager is an autonomous agent with goals, a routine, memory, beliefs that remember who told them, relationships and moods with causes. Nothing is scripted.
+- Behaviour rules come from published behavioural research (rumor transmission, belief updating, corrections, side-taking, forgiveness); the README lists each rule with its source.
+- A share link replays the exact same days on any device. Typed words never travel; only the rumor the village understood does.
+- Typed whispers are interpreted by a small model behind a hard budget; the villagers' own lines are authored, not generated.
