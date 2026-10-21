@@ -1,0 +1,427 @@
+/**
+ * The felt diorama renderer. Ground, walls and doors are painted once per zoom level into an
+ * offscreen layer; trees, roof façades and villagers are depth-sorted standing pieces; threads
+ * and a paper-grain overlay go on top. A frame is a handful of blits and a few strokes.
+ */
+import { TILE, type Camera, type Renderer, type RenderOptions, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
+import { computeView, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
+import { buildRoofs, findBuildings, paintWalls } from './buildings.js';
+import { LAYER_MARGIN, buildTrees, paintGround, type Standing } from './tiles.js';
+import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
+import { ThreadPainter } from './threads.js';
+import { hashString, makeCanvas, makeCork, makeGrain } from './grain.js';
+import { INK, MUSTARD, PAPER, mix, rgba } from './palette.js';
+
+export { fitZoom } from './camera.js';
+/** The close camera: CSS pixels per tile. */
+export const CLOSE_ZOOM = TILE;
+
+interface Layer {
+  zoom: number;
+  dpr: number;
+  /** Backing pixels per CSS pixel; below dpr only when the layer would be too large. */
+  scale: number;
+  canvas: HTMLCanvasElement;
+  /** Trees and roof façades, sorted by depth. */
+  standing: Standing[];
+}
+
+/** Largest ground layer in backing pixels; beyond this it is rendered at a lower scale. */
+const MAX_LAYER_PIXELS = 16e6;
+/** A zoom must hold this many frames before a new layer is painted for it. */
+const SETTLE_FRAMES = 2;
+const GRAIN_ALPHA = 0.06;
+const WALK_FRAME_MS = 170;
+/** Positions further apart than this between snapshots are a jump, not a walk. */
+const TELEPORT = 3;
+
+export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Renderer {
+  const maybe = canvas.getContext('2d', { alpha: false });
+  if (!maybe) throw new Error('Canvas 2D is not available');
+  const ctx: CanvasRenderingContext2D = maybe;
+
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+  let sized = false;
+  const buildings = findBuildings(map);
+  const layers: Layer[] = [];
+  let pendingZoom = Number.NaN;
+  let pendingFrames = 0;
+  const sprites = new SpriteCache();
+  const threads = new ThreadPainter();
+  const grainTile = makeGrain(256);
+  let grain: CanvasPattern | null = null;
+  let cork: CanvasPattern | null = null;
+  let corkDpr = 0;
+  const view = makeView();
+  const hitView = makeView();
+
+  // Per-frame state in preallocated arrays.
+  let capacity = 0;
+  let fx = new Float64Array(0);
+  let fy = new Float64Array(0);
+  let order = new Int32Array(0);
+  let count = 0;
+  let playerX = 0;
+  let playerY = 0;
+  let lastCurrent: WorldSnapshot | null = null;
+  let current: WorldSnapshot | null = null;
+  const prevIndex = new Map<VillagerId, number>();
+  const curIndex = new Map<VillagerId, number>();
+  let prevRef: WorldSnapshot | null = null;
+  let curRef: WorldSnapshot | null = null;
+  const phases = new Map<VillagerId, number>();
+
+  function ensureCapacity(n: number): void {
+    if (n <= capacity) return;
+    capacity = Math.max(n, capacity * 2, 32);
+    fx = new Float64Array(capacity);
+    fy = new Float64Array(capacity);
+    order = new Int32Array(capacity);
+    for (let i = 0; i < capacity; i++) order[i] = i;
+  }
+
+  function setSize(width: number, height: number, ratio: number): void {
+    dpr = Math.max(1, ratio || 1);
+    canvas.width = Math.max(1, Math.round(width * dpr));
+    canvas.height = Math.max(1, Math.round(height * dpr));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    if (corkDpr !== dpr) cork = null;
+  }
+
+  function buildLayer(zoom: number): Layer {
+    const cssW = (map.width + LAYER_MARGIN * 2) * zoom;
+    const cssH = (map.height + LAYER_MARGIN * 2) * zoom;
+    let scale = dpr;
+    if (cssW * cssH * scale * scale > MAX_LAYER_PIXELS) scale = Math.sqrt(MAX_LAYER_PIXELS / (cssW * cssH));
+    const { canvas: lc, ctx: g } = makeCanvas(cssW * scale, cssH * scale);
+    g.setTransform(scale, 0, 0, scale, LAYER_MARGIN * zoom * scale, LAYER_MARGIN * zoom * scale);
+    paintGround(g, map, zoom, scale);
+    paintWalls(g, map, zoom, scale);
+    const standing = buildTrees(map, zoom, dpr).concat(buildRoofs(buildings, zoom, dpr));
+    standing.sort((a, b) => a.sortY - b.sortY);
+    const layer: Layer = { zoom, dpr, scale, canvas: lc, standing };
+    layers.push(layer);
+    if (layers.length > 3) layers.shift();
+    return layer;
+  }
+
+  /** The layer to draw with, and how much to stretch it. Paints a new one once the zoom settles. */
+  function layerFor(zoom: number): { layer: Layer; stretch: number } {
+    let nearest: Layer | null = null;
+    let nearestGap = Infinity;
+    for (const l of layers) {
+      if (l.dpr !== dpr) continue;
+      if (Math.abs(l.zoom - zoom) < 1e-3) return { layer: l, stretch: 1 };
+      const gap = Math.abs(Math.log(l.zoom / zoom));
+      if (gap < nearestGap) {
+        nearestGap = gap;
+        nearest = l;
+      }
+    }
+    if (Math.abs(zoom - pendingZoom) < 1e-3) pendingFrames++;
+    else {
+      pendingZoom = zoom;
+      pendingFrames = 0;
+    }
+    if (!nearest || pendingFrames >= SETTLE_FRAMES) return { layer: buildLayer(zoom), stretch: 1 };
+    return { layer: nearest, stretch: zoom / nearest.zoom };
+  }
+
+  function phaseOf(id: VillagerId): number {
+    let p = phases.get(id);
+    if (p === undefined) {
+      p = hashString(id) * WALK_FRAME_MS * 2;
+      phases.set(id, p);
+    }
+    return p;
+  }
+
+  function index(snapshot: WorldSnapshot, into: Map<VillagerId, number>): void {
+    into.clear();
+    const vs = snapshot.villagers;
+    for (let i = 0; i < vs.length; i++) into.set((vs[i] as WorldSnapshot['villagers'][number]).id, i);
+  }
+
+  /** Interpolated feet positions for this frame, written into fx/fy and the player. */
+  function interpolate(previous: WorldSnapshot | null, cur: WorldSnapshot, alpha: number): void {
+    const a = Math.min(1, Math.max(0, Number.isFinite(alpha) ? alpha : 1));
+    if (previous && previous !== prevRef) {
+      index(previous, prevIndex);
+      prevRef = previous;
+    }
+    if (cur !== curRef) {
+      index(cur, curIndex);
+      curRef = cur;
+    }
+    const vs = cur.villagers;
+    count = vs.length;
+    ensureCapacity(count);
+    for (let i = 0; i < count; i++) {
+      const v = vs[i] as (typeof vs)[number];
+      let x = v.pos.x;
+      let y = v.pos.y;
+      if (previous) {
+        const pvs = previous.villagers;
+        const same = pvs[i];
+        const j = same && same.id === v.id ? i : (prevIndex.get(v.id) ?? -1);
+        const pv = j >= 0 ? pvs[j] : undefined;
+        if (pv && Math.abs(x - pv.pos.x) < TELEPORT && Math.abs(y - pv.pos.y) < TELEPORT) {
+          x = pv.pos.x + (x - pv.pos.x) * a;
+          y = pv.pos.y + (y - pv.pos.y) * a;
+        }
+      }
+      fx[i] = x;
+      fy[i] = y;
+    }
+    playerX = cur.player.pos.x;
+    playerY = cur.player.pos.y;
+    if (previous) {
+      const pp = previous.player.pos;
+      if (Math.abs(playerX - pp.x) < TELEPORT && Math.abs(playerY - pp.y) < TELEPORT) {
+        playerX = pp.x + (playerX - pp.x) * a;
+        playerY = pp.y + (playerY - pp.y) * a;
+      }
+    }
+    // Depth order: insertion sort, nearly sorted from the last frame.
+    for (let i = 0; i < count; i++) if ((order[i] as number) >= count) order[i] = i;
+    for (let i = 1; i < count; i++) {
+      const o = order[i] as number;
+      const y = fy[o] as number;
+      let j = i - 1;
+      while (j >= 0 && (fy[order[j] as number] as number) > y) {
+        order[j + 1] = order[j] as number;
+        j--;
+      }
+      order[j + 1] = o;
+    }
+  }
+
+  function crisp(v: number, stretch: number): number {
+    return stretch === 1 ? Math.round(v * dpr) / dpr : v;
+  }
+
+  function drawTable(camera: Camera): void {
+    if (!cork || corkDpr !== dpr) {
+      cork = ctx.createPattern(makeCork(Math.round(256 * dpr)), 'repeat');
+      corkDpr = dpr;
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = cork ?? mix(MUSTARD, INK, 0.4);
+    ctx.fillRect(0, 0, Math.ceil(camera.width * dpr), Math.ceil(camera.height * dpr));
+    ctx.restore();
+  }
+
+  function drawGround(layer: Layer, stretch: number, camera: Camera): void {
+    const zoom = view.zoom;
+    const m = LAYER_MARGIN * zoom;
+    const gx = crisp(view.ox - m, stretch);
+    const gy = crisp(view.oy - m, stretch);
+    const gw = (map.width + LAYER_MARGIN * 2) * zoom;
+    const gh = (map.height + LAYER_MARGIN * 2) * zoom;
+    const x0 = Math.max(gx, 0);
+    const y0 = Math.max(gy, 0);
+    const x1 = Math.min(gx + gw, camera.width);
+    const y1 = Math.min(gy + gh, camera.height);
+    if (x1 <= x0 || y1 <= y0) return;
+    const kx = layer.canvas.width / gw;
+    const ky = layer.canvas.height / gh;
+    ctx.drawImage(layer.canvas, (x0 - gx) * kx, (y0 - gy) * ky, (x1 - x0) * kx, (y1 - y0) * ky, x0, y0, x1 - x0, y1 - y0);
+  }
+
+  function drawSelection(cur: WorldSnapshot, selected: VillagerId): void {
+    const i = curIndex.get(selected);
+    if (i === undefined || i >= count) return;
+    const v = cur.villagers[i];
+    if (!v) return;
+    const zoom = view.zoom;
+    const sc = (v.tier === 'core' ? CORE_SCALE : 1) * zoom;
+    const x = view.ox + (fx[i] as number) * zoom;
+    const y = view.oy + (fy[i] as number) * zoom;
+    const rx = 0.46 * sc;
+    const ry = 0.19 * sc;
+    const band = Math.max(2, 0.11 * sc);
+    const ring = new Path2D();
+    ring.ellipse(x, y, rx + band / 2, ry + band / 2, 0, 0, Math.PI * 2);
+    ring.ellipse(x, y, rx - band / 2, Math.max(1, ry - band / 2), 0, 0, Math.PI * 2);
+    ctx.save();
+    ctx.shadowColor = rgba(INK, 0.45);
+    ctx.shadowBlur = Math.max(1, 0.1 * sc) * dpr;
+    ctx.shadowOffsetX = 0.03 * sc * dpr;
+    ctx.shadowOffsetY = 0.06 * sc * dpr;
+    ctx.fillStyle = PAPER;
+    ctx.fill(ring, 'evenodd');
+    ctx.restore();
+    ctx.lineWidth = Math.max(0.6, 0.025 * sc);
+    ctx.strokeStyle = rgba(INK, 0.4);
+    ctx.stroke(ring);
+    if (sc >= 18) {
+      ctx.save();
+      ctx.setLineDash([0.09 * sc, 0.07 * sc]);
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 0.035 * sc;
+      ctx.strokeStyle = MUSTARD;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawStanding(s: Standing, stretch: number, camera: Camera): void {
+    const x = view.ox + s.x * stretch;
+    const y = view.oy + s.y * stretch;
+    const w = s.w * stretch;
+    const h = s.h * stretch;
+    if (x > camera.width || y > camera.height || x + w < 0 || y + h < 0) return;
+    ctx.drawImage(s.img, crisp(x, stretch), crisp(y, stretch), w, h);
+  }
+
+  function drawVillager(cur: WorldSnapshot, i: number, layerZoom: number, stretch: number, now: number, camera: Camera): void {
+    const v = cur.villagers[i];
+    if (!v) return;
+    const zoom = view.zoom;
+    const x = view.ox + (fx[i] as number) * zoom;
+    const y = view.oy + (fy[i] as number) * zoom;
+    if (x < -zoom * 2 || y < -zoom || x > camera.width + zoom * 2 || y > camera.height + zoom * 2) return;
+    const frame = v.moving ? (Math.floor((now + phaseOf(v.id)) / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
+    const sp = sprites.villager(v.look, v.facing, frame, v.mood, v.tier === 'core', layerZoom, dpr);
+    ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
+  }
+
+  function drawPlayer(cur: WorldSnapshot, layerZoom: number, stretch: number, now: number): void {
+    const zoom = view.zoom;
+    const x = view.ox + playerX * zoom;
+    const y = view.oy + playerY * zoom;
+    const frame = cur.player.moving ? (Math.floor(now / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
+    const sp = sprites.stranger(cur.player.facing, frame, layerZoom, dpr);
+    ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
+  }
+
+  /** Thread ends pin to the middle of the body. */
+  const resolveEnd = (id: string, out: { x: number; y: number }): boolean => {
+    const zoom = view.zoom;
+    if (id === 'stranger') {
+      out.x = view.ox + playerX * zoom;
+      out.y = view.oy + (playerY - 0.52) * zoom;
+      return true;
+    }
+    const i = curIndex.get(id);
+    if (i === undefined || i >= count || !current) return false;
+    const v = current.villagers[i];
+    const lift = v && v.tier === 'core' ? 0.52 * CORE_SCALE : 0.52;
+    out.x = view.ox + (fx[i] as number) * zoom;
+    out.y = view.oy + ((fy[i] as number) - lift) * zoom;
+    return true;
+  };
+
+  function drawGrain(camera: Camera): void {
+    if (!grain) grain = ctx.createPattern(grainTile, 'repeat');
+    if (!grain) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = GRAIN_ALPHA;
+    ctx.fillStyle = grain;
+    ctx.fillRect(0, 0, Math.ceil(camera.width * dpr), Math.ceil(camera.height * dpr));
+    ctx.restore();
+  }
+
+  function render(previous: WorldSnapshot | null, cur: WorldSnapshot, camera: Camera, options: RenderOptions): void {
+    if (!sized) {
+      setSize(camera.width, camera.height, window.devicePixelRatio || 1);
+      sized = true;
+    }
+    const now = performance.now();
+    current = cur;
+    computeView(map, camera, view);
+    const zoom = view.zoom;
+    const { layer, stretch } = layerFor(zoom);
+    interpolate(previous, cur, options.alpha);
+    lastCurrent = cur;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = stretch === 1 ? 'low' : 'medium';
+    const mapRight = view.ox + map.width * zoom;
+    const mapBottom = view.oy + map.height * zoom;
+    if (view.ox > 0.5 || view.oy > 0.5 || mapRight < camera.width - 0.5 || mapBottom < camera.height - 0.5) drawTable(camera);
+    drawGround(layer, stretch, camera);
+    if (options.selected) drawSelection(cur, options.selected);
+
+    // Depth-sorted pass: trees and roofs from the layer, villagers and the stranger.
+    const standing = layer.standing;
+    let si = 0;
+    let vi = 0;
+    let playerDone = false;
+    for (;;) {
+      const sY = si < standing.length ? (standing[si] as Standing).sortY : Infinity;
+      const vY = vi < count ? (fy[order[vi] as number] as number) : Infinity;
+      const pY = playerDone ? Infinity : playerY;
+      if (sY === Infinity && vY === Infinity && pY === Infinity) break;
+      if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera);
+      else if (vY <= pY) drawVillager(cur, order[vi++] as number, layer.zoom, stretch, now, camera);
+      else {
+        drawPlayer(cur, layer.zoom, stretch, now);
+        playerDone = true;
+      }
+    }
+
+    if (options.threads && cur.threads.length) threads.draw(ctx, cur.threads, resolveEnd, zoom, options.reducedMotion, now);
+    drawGrain(camera);
+  }
+
+  function villagerAt(px: number, py: number, snapshot: WorldSnapshot, camera: Camera): VillagerId | null {
+    const v = computeView(map, camera, hitView);
+    const rendered = snapshot === lastCurrent && snapshot.villagers.length === count;
+    let best: VillagerId | null = null;
+    let bestDepth = -Infinity;
+    let near: VillagerId | null = null;
+    let nearDist = Infinity;
+    const vs = snapshot.villagers;
+    for (let i = 0; i < vs.length; i++) {
+      const vil = vs[i] as (typeof vs)[number];
+      const x = rendered ? (fx[i] as number) : vil.pos.x;
+      const y = rendered ? (fy[i] as number) : vil.pos.y;
+      const sc = (vil.tier === 'core' ? CORE_SCALE : 1) * v.zoom;
+      const sx = v.ox + x * v.zoom;
+      const sy = v.oy + y * v.zoom;
+      if (px >= sx + BODY.left * sc && px <= sx + BODY.right * sc && py >= sy + BODY.top * sc && py <= sy + BODY.bottom * sc) {
+        // Nearest the viewer first: the sprite drawn last, lowest on screen, wins.
+        if (y > bestDepth) {
+          bestDepth = y;
+          best = vil.id;
+        }
+        continue;
+      }
+      // Fingers are wider than small sprites: accept a 44 px target around each body.
+      const cx = sx;
+      const cy = sy + ((BODY.top + BODY.bottom) / 2) * sc;
+      const halfW = Math.max(((BODY.right - BODY.left) * sc) / 2, 22);
+      const halfH = Math.max(((BODY.bottom - BODY.top) * sc) / 2, 22);
+      if (Math.abs(px - cx) <= halfW && Math.abs(py - cy) <= halfH) {
+        const d = Math.hypot(px - cx, py - cy);
+        if (d < nearDist) {
+          nearDist = d;
+          near = vil.id;
+        }
+      }
+    }
+    return best ?? near;
+  }
+
+  return {
+    resize(width: number, height: number, ratio: number): void {
+      setSize(width, height, ratio);
+      sized = true;
+    },
+    render,
+    project(pos: Vec2, camera: Camera): { x: number; y: number } {
+      return projectWith(map, pos, camera);
+    },
+    unproject(px: number, py: number, camera: Camera): Vec2 {
+      return unprojectWith(map, px, py, camera);
+    },
+    villagerAt,
+  };
+}

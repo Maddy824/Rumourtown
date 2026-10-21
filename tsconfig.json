@@ -1,1 +1,14 @@
-{ "files": [], "references": [{ "path": "packages/rumormind" }, { "path": "apps/rumortown" }] }
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/rumormind"
+    },
+    {
+      "path": "apps/rumortown"
+    },
+    {
+      "path": "apps/api"
+    }
+  ]
+}

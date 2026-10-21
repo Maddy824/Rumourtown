@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Felt diorama test page</title>
+    <style>
+      :root {
+        --ink: #2e2a22;
+        --paper: #f6f0e4;
+        --mustard: #d9a531;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #4a4334;
+        font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: var(--ink);
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+      .note {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        max-width: min(340px, calc(100vw - 24px));
+        padding: 8px 10px 9px;
+        background: var(--paper);
+        border-radius: 3px;
+        box-shadow: 0 2px 0 rgba(46, 42, 34, 0.25), 0 6px 14px rgba(46, 42, 34, 0.25);
+        transform: rotate(-0.6deg);
+      }
+      .note[hidden] {
+        display: none;
+      }
+      .note p {
+        margin: 0;
+      }
+      .note .stats {
+        font-variant-numeric: tabular-nums;
+        margin-bottom: 4px;
+      }
+      .note .keys {
+        color: #5b5446;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="board"></canvas>
+    <div class="note" id="note">
+      <p class="stats" id="stats">Measuring frame time</p>
+      <p class="keys">Z switches zoom, T threads, R reduced motion, M map, W whisper to the nearest villager, space pauses, H hides this note. Click a villager to select, or the ground to walk there.</p>
+    </div>
+    <script type="module" src="./dev.ts"></script>
+  </body>
+</html>
