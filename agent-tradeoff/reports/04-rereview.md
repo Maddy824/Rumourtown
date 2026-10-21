@@ -7,3 +7,9 @@ Independent read-only reviewer inspected `2f50570..065f5e6`. Nine original block
 3. Captured-accusation cloning lost live `lastSpeaker` and `lastClaim` writes. Preserve turn bookkeeping without overwriting a newer accusation's context.
 
 The reviewer independently ran 102 focused tests and confirmed the 295,834-byte bundle check. Verdict at that commit: changes needed. The follow-up implementation and verification are recorded below and in the next review.
+
+## Follow-up verdict, `065f5e6..5f8b655`
+
+All rereview blockers resolved. No new Critical or Important findings. The reviewer independently ran 65 replay/engine regression tests and the 295,977/400,000-byte asset gate; whitespace checks passed. The controller ran all 512 tests, root typechecking/build and an independent smoke. Corroboration, same-source fresh evidence, approach completion, captured-accusation bookkeeping and pending whisper input locking are correct in the reviewed diff.
+
+Verdict: **ready to merge from the code-review perspective**. Named-phone performance, live interpreter evals and external account configuration remain separate launch gates. Model approximations listed in report 03 remain parked.
