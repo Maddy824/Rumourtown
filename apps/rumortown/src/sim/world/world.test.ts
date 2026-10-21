@@ -37,6 +37,7 @@ describe('village map', () => {
   const homes = ['mira', 'tom', 'ada', 'rosa', 'jonah', 'ben', 'elin', 'pim', 'sol', 'ivo', 'nell', 'otto'];
   const buildings = ['bakery', 'mill', 'inn', 'chapel', 'school', 'shop', 'smithy', ...homes.map((id) => `home-${id}`)];
   const expectedIds = [...buildings, 'square', 'well', 'field-north', 'field-south', 'bridge', 'riverside', 'orchard'];
+  const busyPlaces = ['inn', 'square', 'chapel', 'well', 'field-north', 'field-south', 'riverside', 'bakery', 'school'];
 
   it('has the exact dimensions and fixed place ids', () => {
     expect([villageMap.width, villageMap.height, villageMap.tiles.length]).toEqual([48, 32, 1536]);
@@ -67,6 +68,37 @@ describe('village map', () => {
         if (path!.length) expect(path!.at(-1)).toEqual(destination);
       }
     }
+  });
+
+  it('provides 8–10 spots at busy places and 4–6 at other rooms, with clear door columns', () => {
+    for (const id of busyPlaces) {
+      expect(world.place(id).spots.length, id).toBeGreaterThanOrEqual(8);
+      expect(world.place(id).spots.length, id).toBeLessThanOrEqual(10);
+    }
+    for (const id of buildings) {
+      const place = world.place(id);
+      if (!busyPlaces.includes(id)) {
+        expect(place.spots.length, id).toBeGreaterThanOrEqual(4);
+        expect(place.spots.length, id).toBeLessThanOrEqual(6);
+      }
+      for (const spot of place.spots) {
+        expect(spot.x, `${id} door column`).not.toBe(place.door.x);
+        expect(villageMap.tiles[spot.y * villageMap.width + spot.x], `${id} standing floor`).toBe('floor');
+      }
+    }
+  });
+
+  it('allocates distinct destinations up to each busy place capacity, including five inn lodgers', () => {
+    for (const id of busyPlaces) {
+      const occupied: Vec2[] = [];
+      for (let i = 0; i < world.place(id).spots.length; i++) {
+        const destination = centre(world.spotFor(id, occupied, () => 0));
+        expect(occupied, `${id} guest ${i + 1}`).not.toContainEqual(destination);
+        occupied.push(destination);
+      }
+    }
+    const squareSpots = world.place('square').spots;
+    for (const spot of world.place('well').spots) expect(squareSpots).not.toContainEqual(spot);
   });
 
   it('builds nineteen cut-away rooms with intact wall rings, one door, and an adjacent path entry', () => {
@@ -198,6 +230,10 @@ describe('world queries', () => {
     expect(createWorld(map).findPath({ x: 1, y: 2 }, { x: 3, y: 2 })).toEqual(expected);
     setTile(map, 2, 2, 'grass');
     expect(createWorld(map).findPath({ x: 2, y: 2 }, { x: 1, y: 3 })).toEqual([{ x: 1, y: 2 }, { x: 1, y: 3 }]);
+    expect(createWorld(map).findPath({ x: 0, y: 0 }, { x: 3, y: 3 })).toEqual([
+      { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 },
+      { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 },
+    ]);
   });
 
   it('uses Bresenham visibility blocked by walls and trees, including endpoints', () => {
@@ -231,20 +267,33 @@ describe('world queries', () => {
 
   it('chooses among free spots with rng and falls back predictably when all are occupied', () => {
     const world = createWorld(villageMap), place = world.place('bakery');
-    const [first, second, third] = place.spots as [Vec2, Vec2, Vec2];
+    const first = place.spots[0]!, second = place.spots[1]!, last = place.spots.at(-1)!;
     expect(world.spotFor(place.id, [], () => 0)).toEqual(first);
-    expect(world.spotFor(place.id, [], () => 0.99)).toEqual(third);
-    expect(world.spotFor(place.id, [centre(first), centre(third)], () => 0.7)).toEqual(second);
+    expect(world.spotFor(place.id, [], () => 0.99)).toEqual(last);
+    const allExceptSecond = place.spots.filter((_, index) => index !== 1).map(centre);
+    expect(world.spotFor(place.id, allExceptSecond, () => 0.7)).toEqual(second);
     const nearby = { x: first.x + 0.99, y: first.y + 0.5 };
     expect(world.spotFor(place.id, [nearby], () => 0)).toEqual(second);
     expect(world.spotFor(place.id, [{ x: first.x + 1, y: first.y + 0.5 }], () => 0)).toEqual(first);
     expect(world.spotFor(place.id, place.spots.map(centre), () => { throw new Error('unneeded rng'); })).toEqual(first);
-    const result = world.spotFor(place.id, [], () => 0);
-    result.x = -100;
-    expect(place.spots[0]).toEqual(first);
   });
 
-  it('measures a 60-tile path after warm-up', () => {
+  it.each([false, true])('returns an independent spot copy when fully occupied is %s', (fullyOccupied) => {
+    // Isolate this fixture so a failed copy assertion cannot corrupt the shared map.
+    const map: VillageMap = {
+      ...villageMap,
+      places: villageMap.places.map((place) => ({ ...place, spots: place.spots.map((spot) => ({ ...spot })) })),
+    };
+    const world = createWorld(map), place = world.place('bakery');
+    const original = { ...place.spots[0]! };
+    const occupied = fullyOccupied ? place.spots.map(centre) : [];
+    const result = world.spotFor(place.id, occupied, () => 0);
+    result.x = -100;
+    expect(place.spots[0]).toEqual(original);
+    expect(result).not.toBe(place.spots[0]);
+  });
+
+  it('finds a 60-tile path with a median below 1 ms after warm-up', () => {
     const world = createWorld(emptyMap(48, 32));
     const from = { x: 0, y: 0 }, to = { x: 30, y: 30 };
     for (let i = 0; i < 50; i++) world.findPath(from, to);
@@ -256,8 +305,8 @@ describe('world queries', () => {
       expect(path).toHaveLength(60);
     }
     timings.sort((a, b) => a - b);
-    // Record actual performance without a hardware-dependent CI assertion.
     console.info(`60-tile A*: median ${timings[50]!.toFixed(3)} ms; p95 ${timings[95]!.toFixed(3)} ms (100 runs)`);
+    expect(timings[50]!).toBeLessThan(1);
   });
 });
 
@@ -278,6 +327,17 @@ describe('mover', () => {
     expect(mover.moving).toBe(false);
     mover.update(10, 1, []);
     expect(mover.pos).toEqual({ x: 20.5, y: 0.5 });
+  });
+
+  it.each([1.4, 0.5])('moves at %s tiles per game-minute', (speed) => {
+    const mover = createMover({ x: 0.5, y: 0.5 });
+    mover.setPath(straightPath);
+    mover.update(1, speed, []);
+    expect(mover.pos.x).toBeCloseTo(0.5 + speed, 10);
+    expect(mover.pos.y).toBe(0.5);
+    mover.update(0.5, speed, []);
+    expect(mover.pos.x).toBeCloseTo(0.5 + 1.5 * speed, 10);
+    expect(mover.arrived()).toBe(false);
   });
 
   it('spends a large update across corners and reports the last direction of travel', () => {
@@ -334,9 +394,30 @@ describe('mover', () => {
     const mover = createMover(start);
     mover.setPath(path);
     start.x = 100;
+    expect(mover.pos).toEqual({ x: 0.5, y: 0.5 });
     path[0]!.x = 100;
     mover.update(1, 1, []);
     expect(mover.pos).toEqual({ x: 1.5, y: 0.5 });
+  });
+
+  it('applies the full 0.15 sideways push for a coincident neighbour', () => {
+    const mover = createMover({ x: 0.5, y: 0.5 });
+    mover.setPath(straightPath);
+    mover.update(0.25, 1, [{ x: 0.75, y: 0.5 }]);
+    expect(mover.pos.x).toBe(0.75);
+    expect(mover.pos.y).toBeCloseTo(0.65, 10);
+  });
+
+  it('pushes at 0.5 tiles but not at 0.65 tiles from a neighbour', () => {
+    const near = createMover({ x: 0.5, y: 0.5 });
+    near.setPath(straightPath);
+    near.update(0.25, 1, [{ x: 0.75, y: 0 }]);
+    expect(near.pos.x).toBe(0.75);
+    expect(near.pos.y).toBeCloseTo(0.525, 10);
+    const far = createMover({ x: 0.5, y: 0.5 });
+    far.setPath(straightPath);
+    far.update(0.25, 1, [{ x: 0.75, y: -0.15 }]);
+    expect(far.pos).toEqual({ x: 0.75, y: 0.5 });
   });
 
   it('pushes sideways away from nearby villagers by at most 0.15, without accumulated drift', () => {

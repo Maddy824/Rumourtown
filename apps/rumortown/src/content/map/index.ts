@@ -1,4 +1,4 @@
-import type { Need, Place, PlaceKind, TileKind, VillageMap } from '../../sim/types.js';
+import type { Need, Place, PlaceKind, TileKind, Vec2, VillageMap } from '../../sim/types.js';
 
 const width = 48;
 const height = 32;
@@ -13,20 +13,23 @@ function fill(x: number, y: number, w: number, h: number, kind: TileKind): void 
 
 function room(
   id: string, name: string, kind: PlaceKind,
-  x: number, y: number, w: number, h: number, satisfies: Need[],
+  x: number, y: number, w: number, h: number, satisfies: Need[], spotCount = 6,
 ): void {
   fill(x, y, w, h, 'wall');
   fill(x + 1, y + 1, w - 2, h - 2, 'floor');
   const entranceX = x + Math.floor(w / 2);
   fill(entranceX, y + h - 1, 1, 1, 'door');
+  // Keep the entire entrance column free for people entering and leaving.
+  const spots: Vec2[] = [];
+  for (let row = y + 1; row < y + h - 1; row++) {
+    for (let col = x + 1; col < x + w - 1; col++) {
+      if (col !== entranceX && spots.length < spotCount) spots.push({ x: col, y: row });
+    }
+  }
   places.push({
     id, name, kind, rect: { x, y, w, h },
     door: { x: entranceX, y: y + h },
-    spots: [
-      { x: x + 1, y: y + 1 },
-      { x: x + w - 2, y: y + 1 },
-      { x: entranceX, y: y + h - 2 },
-    ],
+    spots,
     satisfies,
   });
 }
@@ -52,12 +55,12 @@ fill(43, 12, 5, 1, 'path');
 fill(17, 13, 12, 6, 'path');
 fill(22, 15, 1, 1, 'well');
 
-room('bakery', 'Bakery', 'bakery', 1, 8, 7, 4, ['hunger', 'duty']);
+room('bakery', 'Bakery', 'bakery', 1, 8, 7, 4, ['hunger', 'duty'], 8);
 room('shop', 'Shop', 'shop', 10, 8, 6, 4, ['hunger', 'duty']);
-room('school', 'School', 'school', 18, 8, 6, 4, ['duty']);
-room('chapel', 'Chapel', 'chapel', 26, 8, 6, 4, ['social', 'duty']);
+room('school', 'School', 'school', 18, 8, 7, 4, ['duty'], 8);
+room('chapel', 'Chapel', 'chapel', 26, 8, 7, 4, ['social', 'duty'], 8);
 room('mill', 'Mill', 'mill', 34, 8, 5, 4, ['duty']);
-room('inn', 'Inn', 'inn', 1, 20, 7, 5, ['hunger', 'rest', 'social', 'duty']);
+room('inn', 'Inn', 'inn', 1, 20, 7, 5, ['hunger', 'rest', 'social', 'duty'], 10);
 // The shared PlaceKind union has no smithy, orchard, or riverside variants.
 room('smithy', 'Smithy', 'shop', 10, 20, 6, 5, ['duty']);
 
@@ -76,25 +79,38 @@ places.push(
   {
     id: 'square', name: 'Village square', kind: 'square',
     rect: { x: 17, y: 13, w: 12, h: 6 }, door: { x: 17, y: 15 },
-    spots: [{ x: 19, y: 14 }, { x: 25, y: 15 }, { x: 21, y: 17 }],
+    spots: [
+      { x: 19, y: 14 }, { x: 25, y: 14 }, { x: 27, y: 14 },
+      { x: 19, y: 16 }, { x: 25, y: 16 }, { x: 27, y: 16 },
+      { x: 19, y: 17 }, { x: 21, y: 17 }, { x: 23, y: 17 }, { x: 25, y: 17 },
+    ],
     satisfies: ['social'],
   },
   {
     id: 'well', name: 'Well', kind: 'well',
-    rect: { x: 21, y: 14, w: 3, h: 3 }, door: { x: 22, y: 16 },
-    spots: [{ x: 21, y: 15 }, { x: 23, y: 15 }, { x: 22, y: 14 }],
+    rect: { x: 20, y: 14, w: 5, h: 3 }, door: { x: 22, y: 16 },
+    spots: [
+      { x: 21, y: 14 }, { x: 23, y: 14 }, { x: 20, y: 15 }, { x: 21, y: 15 },
+      { x: 23, y: 15 }, { x: 24, y: 15 }, { x: 21, y: 16 }, { x: 23, y: 16 },
+    ],
     satisfies: ['social'],
   },
   {
     id: 'field-north', name: 'North field', kind: 'field',
     rect: { x: 1, y: 13, w: 9, h: 5 }, door: { x: 9, y: 17 },
-    spots: [{ x: 3, y: 14 }, { x: 5, y: 15 }, { x: 7, y: 16 }],
+    spots: [
+      { x: 3, y: 14 }, { x: 5, y: 14 }, { x: 7, y: 14 }, { x: 2, y: 15 },
+      { x: 8, y: 15 }, { x: 3, y: 16 }, { x: 5, y: 16 }, { x: 7, y: 16 },
+    ],
     satisfies: ['duty'],
   },
   {
     id: 'field-south', name: 'South field', kind: 'field',
     rect: { x: 19, y: 20, w: 12, h: 5 }, door: { x: 24, y: 24 },
-    spots: [{ x: 21, y: 21 }, { x: 25, y: 22 }, { x: 29, y: 23 }],
+    spots: [
+      { x: 21, y: 21 }, { x: 23, y: 21 }, { x: 25, y: 21 }, { x: 27, y: 21 },
+      { x: 21, y: 23 }, { x: 23, y: 23 }, { x: 25, y: 23 }, { x: 27, y: 23 },
+    ],
     satisfies: ['duty'],
   },
   {
@@ -106,7 +122,10 @@ places.push(
   {
     id: 'riverside', name: 'Riverside', kind: 'square',
     rect: { x: 39, y: 1, w: 1, h: 30 }, door: { x: 39, y: 18 },
-    spots: [{ x: 39, y: 11 }, { x: 39, y: 19 }, { x: 39, y: 25 }],
+    spots: [
+      { x: 39, y: 3 }, { x: 39, y: 7 }, { x: 39, y: 11 }, { x: 39, y: 13 },
+      { x: 39, y: 19 }, { x: 39, y: 21 }, { x: 39, y: 25 }, { x: 39, y: 29 },
+    ],
     satisfies: ['duty'],
   },
   {
