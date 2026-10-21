@@ -1,6 +1,6 @@
 import { record } from './types';
 
-export const MAX_TOKENS = 200;
+export const MAX_TOKENS = 120;
 export const DEFAULT_MODELS = 'meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.5-flash-lite';
 export const prices: Readonly<Record<string, { input: number; output: number }>> = {
   'google/gemini-2.5-flash-lite': { input: 0.10 / 1_000_000, output: 0.40 / 1_000_000 },

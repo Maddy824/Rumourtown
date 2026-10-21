@@ -45,7 +45,7 @@ describe('validation and moderation', () => {
   it('prices the most expensive possible fallback, never unknown models', () => {
     const models = modelList(DEFAULT_MODELS);
     expect(modelList('google/gemini-2.5-flash-lite,x:free')[0]).toBe('x:free');
-    expect(reservationCost(models, 1000)).toBeCloseTo(0.00018, 10);
+    expect(reservationCost(models, 1000)).toBeCloseTo(0.000148, 10);
     expect(reservationCost(['x:free'], 1000)).toBe(0);
     expect(() => modelList('unknown-paid-model')).toThrow();
     expect(estimatePromptTokens({ whisper: '你好' })).toBeGreaterThan(1206);

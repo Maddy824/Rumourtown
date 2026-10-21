@@ -6,6 +6,7 @@ import { systemPrompt } from './prompt';
 import { publicKey, sign, verify } from './sign';
 import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
 import { schema, validate } from './validate';
+import { workersAi } from './workers-ai';
 export { BudgetLedger } from './ledger';
 
 interface Dependencies { fetch?: Fetcher; now?: () => number; cache?: EdgeCache }
@@ -14,7 +15,12 @@ function allowedOrigins(env: Env): string[] {
   return env.ALLOWED_ORIGIN === 'https://rumourtown.dev'
     ? [env.ALLOWED_ORIGIN, 'https://www.rumourtown.dev'] : [env.ALLOWED_ORIGIN];
 }
-interface Usage { dispatched: boolean; track?: boolean; reason?: string }
+interface Usage {
+  dispatched: boolean; track?: boolean; reason?: string;
+  workersAi?: boolean; workersAiFailed?: boolean; openRouter?: boolean;
+  pending: Promise<unknown>[];
+}
+type Defer = (task: Promise<void>) => Promise<void>;
 
 // Single stable object for the whole deployment, never a per-visitor object.
 async function ledger(env: Env, method: string, body: unknown): Promise<Record<string, unknown>> {
@@ -48,7 +54,7 @@ async function turnstile(request: Request, token: string, env: Env, fetcher: Fet
   finally { clearTimeout(timer); }
 }
 
-async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number, usage: Usage, cache?: EdgeCache): Promise<SignedPayload | Refusal> {
+async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () => number, usage: Usage, defer: Defer, cache?: EdgeCache): Promise<SignedPayload | Refusal> {
   await admit(request, env);
   const input = await readInput(request);
   if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken', 'castVersion'].includes(key)) ||
@@ -87,14 +93,21 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     return signed;
   }
 
-  let models: string[];
-  try { models = modelList(env.MODELS); } catch { throw new Failure('model'); }
-  const body = {
-    models, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify({ whisper: text }) }],
-    response_format: { type: 'json_schema', json_schema: { name: 'whisper', strict: true, schema } },
-    provider: { require_parameters: true, max_price: providerPriceCap(models) }, temperature: 0, max_tokens: MAX_TOKENS,
-  };
-  const worstCaseUsd = reservationCost(models, estimatePromptTokens(body));
+  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify({ whisper: text }) }];
+  // Gate both tiers through the exact ledger limits; a free attempt holds $0.
+  let models: string[] = [];
+  let body: Record<string, unknown> = {};
+  let worstCaseUsd = 0;
+  function openRouterBody() {
+    try { models = modelList(env.MODELS); } catch { throw new Failure('model'); }
+    body = {
+      models, messages,
+      response_format: { type: 'json_schema', json_schema: { name: 'whisper', strict: true, schema } },
+      provider: { require_parameters: true, max_price: providerPriceCap(models) }, temperature: 0, max_tokens: MAX_TOKENS,
+    };
+    worstCaseUsd = reservationCost(models, estimatePromptTokens(body));
+  }
+  if (!env.AI) openRouterBody();
   const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', request.headers.get('User-Agent') ?? '']));
   const reserved = await ledger(env, 'reserve', { visitorKey, worstCaseUsd, now: now() });
   if (reserved.ok === false && ['limit-visitor', 'limit-global', 'budget'].includes(reserved.reason as string)) {
@@ -104,25 +117,45 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   if (reserved.ok !== true || typeof reserved.reservationId !== 'string') throw new Failure('ledger');
   const reservationId = reserved.reservationId;
 
-  let dispatched = false;
+  let openRouterDispatched = false;
   let settled = false;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    // Invalid/missing secrets fail before dispatch and can safely release the reservation.
-    if (!env.OPENROUTER_API_KEY) throw new Failure('model');
+    // Validate signing configuration before either provider can dispatch.
     publicKey(env.SIGNING_KEY_JWK);
+    if (env.AI) {
+      usage.dispatched = true;
+      usage.workersAi = true;
+      const claim = await workersAi(env, messages);
+      if (claim) {
+        settled = true;
+        await defer(finish(env, 'settle', { reservationId, actualUsd: 0 }));
+        if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
+        const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
+        await finish(env, 'cachePut', { hash: key, payload: signed });
+        await edge.put(signed);
+        return signed;
+      }
+      usage.workersAiFailed = true;
+      openRouterBody();
+      const funded = await ledger(env, 'fund', { reservationId, worstCaseUsd });
+      if (funded.ok === false && funded.reason === 'budget') throw new Failure('budget');
+      if (funded.ok !== true) throw new Failure('ledger');
+    }
+    if (!env.OPENROUTER_API_KEY) throw new Failure('model');
     timer = setTimeout(() => controller.abort(), 6_000);
-    dispatched = true;
+    openRouterDispatched = true;
     usage.dispatched = true;
+    usage.openRouter = true;
     const response = await fetcher('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify(body), signal: controller.signal,
     });
     const result: unknown = await response.json();
     // Settle even malformed/refused output: inference may already have been billed.
-    await finish(env, 'settle', { reservationId, actualUsd: actualCost(result, models, worstCaseUsd) });
     settled = true;
+    await defer(finish(env, 'settle', { reservationId, actualUsd: actualCost(result, models, worstCaseUsd) }));
     if (!response.ok || !record(result) || !Array.isArray(result.choices)) throw new Failure('model');
     const choice: unknown = result.choices[0];
     if (!record(choice) || !record(choice.message) || typeof choice.message.content !== 'string') throw new Failure('invalid');
@@ -140,7 +173,7 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
       // Aborts, lost responses and unknown usage are charged at the reserved bound.
       // If settlement itself fails, its durable reservation remains held (fail closed).
       if (!(error instanceof Failure && error.reason === 'ledger')) {
-        await finish(env, dispatched ? 'settle' : 'release', { reservationId, actualUsd: worstCaseUsd });
+        await defer(finish(env, openRouterDispatched ? 'settle' : 'release', { reservationId, actualUsd: worstCaseUsd }));
       }
     }
     if (error instanceof Failure) throw error;
@@ -160,7 +193,11 @@ export function createWorker(deps: Dependencies = {}) {
         'Access-Control-Expose-Headers': 'Retry-After', Vary: 'Origin', 'Cache-Control': 'no-store',
       };
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
-      const usage: Usage = { dispatched: false };
+      const usage: Usage = { dispatched: false, pending: [] };
+      const defer: Defer = async task => {
+        if (ctx) usage.pending.push(task.catch(() => undefined));
+        else await task;
+      };
       const isInterpret = request.method === 'POST' && new URL(request.url).pathname === '/interpret';
       const requestTime = (deps.now ?? Date.now)();
       try {
@@ -170,7 +207,7 @@ export function createWorker(deps: Dependencies = {}) {
         if (request.method === 'GET' && path === '/pubkey') return json(publicKey(env.SIGNING_KEY_JWK));
         if (request.method === 'POST' && path === '/interpret') {
           const cache = deps.cache ?? (typeof caches === 'undefined' ? undefined : caches.default);
-          const result = await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, cache);
+          const result = await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer, cache);
           if ('unsupported' in result) usage.reason = result.unsupported;
           return json(result);
         }
@@ -183,9 +220,12 @@ export function createWorker(deps: Dependencies = {}) {
       } finally {
         if (isInterpret && (usage.dispatched || usage.track && usage.reason)) {
           // Aggregate bookkeeping and ntfy are never on the response critical path.
-          const recordUsage = ledger(env, 'usage', { ...usage, now: requestTime }).catch(() => undefined);
+          const { pending, ...counts } = usage;
+          const recordUsage = Promise.all(pending).then(() => ledger(env, 'usage', { ...counts, now: requestTime })).catch(() => undefined);
           if (ctx) ctx.waitUntil(recordUsage);
           else await recordUsage;
+        } else if (ctx && usage.pending.length) {
+          ctx.waitUntil(Promise.all(usage.pending));
         }
       }
     },

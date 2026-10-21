@@ -11,6 +11,7 @@ type Job = { day: string; phase: string; attempts: number };
 export class DailyDigests {
   constructor(private readonly ctx: DurableObjectState, private readonly env: Env, private readonly fetcher: Fetcher) {
     const sql = ctx.storage.sql;
+    sql.exec('CREATE TABLE IF NOT EXISTS provider_counts (day TEXT NOT NULL, provider TEXT NOT NULL, requests INTEGER NOT NULL, failures INTEGER NOT NULL, PRIMARY KEY(day, provider))');
     sql.exec('CREATE TABLE IF NOT EXISTS usage_days (day TEXT PRIMARY KEY, count INTEGER NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS refusal_counts (day TEXT NOT NULL, reason TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(day, reason))');
     sql.exec('CREATE TABLE IF NOT EXISTS digest_jobs (day TEXT NOT NULL, phase TEXT NOT NULL, due INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT \'pending\', PRIMARY KEY(day, phase))');
@@ -23,6 +24,11 @@ export class DailyDigests {
     const day = new Date(now).toISOString().slice(0, 10);
     const sql = this.ctx.storage.sql;
     this.ctx.storage.transactionSync(() => {
+      for (const [provider, dispatched, failed] of [
+        ['workers-ai', body.workersAi, body.workersAiFailed], ['openrouter', body.openRouter, false],
+      ] as const) {
+        if (dispatched === true) sql.exec('INSERT INTO provider_counts (day, provider, requests, failures) VALUES (?, ?, 1, ?) ON CONFLICT(day, provider) DO UPDATE SET requests = requests + 1, failures = failures + excluded.failures', day, provider, failed === true ? 1 : 0);
+      }
       if (body.dispatched === true) {
         sql.exec('INSERT INTO usage_days (day, count) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET count = count + 1', day);
         if (this.env.USAGE_ALERT_URL) {
@@ -51,7 +57,8 @@ export class DailyDigests {
     const jobs = sql.exec<Job>("SELECT day, phase, attempts FROM digest_jobs WHERE status IN ('pending', 'sending') AND due <= ? ORDER BY day, phase", now).toArray();
     for (const job of jobs) {
       const daily = sql.exec<{ reserved: number; spent: number }>('SELECT reserved, spent FROM days WHERE day = ?', job.day).toArray()[0];
-      if (job.phase === 'end' && !daily?.spent) {
+      const workers = sql.exec<{ requests: number; failures: number }>("SELECT requests, failures FROM provider_counts WHERE day = ? AND provider = 'workers-ai'", job.day).toArray()[0];
+      if (job.phase === 'end' && !daily?.spent && !workers?.requests) {
         sql.exec("UPDATE digest_jobs SET status = 'done' WHERE day = ? AND phase = ?", job.day, job.phase);
         continue;
       }
@@ -73,6 +80,8 @@ export class DailyDigests {
       const count = sql.exec<{ count: number }>('SELECT count FROM usage_days WHERE day = ?', job.day).toArray()[0]?.count ?? 0;
       try {
         await notifyUsage(this.env, this.fetcher, {
+          workersAiRequests: workers?.requests ?? 0, workersAiFailures: workers?.failures ?? 0,
+          openRouterRequests: sql.exec<{ requests: number }>("SELECT requests FROM provider_counts WHERE day = ? AND provider = 'openrouter'", job.day).toArray()[0]?.requests ?? 0,
           day: job.day, count, spent: (daily?.spent ?? 0) / SCALE,
           dailyRemaining: Math.max(0, Number(this.env.DAILY_ALLOWANCE_USD ?? '.019') - ((daily?.spent ?? 0) + (daily?.reserved ?? 0)) / SCALE),
           lifetimeRemaining: Math.max(0, Number(this.env.LIFETIME_ALLOWANCE_USD ?? '7') - total / SCALE),

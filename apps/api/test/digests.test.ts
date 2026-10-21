@@ -21,6 +21,18 @@ async function spend(s: ReturnType<typeof memoryLedger>, time = now, actual = .0
 }
 
 describe('daily usage digests', () => {
+  it('counts Workers AI attempts and failures separately from OpenRouter and reports free-only days', async () => {
+    const mock = mockFetch(); const { s, digest } = setup(mock.fetcher);
+    await spend(s, now, 0);
+    await s.rpc('usage', { now, dispatched: true, workersAi: true }); await s.drain();
+    expect(String(mock.calls[0]?.init?.body)).toContain('Workers AI: 1 requests, 0 failures ($0 ledger cost). OpenRouter: 0 requests.');
+    await s.rpc('usage', { now: now + 1, dispatched: true, workersAi: true, workersAiFailed: true, openRouter: true }); await s.drain();
+    await digest.flush(midnight);
+    expect(mock.calls).toHaveLength(2);
+    expect(String(mock.calls[1]?.init?.body)).toContain('2 uncached model requests. Spend $0.000000');
+    expect(String(mock.calls[1]?.init?.body)).toContain('Workers AI: 2 requests, 1 failures ($0 ledger cost). OpenRouter: 1 requests.');
+    expect(String(mock.calls[1]?.init?.body)).toContain('Remaining daily $0.019000; lifetime $7.000000');
+  });
   it('sends one first-request digest, then an end-of-day digest only when there was spend', async () => {
     const mock = mockFetch();
     const { s, digest } = setup(mock.fetcher);

@@ -7,6 +7,8 @@ export interface Env {
   OPENROUTER_API_KEY: string;
   SIGNING_KEY_JWK: string;
   MODELS?: string;
+  AI?: { run(model: string, inputs: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<unknown> };
+  WORKERS_AI_MODEL?: string;
   AI_ENABLED?: string;
   USAGE_ALERT_URL?: string;
   DAILY_ALLOWANCE_USD?: string;

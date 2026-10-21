@@ -65,14 +65,16 @@ Dialogue is authored and selected by rules. When the API URL and Turnstile publi
 
 ## Stay within a $10 AI budget
 
-The intended deployment uses four layers. The account and hosting settings must be configured by the operator; repository code cannot establish those settings by itself.
+The intended chain has three tiers: browser rules ($0, planned in a separate task), Workers AI first remotely ($0 in the ledger on Cloudflare Free), then the existing OpenRouter free-model and capped paid fallback. The Worker uses the 8B fast model by default; `WORKERS_AI_MODEL` can select `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. Any Workers AI error, quota response, six-second timeout or invalid output falls through. The requested 8B model ID is currently [listed as unavailable](https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fast/); use the override if needed. Both remote paths use a compact prompt, temperature 0 and a 120-token output cap. The browser interpreter remains future work.
+
+The budget uses four layers. The account and hosting settings must be configured by the operator; repository code cannot establish those settings by itself.
 
 1. Prepaid credit: load $10 on OpenRouter and leave automatic top-up off. Exhausted credit stops interpretation; the ready-made menu remains available.
 2. Capped keys: cap the live key at $7 and the development key at $2, leaving $1 unallocated. These are provider-side stops outside the application.
-3. The ledger: one SQLite Durable Object reserves the worst-case cost before any model call, then settles usage. Its defaults are $0.019 per UTC day, $7 for the lifetime of the ledger, 20 calls per minute globally and 5 per hour per hashed visitor bucket. Notifications are optional daily digests sent outside the request path. AI is off in local defaults and enabled only in production. Cache hits avoid another model call. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
-4. Free hosting with no card: deploy the static game and optional Worker on Cloudflare's free offering, with no paid upgrade or card attached. Quota exhaustion should stop service rather than enable paid usage. An optional custom domain is a separate recurring cost outside the AI budget.
+3. The ledger: one SQLite Durable Object admits Workers AI with a $0 hold and funds the worst-case cost before any OpenRouter call, then settles usage in `waitUntil`. Fallback shares the original request-limit admission. Its defaults are $0.019 per UTC day, $7 for the lifetime of the ledger, 20 calls per minute globally and 5 per hour per hashed visitor bucket. Optional daily digests report Workers AI requests/failures, OpenRouter dispatches, spend and remaining allowances outside the response path. Workers AI attempts are counted even at $0. AI is off in local defaults and enabled only in production. Cache hits avoid another model call. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
+4. Free hosting with no card: deploy the static game and optional Worker on Cloudflare's free offering, with no paid upgrade or card attached. [Workers AI's free daily allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/) costs $0; quota exhaustion returns an error and falls back to the capped OpenRouter path. Keep Workers AI on Free: paid-plan overages are outside this ledger. An optional custom domain is a separate recurring cost outside the AI budget.
 
-These are deployment requirements, not a claim that a live account has been audited. See [the request and ledger order](docs/architecture.md#the-workers-request-path).
+These are deployment requirements, not a claim that a live account has been audited. See [credit controls and the three tiers](docs/credit-controls.md) and [the request and ledger order](docs/architecture.md#the-workers-request-path).
 
 ## What we deliberately did not build on
 

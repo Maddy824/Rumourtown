@@ -2,6 +2,9 @@ name = "rumortown-api"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
+[ai]
+binding = "AI"
+
 [[durable_objects.bindings]]
 name = "LEDGER"
 class_name = "BudgetLedger"
@@ -38,6 +41,9 @@ GLOBAL_PER_MINUTE = "20"
 [env.production]
 name = "rumortown-api"
 routes = [{ pattern = "api.rumourtown.dev", custom_domain = true }]
+
+[env.production.ai]
+binding = "AI"
 
 [env.production.vars]
 ALLOWED_ORIGIN = "https://rumourtown.dev"

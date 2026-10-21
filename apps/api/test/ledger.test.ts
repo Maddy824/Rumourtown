@@ -9,6 +9,45 @@ afterEach(() => { for (const s of stores.splice(0)) s.db.close(); });
 const reserve = (s: ReturnType<typeof store>, usd = 0.04, time = now, who = visitor) => s.rpc('reserve', { visitorKey: who, worstCaseUsd: usd, now: time });
 
 describe('BudgetLedger', () => {
+  it('funds a free hold atomically once without counting another request', async () => {
+    const s = store({ PER_VISITOR_PER_HOUR: '1', GLOBAL_PER_MINUTE: '1' });
+    const a = await reserve(s, 0);
+    const body = { reservationId: a.reservationId, worstCaseUsd: .04 };
+    expect(await s.rpc('fund', body)).toEqual({ ok: true });
+    expect(await s.rpc('fund', body)).toEqual({ ok: true });
+    expect(s.db.prepare('SELECT reserved, spent FROM days').all()).toEqual([{ reserved: 40_000_000_000, spent: 0 }]);
+    expect(s.db.prepare('SELECT count FROM visitors').all()).toEqual([{ count: 1 }]);
+    expect(s.db.prepare('SELECT count FROM minutes').all()).toEqual([{ count: 1 }]);
+    await s.rpc('settle', { reservationId: a.reservationId, actualUsd: .01 });
+    expect(await s.rpc('fund', body)).toEqual({ reason: 'ledger' });
+  });
+  it('cannot oversubscribe allowances by concurrently funding free holds', async () => {
+    const s = store({ LIFETIME_ALLOWANCE_USD: '.03', PER_VISITOR_PER_HOUR: '100', GLOBAL_PER_MINUTE: '100' });
+    const holds = await Promise.all(Array.from({ length: 20 }, () => reserve(s, 0)));
+    const funded = await Promise.all(holds.map(h => s.rpc('fund', { reservationId: h.reservationId, worstCaseUsd: .01 })));
+    expect(funded.filter(r => r.ok)).toHaveLength(3);
+    expect(funded.filter(r => r.reason === 'budget')).toHaveLength(17);
+    expect(s.db.prepare('SELECT SUM(reserved + spent) AS total FROM days').all()).toEqual([{ total: 30_000_000_000 }]);
+  });
+  it('funds against the original day and refuses billing faults, invalid and decreasing amounts', async () => {
+    const s = store();
+    const a = await reserve(s, 0, now - 86_400_000);
+    expect(await s.rpc('fund', { reservationId: a.reservationId, worstCaseUsd: .1 })).toEqual({ ok: true });
+    expect(await s.rpc('fund', { reservationId: a.reservationId, worstCaseUsd: .11 })).toEqual({ ok: false, reason: 'budget' });
+    for (const amount of [-1, 'bad', .05]) expect(await s.rpc('fund', { reservationId: a.reservationId, worstCaseUsd: amount })).toEqual({ reason: 'ledger' });
+    expect(s.db.prepare('SELECT day, reserved FROM days').all()).toEqual([{ day: '2026-10-20', reserved: 100_000_000_000 }]);
+    const b = await reserve(s, 0);
+    await s.rpc('settle', { reservationId: a.reservationId, actualUsd: .2 });
+    expect(await s.rpc('fund', { reservationId: b.reservationId, worstCaseUsd: .01 })).toEqual({ ok: false, reason: 'budget' });
+  });
+  it('rolls back a failed funding write, preserving the original free hold', async () => {
+    const s = store();
+    const a = await reserve(s, 0);
+    s.db.exec("CREATE TRIGGER fail_fund BEFORE UPDATE ON reservations BEGIN SELECT RAISE(ABORT, 'storage failure'); END");
+    expect(await s.rpc('fund', { reservationId: a.reservationId, worstCaseUsd: .01 })).toEqual({ reason: 'ledger' });
+    expect(s.db.prepare('SELECT reserved, spent FROM days').all()).toEqual([{ reserved: 0, spent: 0 }]);
+    expect(s.db.prepare('SELECT amount, status FROM reservations').all()).toEqual([{ amount: 0, status: 'reserved' }]);
+  });
   it('paces the default allowance for 365 days within $7, without a New Year reset', async () => {
     const s = store({ DAILY_ALLOWANCE_USD: undefined });
     for (let day = 0; day < 365; day++) {

@@ -85,6 +85,29 @@ export class BudgetLedger {
     });
   }
 
+  /** Fund a free-tier hold before paid fallback, without counting a second request. */
+  private fund(body: Record<string, unknown>): unknown {
+    const id = text(body.reservationId);
+    if (typeof body.worstCaseUsd !== 'number') throw new Error('amount');
+    const amount = units(body.worstCaseUsd);
+    const allowance = units(Number(this.env.DAILY_ALLOWANCE_USD ?? '.019'));
+    const lifetime = units(Number(this.env.LIFETIME_ALLOWANCE_USD ?? '7'));
+    if (lifetime > units(7)) throw new Error('config');
+    return this.ctx.storage.transactionSync(() => {
+      const row = this.sql.exec<{ day: string; amount: number; status: string }>('SELECT day, amount, status FROM reservations WHERE id = ?', id).toArray()[0];
+      if (!row || row.status !== 'reserved') throw new Error('reservation');
+      if (this.sql.exec('SELECT reason FROM billing_faults LIMIT 1').toArray().length) return { ok: false, reason: 'budget' };
+      if (amount < row.amount) throw new Error('amount');
+      const extra = amount - row.amount;
+      const daily = this.sql.exec<{ reserved: number; spent: number }>('SELECT reserved, spent FROM days WHERE day = ?', row.day).toArray()[0]!;
+      const total = this.sql.exec<{ total: number }>('SELECT COALESCE(SUM(reserved + spent), 0) AS total FROM days').toArray()[0]!.total;
+      if (daily.reserved + daily.spent + extra > allowance || total + extra > lifetime) return { ok: false, reason: 'budget' };
+      this.sql.exec('UPDATE days SET reserved = reserved + ? WHERE day = ?', extra, row.day);
+      this.sql.exec('UPDATE reservations SET amount = ? WHERE id = ?', amount, id);
+      return { ok: true };
+    });
+  }
+
   private finish(body: Record<string, unknown>, release: boolean): unknown {
     const id = text(body.reservationId);
     return this.ctx.storage.transactionSync(() => {
@@ -117,6 +140,7 @@ export class BudgetLedger {
       switch (new URL(request.url).pathname) {
         case '/usage': await this.digests.record(body); result = { ok: true }; break;
         case '/reserve': result = this.reserve(body); break;
+        case '/fund': result = this.fund(body); break;
         case '/settle': result = this.finish(body, false); break;
         case '/release': result = this.finish(body, true); break;
         case '/cacheGet': {

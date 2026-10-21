@@ -30,7 +30,7 @@ describe('Worker routes', () => {
     expect(String(mock.calls[0]?.init?.body)).toContain('secret=test-turnstile');
     expect(mock.calls[1]?.url).toBe('https://openrouter.ai/api/v1/chat/completions');
     const request = JSON.parse(String(mock.calls[1]?.init?.body));
-    expect(request).toMatchObject({ temperature: 0, max_tokens: 200, provider: { require_parameters: true }, response_format: { type: 'json_schema', json_schema: { strict: true } } });
+    expect(request).toMatchObject({ temperature: 0, max_tokens: 120, provider: { require_parameters: true }, response_format: { type: 'json_schema', json_schema: { strict: true } } });
     expect(s.calls.filter(c => c.method !== 'usage').map(c => c.method)).toEqual(['cacheGet', 'reserve', 'settle', 'cachePut']);
     expect(JSON.stringify(s.calls)).not.toContain('Mira stole bread from Tom.');
     expect(s.calls.find(c => c.method === 'reserve')?.body.visitorKey).toMatch(/^[a-f0-9]{64}$/u);

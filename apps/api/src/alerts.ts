@@ -4,6 +4,9 @@ export interface UsageDigest {
   day: string;
   count: number;
   spent: number;
+  workersAiRequests: number;
+  workersAiFailures: number;
+  openRouterRequests: number;
   dailyRemaining: number;
   lifetimeRemaining: number;
   refusals: { reason: string; count: number }[];
@@ -24,7 +27,7 @@ export async function notifyUsage(env: Env, fetcher: Fetcher, digest: UsageDiges
       const response = await fetcher(url.href, {
         method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'Content-Type': 'text/plain; charset=utf-8', Title: 'Rumourtown daily AI usage', Tags: 'robot', Priority: 'default' },
-        body: `${digest.day}: ${digest.count} uncached model requests. Spend $${digest.spent.toFixed(6)}. Remaining daily $${digest.dailyRemaining.toFixed(6)}; lifetime $${digest.lifetimeRemaining.toFixed(6)}. Top refusals: ${digest.refusals.map(r => `${r.reason} (${r.count})`).join(', ') || 'none'}.`,
+        body: `${digest.day}: ${digest.count} uncached model requests. Spend $${digest.spent.toFixed(6)}. Remaining daily $${digest.dailyRemaining.toFixed(6)}; lifetime $${digest.lifetimeRemaining.toFixed(6)}. Workers AI: ${digest.workersAiRequests} requests, ${digest.workersAiFailures} failures ($0 ledger cost). OpenRouter: ${digest.openRouterRequests} requests. Top refusals: ${digest.refusals.map(r => `${r.reason} (${r.count})`).join(', ') || 'none'}.`,
       });
       if (!response.ok) throw new Error('alerts');
       const receipt: unknown = await response.json();
