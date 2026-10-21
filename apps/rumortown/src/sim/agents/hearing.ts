@@ -7,6 +7,7 @@ import type { GameClaim, VillagerId } from '../types.js';
 import { emit, strangerClaimOf, type Agent, type Ctx } from './context.js';
 import { exposeStranger } from './exposure.js';
 import { remembersStranger } from './provenance.js';
+import { chainEntries } from './inspect.js';
 import { STRANGER_ID } from './text.js';
 
 export type Source = VillagerId | 'stranger' | 'self';
@@ -42,6 +43,7 @@ function afterHear(ctx: Ctx, listener: Agent, claim: GameClaim, source: Source, 
 export function hearFrom(ctx: Ctx, speaker: Agent, listener: Agent, claim: GameClaim, evidence: boolean): HearResult | null {
   if (listener.d.id === claim.about) return null;
   const before = contradictedBefore(ctx, listener, claim);
+  const trail = chainEntries(ctx, speaker, claim.id);
   let result: HearResult;
   if (listener.whisperWitnessed.has(claim.id)) {
     // They saw the stranger whisper: whoever tells them, they attach the origin themselves.
@@ -56,6 +58,9 @@ export function hearFrom(ctx: Ctx, speaker: Agent, listener: Agent, claim: GameC
   } else {
     result = tell(speaker.ledger, listener.ledger, claim, ctx.claims, ctx.rel, ctx.rng, ctx.tick, ctx.tuning);
   }
+  const provenance = listener.ledger.beliefs.get(claim.id)?.provenance;
+  const heard = provenance?.[provenance.length - 1];
+  if (heard) ctx.transmissionChains.set(heard, trail);
   afterHear(ctx, listener, claim, speaker.d.id, result, before, evidence);
   return result;
 }
@@ -83,24 +88,10 @@ export function seeClaim(ctx: Ctx, witness: Agent, claim: GameClaim, clarity: nu
   return result;
 }
 
-/**
- * A correction with no claim behind it: a bare denial, or a witnessed act that contradicts a
- * claim without confirming an authored alternative. Mirrors the library's correction maths
- * (removal fraction x credibility, floored at the residual) because the ledger has no public
- * entry point for it. Returns the new confidence, or null when nothing moved.
- */
+/** A bare denial or direct witnessed correction, applied through the library. */
 export function correctBelief(ctx: Ctx, listener: Agent, claimId: ClaimId, credibility: number, alternative: boolean, source: Source, evidence: boolean): number | null {
-  const b = listener.ledger.beliefs.get(claimId);
-  if (!b || b.logOdds <= 0) return null;
-  const t = ctx.tuning;
-  const removal = (alternative ? t.correctionRemoval : t.correctionRemovalBare) * Math.min(1, Math.max(0, credibility));
-  const floor = t.residualFraction * Math.max(b.peakLogOdds, 0);
-  const next = Math.max(b.logOdds * (1 - removal), floor);
-  const delta = Math.min(0, next - b.logOdds);
-  if (delta === 0) return null;
   const before = listener.ledger.confidence(claimId);
-  b.logOdds += delta;
-  b.provenance.push({ kind: 'corrected', source, origin: source, tick: ctx.tick, delta });
+  if (!listener.ledger.correct(claimId, { credibility, alternative, source, tick: ctx.tick })) return null;
   const after = listener.ledger.confidence(claimId);
   emit(ctx, { kind: 'belief', tick: ctx.tick, villager: listener.d.id, claimId, before, after, source, independent: false });
   const claim = ctx.claims.get(claimId);

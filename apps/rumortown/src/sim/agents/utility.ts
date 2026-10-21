@@ -16,7 +16,6 @@ import { activityWord, needWord, percent } from './text.js';
 interface Candidate {
   kind: GoalKind;
   action: string;
-  score: number;
   terms: Term[];
   target?: VillagerId;
   claimId?: string;
@@ -39,14 +38,13 @@ export function decide(ctx: Ctx, agent: Agent): void {
 
   // The routine leads.
   const routineTerms: Term[] = [
-    { text: `it is ${activityWord(entry.activity)} time at ${placeName}`, value: 0.45 },
+    { text: `it is ${activityWord(entry.activity)} time at ${placeName}`, value: 0.45 + (g.kind === 'schedule' ? 0.05 : 0) },
     { text: t.conscientiousness >= 0.5 ? 'keeps to the routine' : 'nothing better to do', value: 0.15 * t.conscientiousness },
   ];
-  if (stale !== undefined) routineTerms.push({ text: `gave up on reaching ${nameOf(ctx, stale, true)}`, value: 0.5 });
+  if (stale !== undefined) routineTerms.push({ text: `gave up on reaching ${nameOf(ctx, stale, true)}`, value: 0 });
   cands.push({
     kind: 'schedule',
     action: `${entry.activity} at ${placeName}`,
-    score: 0.45 + 0.15 * t.conscientiousness + (g.kind === 'schedule' ? 0.05 : 0),
     terms: routineTerms,
   });
 
@@ -60,10 +58,9 @@ export function decide(ctx: Ctx, agent: Agent): void {
       cands.push({
         kind: 'need',
         action: `${activityForNeed(urgent.need)} at the ${place.name.toLowerCase()}`,
-        score: 0.9 * urgent.deficit * urgent.deficit + (g.kind === 'need' && g.need === urgent.need ? 0.05 : 0),
         terms: [
-          { text: `${needWord(urgent.need)} (${percent(urgent.deficit)})`, value: urgent.deficit },
-          { text: `the ${place.name.toLowerCase()} is ${d <= 8 ? 'close by' : 'not far'}`, value: 0.2 },
+          { text: `${needWord(urgent.need)} (${percent(urgent.deficit)})`, value: 0.9 * urgent.deficit * urgent.deficit },
+          { text: `the ${place.name.toLowerCase()} is ${d <= 8 ? 'close by' : 'not far'}`, value: g.kind === 'need' && g.need === urgent.need ? 0.05 : 0 },
         ],
         need: urgent.need,
         place: place.id,
@@ -77,7 +74,6 @@ export function decide(ctx: Ctx, agent: Agent): void {
       cands.push({
         kind: 'avoid',
         action: 'walk away',
-        score: 0.85,
         terms: [
           { text: 'accused in front of everyone', value: 0.6 },
           { text: 'would rather walk away than fight', value: 0.25 },
@@ -106,10 +102,9 @@ export function decide(ctx: Ctx, agent: Agent): void {
         cands.push({
           kind: 'apologize',
           action: `apologize to ${otherName}`,
-          score: 0.7 + 0.2 * t.honesty + 0.1 * t.agreeableness + commit,
           terms: [
-            { text: `only ${percent(conf)} sure now that ${owed.text}`, value: 0.6 },
-            { text: `owes ${otherName} an apology`, value: 0.3 },
+            { text: `only ${percent(conf)} sure now that ${owed.text}`, value: 0.7 },
+            { text: `owes ${otherName} an apology`, value: 0.2 * t.honesty + 0.1 * t.agreeableness + commit },
           ],
           target: them,
           claimId: owed.id,
@@ -126,10 +121,9 @@ export function decide(ctx: Ctx, agent: Agent): void {
       cands.push({
         kind: 'reconcile',
         action: `make up with ${otherName}`,
-        score: 0.6 + 0.2 * t.agreeableness + commit,
         terms: [
-          { text: 'the sting of being accused has faded', value: 0.5 },
-          { text: `still fond of ${otherName}`, value: 0.3 },
+          { text: 'the sting of being accused has faded', value: 0.6 },
+          { text: `still fond of ${otherName}`, value: 0.2 * t.agreeableness + commit },
         ],
         target: them,
       });
@@ -137,14 +131,16 @@ export function decide(ctx: Ctx, agent: Agent): void {
 
     for (const claim of harmfulClaimsAbout(ctx, agent, them)) {
       const conf = agent.ledger.confidence(claim.id);
-      if (conf < CONFRONT_BELIEF || agent.accusedToday.has(`${claim.id}|${them}`) || !accusationOpen(ctx, claim.id, them)) continue;
+      if (conf <= CONFRONT_BELIEF || agent.accusedToday.has(`${claim.id}|${them}`) || !accusationOpen(ctx, claim.id, them)) continue;
       const reason = confrontReason(ctx, agent, claim);
       if (!reason) continue;
       cands.push({
         kind: 'confront',
         action: `confront ${otherName}`,
-        score: 0.85 + 0.8 * (conf - CONFRONT_BELIEF) + 0.05 * (t.emotionality - 0.5) - 0.05 * (t.agreeableness - 0.5) + commit,
-        terms: [{ text: `${percent(conf)} sure ${claim.text}`, value: conf }, reason],
+        terms: [
+          { text: `${percent(conf)} sure ${claim.text}`, value: 0.85 + 0.8 * (conf - CONFRONT_BELIEF) },
+          { text: reason.text, value: 0.05 * (t.emotionality - 0.5) - 0.05 * (t.agreeableness - 0.5) + commit },
+        ],
         target: them,
         claimId: claim.id,
       });
@@ -155,8 +151,7 @@ export function decide(ctx: Ctx, agent: Agent): void {
       cands.push({
         kind: 'gossip',
         action: `${telling.act} to ${otherName}`,
-        score: telling.utility - (0.02 * d) / APPROACH_RANGE + commit,
-        terms: telling.terms,
+        terms: [...telling.terms, { text: `${otherName} is within reach`, value: -(0.02 * d) / APPROACH_RANGE + commit }],
         target: them,
         claimId: telling.claim.id,
         act: telling.act,
@@ -170,10 +165,9 @@ export function decide(ctx: Ctx, agent: Agent): void {
       cands.push({
         kind: 'approach',
         action: `talk to ${otherName}`,
-        score: 0.2 + 0.35 * social + 0.15 * closeness + 0.1 * (t.extraversion - 0.5) - 0.1 * (d / APPROACH_RANGE) - (recently ? 0.2 : 0) + commit,
         terms: [
-          { text: `wants company (${percent(social)} lonely)`, value: 0.35 * social },
-          { text: closeness >= 0.6 ? `${otherName} is a friend` : `${otherName} is nearby`, value: 0.15 * closeness },
+          { text: `wants company (${percent(social)} lonely)`, value: 0.2 + 0.35 * social + 0.1 * (t.extraversion - 0.5) },
+          { text: closeness >= 0.6 ? `${otherName} is a friend` : `${otherName} is nearby`, value: 0.15 * closeness - 0.1 * (d / APPROACH_RANGE) - (recently ? 0.2 : 0) + commit },
         ],
         target: them,
       });
@@ -183,7 +177,7 @@ export function decide(ctx: Ctx, agent: Agent): void {
   let best = cands[0]!;
   let bestScore = -Infinity;
   for (const c of cands) {
-    const s = c.score + UTILITY_JITTER * ctx.rng();
+    const s = c.terms.reduce((sum, term) => sum + term.value, 0) + UTILITY_JITTER * ctx.rng();
     if (s > bestScore) {
       best = c;
       bestScore = s;

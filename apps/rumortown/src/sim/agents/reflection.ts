@@ -3,14 +3,14 @@
  * dusk reflection that turns the day's most important event into one standing opinion.
  */
 import type { VillagerId } from '../types.js';
-import { emit, relKey, type Agent, type Ctx } from './context.js';
+import { emit, recordDecision, relKey, type Agent, type Ctx } from './context.js';
 
 export function remember(ctx: Ctx, agent: Agent, importance: number, text: string, opinion: string, about?: VillagerId): void {
   agent.memories.push(about ? { tick: ctx.tick, importance, text, opinion, about } : { tick: ctx.tick, importance, text, opinion });
 }
 
 /** The day's weightiest memory becomes an opinion; it is kept for inspection and, when it is about someone, becomes the reason behind that relation. */
-export function reflect(ctx: Ctx, agent: Agent): string | null {
+export function reflect(ctx: Ctx, agent: Agent): string {
   let best: Agent['memories'][number] | null = null;
   let bestScore = -Infinity;
   for (const m of agent.memories) {
@@ -22,9 +22,10 @@ export function reflect(ctx: Ctx, agent: Agent): string | null {
     }
   }
   agent.memories.length = 0;
-  if (!best) return null;
-  agent.opinions.push(best.opinion);
-  if (best.about) ctx.relationWhy.set(relKey(agent.d.id, best.about), best.opinion);
-  emit(ctx, { kind: 'action', tick: ctx.tick, villager: agent.d.id, action: 'reflect', why: best.opinion });
-  return best.opinion;
+  const opinion = best?.opinion ?? `${agent.d.name} had a quiet day and kept to the routine`;
+  agent.opinions.push({ tick: ctx.tick, action: 'reflect', why: opinion });
+  recordDecision(ctx, agent, 'reflect', opinion);
+  if (best?.about) ctx.relationWhy.set(relKey(agent.d.id, best.about), best.opinion);
+  emit(ctx, { kind: 'action', tick: ctx.tick, villager: agent.d.id, action: 'reflect', why: opinion });
+  return opinion;
 }

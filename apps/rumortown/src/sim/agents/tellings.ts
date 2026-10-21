@@ -97,23 +97,25 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
           : listenerKnows
             ? `${listenerName} has heard it already`
             : `${listenerName} has not heard it yet`;
-    best = {
-      claim,
-      act,
-      score,
-      utility,
-      terms: [
-        { text: `${percent(confidence)} sure ${claim.text}`, value: confidence },
-        { text: listenerTerm, value: 0.3 * closenessSL + (claim.target === l ? 0.3 : 0) },
-      ],
-    };
+    // Decompose the very same tellScore and utility used above, including trait scaling and cap.
+    const factor = claim.valence < 0 ? (1 - 0.2 * (t.honesty - 0.5)) * (1 + 0.2 * (t.extraversion - 0.5)) : 1;
+    const base = (0.3 - 0.4 * tellThreshold) * factor;
+    const terms: Term[] = [
+      { text: `${percent(confidence)} sure ${claim.text}`, value: base + 0.4 * confidence * factor },
+      { text: listenerTerm, value: 0.4 * (0.3 * closenessSL - (listenerKnows ? 0.6 : 0) - (claim.valence < 0 ? 0.3 * closenessLT : 0)) * factor },
+      { text: claim.valence < 0 ? 'a harmful story draws attention' : 'a story worth hearing', value: 0.4 * ((claim.valence < 0 ? Math.log(ctx.tuning.negativitySharingOdds) : 0) + 0.2 * claim.severity / 3) * factor },
+    ];
+    if (act === 'defend') terms.push({ text: 'the truth sets the record straight', value: 0.25 });
+    const uncapped = terms.reduce((sum, term) => sum + term.value, 0);
+    if (uncapped > TELL_CAP) for (const term of terms) term.value *= TELL_CAP / uncapped;
+    best = { claim, act, score, utility, terms };
   }
   return best;
 }
 
 /**
  * Grounds for confronting the subject of a harmful claim: the believer is the one wronged, has two
- * independent sources, is close to the one wronged, or is close to the subject and goes to ask.
+ * independent sources, or is close to the one wronged.
  */
 export function confrontReason(ctx: Ctx, agent: Agent, claim: GameClaim): Term | null {
   const me = agent.d.id;
@@ -122,9 +124,6 @@ export function confrontReason(ctx: Ctx, agent: Agent, claim: GameClaim): Term |
   if (sources >= 2) return { text: `heard it from ${sources} people separately`, value: 0.25 };
   if (claim.target && ctx.rel.closeness(me, claim.target) >= CLOSE) {
     return { text: `${nameOf(ctx, claim.target, true)} is a friend and was wronged`, value: 0.2 };
-  }
-  if (ctx.rel.closeness(me, claim.about) >= CLOSE) {
-    return { text: `${nameOf(ctx, claim.about, true)} is a friend and deserves a straight question`, value: 0.2 };
   }
   return null;
 }

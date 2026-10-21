@@ -1,6 +1,7 @@
 /** The dossier schedule, walking to places and to people. */
 import type { Activity, Place, PlaceId, ScheduleEntry, Vec2 } from '../types.js';
 import { tileOf, visibleActivity, type Agent, type Ctx, type Goal } from './context.js';
+import { leaveConversation } from './conversation.js';
 import { TALK_RANGE } from './params.js';
 import { minuteOfDay } from './text.js';
 
@@ -135,7 +136,13 @@ export function updateSchedule(ctx: Ctx, agent: Agent): void {
   const idx = currentEntryIndex(agent.d.schedule, minuteOfDay(ctx.tick));
   if (idx === agent.entryIndex) return;
   agent.entryIndex = idx;
-  if (agent.conversation !== null) return;
+  if (agent.conversation !== null) {
+    const conv = ctx.conversations.find((c) => c.id === agent.conversation && !c.ended);
+    agent.goal = { kind: 'schedule', since: ctx.tick };
+    if (conv) leaveConversation(ctx, conv, agent);
+    else { agent.conversation = null; followSchedule(ctx, agent); }
+    return;
+  }
   if (agent.goal.kind === 'schedule' || agent.goal.kind === 'need' || agent.goal.kind === 'avoid') followSchedule(ctx, agent);
 }
 

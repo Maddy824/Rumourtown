@@ -11,17 +11,16 @@ import { remember } from './reflection.js';
 import { changeTrust, exposeTrust } from './relations.js';
 import { dayOf, STRANGER_ID } from './text.js';
 
-/** Once per claim per day. `witness` is the villager whose belief first-hand evidence just corrected. */
+/** Once per affected villager per claim per day. `witness` is the villager whose belief first-hand evidence just corrected. */
 export function exposeStranger(ctx: Ctx, claim: GameClaim, witness: Agent): void {
   const sc = strangerClaimOf(ctx, claim.id);
   if (!sc) return;
   sc.correctedFirsthand.add(witness.d.id);
   const day = dayOf(ctx.tick);
-  if (sc.exposedDay === day) return;
-  sc.exposedDay = day;
   const why = `The story that ${claim.text} came from the stranger and did not hold up`;
   for (const a of ctx.agents) {
-    if (!remembersStranger(a, claim.id)) continue;
+    if (!remembersStranger(a, claim.id) || sc.exposedVillagers.get(a.d.id) === day) continue;
+    sc.exposedVillagers.set(a.d.id, day);
     exposeTrust(ctx, a.d.id, STRANGER_ID, TRUST.strangerExposed, why);
     sc.trustLost = true;
     a.mood.add(MOOD.liedTo.label, MOOD.liedTo.delta, ctx.tick + MOOD.liedTo.ticks);

@@ -40,7 +40,7 @@ import {
   TRUST,
   UTILITY_JITTER,
 } from './params.js';
-import { hasFirsthand, knownAlternative } from './provenance.js';
+import { hasFirsthand, independentSources, knownAlternative } from './provenance.js';
 import { changeAffinity, changeTrust } from './relations.js';
 import { remember } from './reflection.js';
 import { considerForgiveness, repairTrust } from './repair.js';
@@ -113,6 +113,7 @@ export function startConversation(ctx: Ctx, a: Agent, b: Agent, intent: boolean)
     accusation: null,
     topic: null,
     ended: false,
+    farewellTo: null,
   };
   ctx.conversations.push(conv);
   enter(conv, a);
@@ -127,9 +128,14 @@ function enter(conv: Conversation, agent: Agent): void {
   agent.activity = 'talk';
 }
 
-export function joinConversation(conv: Conversation, agent: Agent): void {
+export function joinConversation(ctx: Ctx, conv: Conversation, agent: Agent): boolean {
+  if (conv.ended || agent.conversation !== null || isAsleep(agent) || conv.members.length >= MAX_GROUP || conv.members.some((id) => {
+    const member = agentOf(ctx, id);
+    return !member || dist(ctx, agent, member) > TALK_RANGE;
+  })) return false;
   enter(conv, agent);
   conv.maxLines = Math.min(MAX_LINES, Math.max(conv.maxLines, conv.lines + 3));
+  return true;
 }
 
 function exit(ctx: Ctx, agent: Agent, others: readonly VillagerId[]): void {
@@ -145,6 +151,10 @@ function exit(ctx: Ctx, agent: Agent, others: readonly VillagerId[]): void {
     if (!followSchedule(ctx, agent)) agent.activity = 'idle';
     return;
   }
+  if (agent.goal.kind === 'schedule') {
+    if (!followSchedule(ctx, agent)) agent.activity = 'idle';
+    return;
+  }
   agent.activity = restingActivity(agent);
   resumeGoal(ctx, agent);
 }
@@ -154,7 +164,8 @@ export function leaveConversation(ctx: Ctx, conv: Conversation, agent: Agent): v
   conv.members = others;
   conv.queue = conv.queue.filter((q) => q.speaker !== agent.d.id && q.listener !== agent.d.id);
   exit(ctx, agent, others);
-  if (conv.members.length < 2) endConversation(ctx, conv);
+  conv.farewellTo = agent.d.id;
+  if (conv.members.length === 0) endConversation(ctx, conv);
 }
 
 export function endConversation(ctx: Ctx, conv: Conversation): void {
@@ -170,6 +181,14 @@ export function endConversation(ctx: Ctx, conv: Conversation): void {
 
 export function tickConversations(ctx: Ctx): void {
   for (const conv of ctx.conversations) if (!conv.ended) advance(ctx, conv);
+  // Each nearby hearer gets a public response, independently of the four-person conversation.
+  let pending = 0;
+  for (const response of ctx.publicResponses) {
+    if (response.readyTick > ctx.tick) { ctx.publicResponses[pending++] = response; continue; }
+    resolveSide(ctx, response.conversation, response.line);
+    speak(ctx, response.conversation, response.line);
+  }
+  ctx.publicResponses.length = pending;
   let w = 0;
   for (const conv of ctx.conversations) if (!conv.ended) ctx.conversations[w++] = conv;
   ctx.conversations.length = w;
@@ -179,6 +198,10 @@ export function tickConversations(ctx: Ctx): void {
 function advance(ctx: Ctx, conv: Conversation): void {
   const members = membersOf(ctx, conv);
   if (members.length < 2) {
+    if (members[0] && conv.farewellTo && conv.lines > 0) {
+      speak(ctx, conv, { speaker: members[0].d.id, listener: conv.farewellTo, act: 'farewell', why: 'time to go' });
+      conv.lines++;
+    }
     endConversation(ctx, conv);
     return;
   }
@@ -194,16 +217,16 @@ function nextLine(ctx: Ctx, conv: Conversation, members: Agent[]): QueuedLine {
   const first = members[0]!;
   const second = members[1]!;
   if (conv.lines === 0) return { speaker: first.d.id, listener: second.d.id, act: 'greet', why: 'a greeting' };
+  if (conv.lines >= conv.maxLines - 1) {
+    const s = pickSpeaker(conv, members);
+    const l = members.find((m) => m !== s) ?? s;
+    return { speaker: s.d.id, listener: l.d.id, act: 'farewell', why: 'time to go' };
+  }
   while (conv.queue.length) {
     const q = conv.queue.shift()!;
     if (!conv.members.includes(q.speaker) || !conv.members.includes(q.listener)) continue;
     if (q.decideSide) resolveSide(ctx, conv, q);
     return q;
-  }
-  if (conv.lines >= conv.maxLines - 1) {
-    const s = pickSpeaker(conv, members);
-    const l = members.find((m) => m !== s) ?? s;
-    return { speaker: s.d.id, listener: l.d.id, act: 'farewell', why: 'time to go' };
   }
   for (const m of members) {
     const intent = intentLine(ctx, conv, m, members);
@@ -228,9 +251,9 @@ function intentLine(ctx: Ctx, conv: Conversation, m: Agent, members: Agent[]): Q
   switch (g.kind) {
     case 'confront': {
       const claim = g.claimId !== undefined ? ctx.claims.get(g.claimId) : undefined;
-      if (!claim || m.accusedToday.has(`${claim.id}|${target.d.id}`) || conv.lines > LAST_ACCUSE_LINE + 1) return null;
+      if (!claim || m.accusedToday.has(`${claim.id}|${target.d.id}`) || conv.lines > LAST_ACCUSE_LINE) return null;
       const conf = m.ledger.confidence(claim.id);
-      if (conf < CONFRONT_BELIEF || !accusationOpen(ctx, claim.id, target.d.id)) return null;
+      if (conf <= CONFRONT_BELIEF || !confrontReason(ctx, m, claim) || !accusationOpen(ctx, claim.id, target.d.id)) return null;
       return { speaker: m.d.id, listener: target.d.id, act: 'accuse', claimId: claim.id, why: `${percent(conf)} sure ${claim.text}; came to have it out` };
     }
     case 'apologize': {
@@ -264,7 +287,7 @@ function chooseLine(ctx: Ctx, conv: Conversation, speaker: Agent, members: Agent
     for (const t of others) {
       for (const claim of harmfulClaimsAbout(ctx, speaker, t.d.id)) {
         const conf = speaker.ledger.confidence(claim.id);
-        if (conf < CONFRONT_BELIEF || speaker.accusedToday.has(`${claim.id}|${t.d.id}`) || !accusationOpen(ctx, claim.id, t.d.id)) continue;
+        if (conf <= CONFRONT_BELIEF || speaker.accusedToday.has(`${claim.id}|${t.d.id}`) || !accusationOpen(ctx, claim.id, t.d.id)) continue;
         const reason = confrontReason(ctx, speaker, claim);
         if (!reason) continue;
         cands.push({
@@ -283,7 +306,7 @@ function chooseLine(ctx: Ctx, conv: Conversation, speaker: Agent, members: Agent
       const conf = speaker.ledger.confidence(claim.id);
       const trustIn = ctx.rel.trust(me, teller);
       const tellerName = nameOf(ctx, teller, true);
-      if (conf >= 0.7) {
+      if (conf > CONFRONT_BELIEF && independentSources(speaker, claim.id) >= 2) {
         cands.push({
           line: { speaker: me, listener: teller, act: 'agree', claimId: claim.id, why: '' },
           score: 0.6 + 0.3 * (conf - 0.7),
@@ -357,7 +380,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
     key.topic = conv.topic;
   }
   const spoken = ctx.talk.say(key, ctx.rng);
-  const listeners = conv.members.filter((id) => id !== speaker.d.id);
+  const listeners = audienceOf(ctx, conv, speaker, listener, line.act === 'accuse');
   if (claim) emit(ctx, { kind: 'line', tick: ctx.tick, speaker: speaker.d.id, listeners, act: line.act, text: spoken.text, lineId: spoken.lineId, claimId: claim.id });
   else emit(ctx, { kind: 'line', tick: ctx.tick, speaker: speaker.d.id, listeners, act: line.act, text: spoken.text, lineId: spoken.lineId });
   speaker.bubble = { text: spoken.text, untilTick: ctx.tick + BUBBLE_TICKS, to: listener.d.id };
@@ -412,7 +435,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
 /** Everyone present hears the claim; `evidence` marks a public, first-hand account. */
 function spreadClaim(ctx: Ctx, conv: Conversation, speaker: Agent, claim: GameClaim, evidence: boolean): void {
   const speakerName = nameOf(ctx, speaker.d.id, true);
-  for (const id of conv.members) {
+  for (const id of audienceOf(ctx, conv, speaker)) {
     if (id === speaker.d.id) continue;
     const m = agentOf(ctx, id);
     if (!m) continue;
@@ -420,6 +443,25 @@ function spreadClaim(ctx: Ctx, conv: Conversation, speaker: Agent, claim: GameCl
     if (r && claim.valence < 0) remember(ctx, m, IMPORTANCE.heardRumor, `${speakerName} said ${claim.text}`, `There is talk that ${claim.text}`, claim.about);
   }
   conv.lastClaim = { claimId: claim.id, speaker: speaker.d.id };
+}
+
+/** Members plus hearers of a public accusation and its responses, without admitting the crowd. */
+function audienceOf(ctx: Ctx, conv: Conversation, speaker: Agent, listener?: Agent, accusation = false): VillagerId[] {
+  const isPublic = accusation || conv.accusation?.isPublic;
+  const memberSpeaking = conv.members.includes(speaker.d.id);
+  const audience: VillagerId[] = [];
+  for (const a of ctx.agents) {
+    if (a === speaker) continue;
+    if (memberSpeaking && conv.members.includes(a.d.id)) {
+      audience.push(a.d.id);
+      continue;
+    }
+    if (!isPublic || isAsleep(a)) continue;
+    const hearsSpeaker = dist(ctx, a, speaker) <= PUBLIC_RANGE && ctx.world.lineOfSight(a.mover.pos, speaker.mover.pos);
+    const hearsAccusation = accusation && listener && dist(ctx, a, listener) <= PUBLIC_RANGE && ctx.world.lineOfSight(a.mover.pos, listener.mover.pos);
+    if (hearsSpeaker || hearsAccusation) audience.push(a.d.id);
+  }
+  return audience;
 }
 
 /** Private means just the two of them, with no third villager within earshot. */
@@ -434,23 +476,9 @@ function isPublicAround(ctx: Ctx, conv: Conversation, a: Agent, b: Agent): boole
 
 function onAccuse(ctx: Ctx, conv: Conversation, accuser: Agent, accused: Agent, claim: GameClaim): void {
   const isPublic = isPublicAround(ctx, conv, accuser, accused);
-  const bystanders: Agent[] = [];
-  for (const id of conv.members) {
-    if (id === accuser.d.id || id === accused.d.id) continue;
-    const b = agentOf(ctx, id);
-    if (b) bystanders.push(b);
-  }
-  // Villagers within earshot overhear; they join if there is room, so they can take a side.
-  for (const o of ctx.agents) {
-    if (o.conversation !== null || isAsleep(o) || o === accuser || o === accused) continue;
-    if (dist(ctx, o, accused) > PUBLIC_RANGE || !ctx.world.lineOfSight(o.mover.pos, accused.mover.pos)) continue;
-    if (conv.members.length < MAX_GROUP) {
-      joinConversation(conv, o);
-      bystanders.push(o);
-    } else {
-      hearFrom(ctx, accuser, o, claim, false);
-    }
-  }
+  const bystanders = audienceOf(ctx, conv, accuser, accused, true)
+    .filter((id) => id !== accused.d.id)
+    .map((id) => agentOf(ctx, id)!).filter(Boolean);
   const record: AccusationRecord = {
     claimId: claim.id,
     accuser: accuser.d.id,
@@ -487,10 +515,10 @@ function onAccuse(ctx: Ctx, conv: Conversation, accuser: Agent, accused: Agent, 
   let act: SpeechAct;
   let why: string;
   let claimId = claim.id;
-  if (alt && honesty >= 0.5 && (!isPublic || (honesty >= 0.7 && agreeableness < 0.6))) {
+  if (alt && honesty >= 0.5 && !isPublic) {
     act = 'explain';
     claimId = alt.id;
-    why = `Knows what really happened: ${alt.text}; ${isPublic ? 'honest enough to say so in front of everyone' : 'it is just the two of them'}`;
+    why = `Knows what really happened: ${alt.text}; it is just the two of them`;
   } else if (isPublic && agreeableness >= 0.6) {
     act = 'refuse';
     why = 'Accused in front of everyone; will not have it out in public';
@@ -500,7 +528,10 @@ function onAccuse(ctx: Ctx, conv: Conversation, accuser: Agent, accused: Agent, 
   }
   conv.queue.push({ speaker: accused.d.id, listener: accuser.d.id, act, claimId, why });
   for (const b of bystanders) {
-    conv.queue.push({ speaker: b.d.id, listener: accuser.d.id, act: 'doubt', claimId: claim.id, why: '', decideSide: { accuser: accuser.d.id, accused: accused.d.id, claimId: claim.id } });
+    const line: QueuedLine = { speaker: b.d.id, listener: accuser.d.id, act: 'doubt', claimId: claim.id, why: '',
+      decideSide: { accuser: accuser.d.id, accused: accused.d.id, claimId: claim.id } };
+    if (conv.members.includes(b.d.id)) conv.queue.push(line);
+    else ctx.publicResponses.push({ conversation: conv, readyTick: ctx.tick + 2, line });
   }
   conv.maxLines = Math.min(MAX_LINES, Math.max(conv.maxLines, conv.lines + 1 + conv.queue.length + 1));
 }
@@ -535,7 +566,7 @@ function onDefend(ctx: Ctx, conv: Conversation, defender: Agent, claim: GameClai
   if (claim.valence >= 0) {
     spreadClaim(ctx, conv, defender, claim, isPublic && hasFirsthand(defender, claim.id));
   } else {
-    for (const id of conv.members) {
+    for (const id of audienceOf(ctx, conv, defender)) {
       if (id === defender.d.id) continue;
       const m = agentOf(ctx, id);
       if (m) correctBelief(ctx, m, claim.id, ctx.rel.trust(m.d.id, defender.d.id) * 0.5, false, defender.d.id, false);
@@ -554,7 +585,7 @@ function onDefend(ctx: Ctx, conv: Conversation, defender: Agent, claim: GameClai
 }
 
 function onDeny(ctx: Ctx, conv: Conversation, accused: Agent, claim: GameClaim): void {
-  for (const id of conv.members) {
+  for (const id of audienceOf(ctx, conv, accused)) {
     if (id === accused.d.id) continue;
     const m = agentOf(ctx, id);
     if (m) correctBelief(ctx, m, claim.id, ctx.rel.trust(m.d.id, accused.d.id), false, accused.d.id, false);
@@ -632,8 +663,7 @@ function tryStartConversations(ctx: Ctx): void {
         if (t.conversation !== null) {
           const conv = ctx.conversations.find((c) => c.id === t.conversation && !c.ended);
           if (conv && conv.members.length < MAX_GROUP) {
-            joinConversation(conv, a);
-            continue;
+            if (joinConversation(ctx, conv, a)) continue;
           }
         } else {
           startConversation(ctx, a, t, true);
@@ -678,10 +708,7 @@ function tryStartConversations(ctx: Ctx): void {
         }
       }
       if (!near) continue;
-      if (ctx.rng() < 0.25) {
-        joinConversation(conv, a);
-        break;
-      }
+      if (ctx.rng() < 0.25 && joinConversation(ctx, conv, a)) break;
     }
   }
 }

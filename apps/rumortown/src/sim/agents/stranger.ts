@@ -54,7 +54,7 @@ export function whisper(ctx: Ctx, listenerId: VillagerId, claimId: ClaimId, forc
       backedAccuser: new Set(),
       backedAccused: new Set(),
       correctedFirsthand: new Set(),
-      exposedDay: null,
+      exposedVillagers: new Map(),
       trustLost: false,
     });
   }

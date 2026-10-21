@@ -2,7 +2,7 @@
  * The simulation: twenty-four rule-driven villagers living a day, one game-minute per step.
  * Deterministic for a seed. Wires the modules under ./agents/ and satisfies the Simulation contract.
  */
-import { BeliefLedger, clamp, createRng, DEFAULT_TUNING, logit, Relationships, type ClaimId, type Tuning } from 'rumormind';
+import { BeliefLedger, createRng, DEFAULT_TUNING, Relationships, type ClaimId, type Tuning } from 'rumormind';
 import { emit, isAsleep, visibleActivity, type Agent, type Ctx } from './agents/context.js';
 import { tickConversations } from './agents/conversation.js';
 import { judgeDay } from './agents/endings.js';
@@ -53,8 +53,11 @@ function seedKnowledge(ctx: Ctx, agent: Agent): void {
   for (const k of agent.d.knows ?? []) {
     const c = ctx.claims.get(k.claimId);
     if (!c || agent.ledger.knows(c.id)) continue;
-    const lo = logit(clamp(k.confidence, 0.01, 0.99));
-    agent.ledger.beliefs.set(c.id, { claimId: c.id, logOdds: lo, peakLogOdds: lo, exposures: 1, provenance: [{ kind: 'saw', source: 'self', origin: 'self', tick: 0, delta: lo }] });
+    const participant = c.about === agent.d.id || (ctx.castMap.get(c.about)?.secrets.some(
+      (secret) => secret.with === agent.d.id && secret.confirms.includes(c.kind),
+    ) ?? false);
+    if (participant) agent.ledger.see(c, ctx.claims, 0, k.confidence);
+    else agent.ledger.hear(c, ctx.claims, { source: 'villager', trust: 0.6, strength: k.confidence, tick: 0 });
   }
 }
 
@@ -87,6 +90,8 @@ export function createSimulation(opts: SimulationOptions): Simulation {
     events: [],
     threads: [],
     conversations: [],
+    publicResponses: [],
+    transmissionChains: new WeakMap(),
     accusations: [],
     strangerClaims: [],
     player: { mover: makeMover(start) },
@@ -161,7 +166,7 @@ export function createSimulation(opts: SimulationOptions): Simulation {
   applyPending();
 
   const endDay = (): void => {
-    const dayIndex = Math.floor(ctx.tick / MINUTES_PER_DAY);
+    const dayIndex = Math.floor(ctx.tick / MINUTES_PER_DAY) - 1;
     const verdict = judgeDay(ctx);
     emit(ctx, { kind: 'day-end', tick: ctx.tick, dayIndex, summary: verdict.summary, ending: verdict.ending });
     for (const a of agents) {
@@ -208,7 +213,7 @@ export function createSimulation(opts: SimulationOptions): Simulation {
       a.mood.expire(ctx.tick);
       if (a.bubble && a.bubble.untilTick <= ctx.tick) a.bubble = undefined;
     }
-    if ((ctx.tick + 1) % MINUTES_PER_DAY === 0) endDay();
+    if (ctx.tick % MINUTES_PER_DAY === 0) endDay();
     // The UI records a live whisper at `sim.tick` once the step has run, so a replayed one lands here.
     applyPending();
   };

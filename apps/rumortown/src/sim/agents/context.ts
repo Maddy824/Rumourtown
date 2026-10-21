@@ -2,7 +2,7 @@
  * The engine's shared state. Every module takes a `Ctx` and iterates `agents` in cast order,
  * so results never depend on Map or Set iteration order.
  */
-import type { BeliefLedger, ClaimId, Relationships, Rng, Tuning } from 'rumormind';
+import type { BeliefLedger, ClaimId, Relationships, Rng, Tuning, Provenance } from 'rumormind';
 import type {
   Activity,
   DecisionView,
@@ -59,7 +59,7 @@ export interface Agent {
   /** Newest first, at most DECISIONS_KEPT. */
   readonly decisions: DecisionView[];
   readonly memories: Memory[];
-  readonly opinions: string[];
+  readonly opinions: DecisionView[];
   readonly lastTalk: Map<VillagerId, Tick>;
   /** `${claimId}|${accused}` for accusations already made today. */
   readonly accusedToday: Set<string>;
@@ -99,7 +99,8 @@ export interface StrangerClaim {
   backedAccused: Set<VillagerId>;
   /** Villagers whose belief in the claim was corrected by first-hand evidence. */
   correctedFirsthand: Set<VillagerId>;
-  exposedDay: number | null;
+  /** Last day each villager was penalized for this claim. */
+  exposedVillagers: Map<VillagerId, number>;
   trustLost: boolean;
 }
 
@@ -128,6 +129,13 @@ export interface Conversation {
   accusation: AccusationRecord | null;
   topic: string | null;
   ended: boolean;
+  farewellTo: VillagerId | null;
+}
+
+export interface ChainEntry {
+  tick: Tick;
+  text: string;
+  evidence: Provenance;
 }
 
 export interface Ctx {
@@ -146,6 +154,10 @@ export interface Ctx {
   readonly events: SimEvent[];
   readonly threads: ThreadLink[];
   readonly conversations: Conversation[];
+  /** Public reactions are separate utterances, not conversation membership or turns. */
+  readonly publicResponses: { conversation: Conversation; line: QueuedLine; readyTick: Tick }[];
+  /** Immutable evidence available to a teller immediately before each hearing. */
+  readonly transmissionChains: WeakMap<Provenance, readonly ChainEntry[]>;
   readonly accusations: AccusationRecord[];
   readonly strangerClaims: StrangerClaim[];
   readonly player: { mover: Mover };

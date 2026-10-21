@@ -1,11 +1,9 @@
 /** The tag the player opens on a villager: beliefs with their chain, relations with reasons, moods, decisions. */
 import type { Provenance } from 'rumormind';
 import type { BeliefView, Inspection, RelationView } from '../types.js';
-import { agentOf, nameOf, relKey, visibleActivity, type Agent, type Ctx } from './context.js';
+import { nameOf, relKey, visibleActivity, type Agent, type Ctx, type ChainEntry } from './context.js';
 import { independentSources } from './provenance.js';
 import { clock, STRANGER_ID } from './text.js';
-
-const MAX_DEPTH = 6;
 
 /**
  * The UI parses exactly two shapes, "X told Y at HH:MM" and "Y saw it at HH:MM", so corrections
@@ -23,27 +21,22 @@ function describe(ctx: Ctx, agent: Agent, p: Provenance): string | null {
   }
 }
 
-/** Oldest first: the teller's own trail (recursively), then this villager's. */
-function trace(ctx: Ctx, agent: Agent, claimId: string, out: string[], visited: Set<string>, depth: number): void {
-  if (depth > MAX_DEPTH || visited.has(agent.d.id)) return;
-  visited.add(agent.d.id);
-  const b = agent.ledger.beliefs.get(claimId);
-  if (!b) return;
-  const first = b.provenance.find((p) => p.kind === 'heard');
-  if (first && first.source !== 'self' && first.source !== STRANGER_ID) {
-    const src = agentOf(ctx, first.source);
-    if (src) trace(ctx, src, claimId, out, visited, depth + 1);
+/** Evidence snapshots preserve causal order even when a teller learns more later in the same tick. */
+export function chainEntries(ctx: Ctx, agent: Agent, claimId: string): ChainEntry[] {
+  const out: ChainEntry[] = [];
+  const seen = new Set<Provenance>();
+  for (const p of agent.ledger.beliefs.get(claimId)?.provenance ?? []) {
+    for (const entry of ctx.transmissionChains.get(p) ?? []) {
+      if (!seen.has(entry.evidence)) { seen.add(entry.evidence); out.push(entry); }
+    }
+    const text = describe(ctx, agent, p);
+    if (text !== null && !seen.has(p)) { seen.add(p); out.push({ tick: p.tick, text, evidence: p }); }
   }
-  for (const p of b.provenance) {
-    const line = describe(ctx, agent, p);
-    if (line !== null) out.push(line);
-  }
+  return out.sort((a, b) => a.tick - b.tick);
 }
 
 export function chainFor(ctx: Ctx, agent: Agent, claimId: string): string[] {
-  const out: string[] = [];
-  trace(ctx, agent, claimId, out, new Set(), 0);
-  return out;
+  return chainEntries(ctx, agent, claimId).map((entry) => entry.text);
 }
 
 export function inspectAgent(ctx: Ctx, agent: Agent): Inspection {
@@ -77,6 +70,8 @@ export function inspectAgent(ctx: Ctx, agent: Agent): Inspection {
     relations,
     trustInStranger: ctx.rel.trust(agent.d.id, STRANGER_ID),
     moods: agent.mood.list(ctx.tick),
-    decisions: agent.decisions.slice(),
+    decisions: agent.decisions.some((d) => d.action === 'reflect') || !agent.opinions.length
+      ? agent.decisions.slice()
+      : [...agent.decisions.slice(0, 4), agent.opinions[agent.opinions.length - 1]!],
   };
 }

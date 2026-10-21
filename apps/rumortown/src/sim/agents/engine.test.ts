@@ -90,11 +90,12 @@ describe('createSimulation', () => {
     expect(b.independentSources).toBe(1);
   });
 
-  it('a harmful whisper to a close friend of the subject leads to a confrontation within 300 ticks', () => {
+  it('a harmful whisper to a friend of the victim leads to a confrontation within 300 ticks', () => {
     const cast = createFakeCast(11);
     const mira = cast.find((d) => d.id === 'mira')!;
-    mira.closeTo = ['tom'];
-    const sim = make(11, cast);
+    mira.closeTo = ['ada'];
+    cast.find((d) => d.id === 'tom')!.traits.agreeableness = 0.2;
+    const sim = make(11, cast, CLAIMS.map((c) => c.id === 'stole' ? { ...c, target: 'ada' } : c));
     // One telling lands near 0.65 by design; the stranger keeps at it until Mira is sure enough to act.
     let tries = 0;
     while (belief(sim, 'mira', 'stole') <= 0.75 && tries < 8) {
@@ -109,12 +110,11 @@ describe('createSimulation', () => {
     const events = sim.events(from);
     const decided = events.find((e) => e.kind === 'action' && e.villager === 'mira' && e.action === 'confront Tom');
     expect(decided).toBeDefined();
-    // Mira is both the one wronged and Tom's friend; the victim reason ranks first.
-    if (decided && decided.kind === 'action') expect(decided.why).toMatch(/^\d+% sure Tom stole bread from the bakery; (it happened to her|Tom is a friend)/);
+    if (decided && decided.kind === 'action') expect(decided.why).toContain('Ada is a friend and was wronged');
     const accusation = events.find((e) => e.kind === 'line' && e.act === 'accuse' && e.speaker === 'mira' && e.listeners.includes('tom'));
     expect(accusation).toBeDefined();
     // Tom answers in the next line and feels it.
-    const answer = events.find((e) => e.kind === 'line' && e.speaker === 'tom' && (e.act === 'deny' || e.act === 'explain' || e.act === 'refuse') && e.tick > accusation!.tick);
+    const answer = events.find((e) => e.kind === 'line' && e.speaker === 'tom' && e.act === 'deny' && e.tick > accusation!.tick);
     expect(answer).toBeDefined();
     expect(sim.inspect('tom').relations.find((r) => r.to === 'mira')!.why).toMatch(/accused him/);
     expect(events.some((e) => e.kind === 'mood' && e.villager === 'tom' && /accused/.test(e.label))).toBe(true);
@@ -153,17 +153,16 @@ describe('createSimulation', () => {
 
   it('replays interventions at their ticks, after the step that reaches them, as the UI records them', () => {
     const live = make(9);
-    expect(walkTo(live, 'mira')).toBe(true);
-    live.step();
+    const pos = live.snapshot().villagers.find((v) => v.id === 'mira')!.pos;
+    live.movePlayer({ x: Math.floor(pos.x), y: Math.floor(pos.y) });
+    run(live, 5);
     const at = live.tick;
     expect(live.whisper('mira', 'stole')).toBe(true);
     run(live, 150);
     const replay = createSimulation({ seed: 9, cast: createFakeCast(9), claims: CLAIMS, world: world(), talk, interventions: live.interventions() });
     run(replay, at + 150);
     expect(replay.interventions()).toEqual(live.interventions());
-    expect(replay.events(at).filter((e) => e.kind !== 'line' || e.act !== 'reactToWhisper').map((e) => e.kind + e.tick)).toEqual(
-      live.events(at).filter((e) => e.kind !== 'line' || e.act !== 'reactToWhisper').map((e) => e.kind + e.tick),
-    );
+    expect(replay.events(at)).toEqual(live.events(at));
     expect(replay.inspect('mira').beliefs).toEqual(live.inspect('mira').beliefs);
   });
 
@@ -173,9 +172,10 @@ describe('createSimulation', () => {
     run(sim, 900);
     const elapsed = performance.now() - t0;
     expect(elapsed).toBeLessThan(1500);
-    const dayEnd = sim.events(899).find((e) => e.kind === 'day-end');
+    const dayEnd = sim.events(900).find((e) => e.kind === 'day-end');
     expect(dayEnd).toBeDefined();
     if (dayEnd && dayEnd.kind === 'day-end') {
+      expect(dayEnd.tick).toBe(900);
       expect(dayEnd.dayIndex).toBe(0);
       expect(dayEnd.ending).toBe('quiet');
       expect(dayEnd.summary.length).toBeGreaterThan(20);
