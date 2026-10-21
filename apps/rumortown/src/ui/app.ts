@@ -141,7 +141,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const canvas = h('canvas', {
     class: 'rt-world',
     tabindex: '0',
-    role: 'application',
+    role: 'img',
     'aria-label': 'The village. Arrow keys or W, A, S and D walk you one tile at a time. Enter opens the tag of the nearest villager. Space pauses.',
   });
   const focusFrame = h('div', { class: 'rt-focus-frame', 'aria-hidden': 'true' });
@@ -150,6 +150,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const bubbleLayer = h('div', { class: 'rt-bubbles', 'aria-hidden': 'true' });
   const marker = h('div', { class: 'rt-marker', 'aria-hidden': 'true', hidden: true });
   const live = h('div', { class: 'sr-only', 'aria-live': 'polite' });
+  const actionLive = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
+  const villagers = h('details', { class: 'villager-index', 'aria-label': 'Villagers' },
+    h('summary', null, 'Meet the villagers'),
+    h('ul', null, [...sim.cast.values()].map(d => h('li', null,
+      h('button', { type: 'button', class: 'button button-quiet', onclick: (ev: Event) => openTag(d.id, true, ev.currentTarget as Element) }, `${d.name}, ${d.role}`)))));
 
   const dial = dialArt();
   const timeText = h('span', { class: 'clock-time' });
@@ -341,7 +346,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   });
 
   const bottom = h('div', { class: 'rt-bottom' }, postbox, prompt, time.bar, time.tab);
-  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, bottom, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, rewind, toast, live);
+  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, rewind, toast, live, actionLive);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
@@ -472,6 +477,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function doWhisper(listener: VillagerId, claimId: ClaimId): boolean {
     if (rewinding) return false;
     if (!sim.whisper(listener, claimId)) return false;
+    actionLive.textContent = `You whispered to ${sim.cast.get(listener)?.name ?? listener}: ${sim.claims.get(claimId)?.text ?? 'a village story'}.`;
     interventions.push({ tick: sim.tick, listener, claimId });
     interventions.sort((a, b) => a.tick - b.tick);
     written = writeShareToLocation(shareState());
@@ -534,6 +540,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   }
 
   function showDayEnd(ev: DayEndEvent): void {
+    actionLive.textContent = `End of day ${ev.dayIndex + 1}. ${ev.summary}`;
     hold('dayend');
     hideToast();
     closeSheetsForPhone('');

@@ -1,2 +1,6 @@
 import { defineConfig } from 'vitest/config';
-export default defineConfig({ test: { include: ['packages/**/*.test.ts', 'apps/**/*.test.ts'], exclude: ['**/node_modules/**', 'spike/**'] } });
+export default defineConfig({ test: {
+  include: ['packages/**/*.test.ts', 'apps/**/*.test.ts'],
+  exclude: ['**/node_modules/**', 'spike/**'],
+  css: { include: [/app\.css/] },
+} });
