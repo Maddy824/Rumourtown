@@ -35,6 +35,22 @@ afterAll(() => rmSync(output, { recursive: true, force: true }));
 describe.each(['source', 'build'] as const)('%s HTML', location => {
   const read = (page: string) => readFileSync(join(location === 'source' ? root : output, page), 'utf8');
 
+  it('ships browser security headers while allowing the game assets, API and Turnstile', () => {
+    const headers = read(location === 'source' ? 'public/_headers' : '_headers');
+    const global = headers.split('\n/*\n')[1]!;
+    expect(global).toContain('X-Content-Type-Options: nosniff');
+    expect(global).toContain('Strict-Transport-Security: max-age=31536000');
+    expect(global).toContain('X-Frame-Options: DENY');
+    const csp: string = global.split('Content-Security-Policy: ')[1]!.split('\n')[0]!;
+    const directives = Object.fromEntries(csp.split(';').map(part => { const [name, ...sources] = part.trim().split(/\s+/u); return [name, sources]; }));
+    expect(directives['default-src']).toEqual(["'self'"]);
+    expect(directives['script-src']).toEqual(["'self'", 'https://challenges.cloudflare.com', 'https://static.cloudflareinsights.com']);
+    expect(directives['connect-src']).toEqual(["'self'", 'https://api.rumourtown.dev', 'https://challenges.cloudflare.com', 'https://cloudflareinsights.com']);
+    expect(directives['frame-src']).toEqual(['https://challenges.cloudflare.com']);
+    expect(directives['img-src']).toEqual(["'self'", 'data:', 'blob:']);
+    for (const directive of ['object-src', 'base-uri', 'frame-ancestors']) expect(directives[directive]).toEqual(["'none'"]);
+  });
+
   it.each([
     ['index.html', 'Rumourtown: a village that gossips', 'https://rumourtown.dev/'],
     ['about.html', 'How Rumourtown works', 'https://rumourtown.dev/about'],

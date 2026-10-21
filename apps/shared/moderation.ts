@@ -7,7 +7,8 @@ const patterns = [...slurs, ...sexual].map(word => ({ word,
 
 /** Worker normalization, also joining spaced letters in blocked words without joining whole sentences. */
 export function normaliseSharedText(text: string): string {
-  let lower = text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, '').replace(/\s+/gu, ' ').trim();
+  let lower = text.normalize('NFKC').toLowerCase().replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ').replace(/\s+/gu, ' ').trim();
   for (const { word, pattern } of patterns) lower = lower.replace(pattern, word);
   return lower;
 }

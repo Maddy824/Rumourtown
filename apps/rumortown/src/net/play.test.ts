@@ -7,3 +7,8 @@ it('rejects unrecognized model actions and destinations before the UI offers the
     expect(readPlayReply({ ...reply, ...changed }, ['square'], ['mira'])).toBeNull();
   }
 });
+
+it.each(['<script>alert(1)</script>', '<img src=x onerror=alert(1)>', 'hidden\ncommand', 'porn,visitor'])(
+  'rejects markup, controls and blocked model prose: %s', reply => {
+    expect(readPlayReply({ reply, action: 'none', target: '' }, ['square'], ['mira'])).toBeNull();
+  });

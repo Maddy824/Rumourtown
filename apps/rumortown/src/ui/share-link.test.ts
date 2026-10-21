@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import type { ShareState } from '../sim/types.js';
 import { decodeShare, encodeShare, shareUrl, writeShareToLocation } from './share-link.js';
 
-const rawEncode = (state: ShareState): string => btoa(JSON.stringify(state)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const rawEncode = (state: unknown): string => btoa(JSON.stringify(state)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const state = (count: number): ShareState => ({
   v: 1, seed: 42, cast: 'v1',
   interventions: Array.from({ length: count }, (_, tick) => ({ tick, listener: 'mira', claimId: 'theft-tom' })),
@@ -11,6 +11,18 @@ const state = (count: number): ShareState => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('share link size agreement', () => {
+  it('rejects hostile replay shapes and strips fields outside the replay format', () => {
+    const original = state(1);
+    for (const changed of [{ seed: -1 }, { seed: Number.MAX_SAFE_INTEGER }, { interventions: [{}] },
+      { interventions: [{ tick: 1000001, listener: 'mira', claimId: 'theft-tom' }] },
+      { interventions: [{ tick: 0, listener: '<img src=x>', claimId: 'theft-tom' }] },
+      { interventions: [{ tick: 0, listener: 'mira', claimId: 'javascript:alert(1)' }] },
+      { v: 2, start: 1440 }]) {
+      expect(decodeShare(rawEncode({ ...original, ...changed }))).toBeNull();
+    }
+    expect(decodeShare(rawEncode({ ...original, instructions: '<script>alert(1)</script>' }))).toEqual(original);
+    expect(decodeShare(btoa('['.repeat(5000) + ']'.repeat(5000)))).toBeNull();
+  });
   it('round-trips an ordinary state', () => {
     const original = state(3);
     expect(decodeShare(encodeShare(original))).toEqual(original);

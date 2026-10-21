@@ -11,6 +11,7 @@ import { villageMap } from '../content/map/index.js';
 import { createOpening } from './opening.js';
 import type { Layers } from './layers.js';
 import type { SimEvent } from '../sim/types.js';
+import { h } from './dom.js';
 
 vi.mock('./faces.js', () => ({ faceImg: () => document.createElement('img') }));
 vi.mock('../render/sprites.js', () => ({ SpriteCache: class {
@@ -53,6 +54,17 @@ function paperDocument(reduced = false) {
 }
 const stack = () => ({ open: vi.fn(), closed: vi.fn() }) as unknown as Layers;
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it('renders hostile story, model and villager text as text nodes', () => {
+  paperDocument();
+  const text = '<img src=x onerror=alert(1)><script>alert(1)</script>';
+  const element = h('p', null, text, h('strong', null, text)) as unknown as PaperElement;
+  expect(element.textContent).toBe(text + text);
+  expect(element.children[0]!.tagName).toBe('#text');
+  expect(element.children[1]!.children[0]!.tagName).toBe('#text');
+  expect(element.querySelectorAll('script')).toEqual([]);
+  expect(element.querySelectorAll('img')).toEqual([]);
+});
 
 it('places dawn and night on absolute ticks when the last timeline day is partial', () => {
   paperDocument(); Object.assign(window, { addEventListener() {} });

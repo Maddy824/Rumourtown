@@ -1,4 +1,5 @@
 import { mentionedPeople, type WhisperPerson } from './whisper-grounding';
+import { blockedSharedText } from './moderation';
 
 export const MAX_RUMOR_TEXT = 100;
 export interface RumorMeaning {
@@ -19,7 +20,7 @@ export function readRumorMeaning(value: unknown, text: string, cast: readonly Wh
   const v = value as Record<string, unknown>;
   if (Object.keys(v).length !== keys.length || !keys.every(key => Object.hasOwn(v, key)) ||
       ![-1, 0, 1].includes(v.valence as number) || ![1, 2, 3].includes(v.severity as number) ||
-      typeof v.question !== 'string' || v.question.length > 72 || /[\u0000-\u001f\u007f<>]/u.test(v.question)) return null;
+      typeof v.question !== 'string' || v.question.length > 72 || /[\u0000-\u001f\u007f<>]/u.test(v.question) || blockedSharedText(v.question)) return null;
   const mentions = mentionedPeople(text, cast);
   for (const person of [v.actor, v.affected]) {
     if (person !== null && (typeof person !== 'string' ||

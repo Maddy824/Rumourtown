@@ -1,4 +1,5 @@
 import cast from './cast.json';
+import { blockedSharedText } from '../../shared/moderation';
 import { record } from './types';
 
 const ids = cast.map(person => person.id);
@@ -16,8 +17,9 @@ export interface PlayContext {
 const short = (value: unknown, max: number): value is string => typeof value === 'string' && value.length <= max && !/[\u0000-\u001f\u007f]/u.test(value);
 const exact = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 export function readPlayContext(value: unknown): PlayContext | null {
-  const keys = Object.hasOwn(value as object, 'facts') ? ['speaker', 'nearby', 'places', 'voice', 'history', 'facts'] : ['speaker', 'nearby', 'places', 'voice', 'history'];
-  if (!record(value) || !exact(value, keys) ||
+  if (!record(value)) return null;
+  const keys = Object.hasOwn(value, 'facts') ? ['speaker', 'nearby', 'places', 'voice', 'history', 'facts'] : ['speaker', 'nearby', 'places', 'voice', 'history'];
+  if (!exact(value, keys) ||
       value.speaker !== null && (typeof value.speaker !== 'string' || !ids.includes(value.speaker)) ||
       !short(value.voice, 700) || !Array.isArray(value.nearby) || value.nearby.length > 8 ||
       !Array.isArray(value.places) || value.places.length > 100 || !Array.isArray(value.history) || value.history.length > 3) return null;
@@ -35,7 +37,7 @@ export const playSchema = {
   required: ['reply', 'action', 'target'],
 };
 export function validatePlay(value: unknown, context: PlayContext): PlayReply | null {
-  if (!record(value) || !exact(value, ['reply', 'action', 'target']) || !short(value.reply, 240) || !value.reply.trim() ||
+  if (!record(value) || !exact(value, ['reply', 'action', 'target']) || !short(value.reply, 240) || !value.reply.trim() || /[<>]/u.test(value.reply) || blockedSharedText(value.reply) ||
       typeof value.action !== 'string' || !(actions as readonly string[]).includes(value.action) || !short(value.target, 64)) return null;
   if (value.action === 'move' ? !context.places.some(p => p.id === value.target) :
       value.action === 'approach' ? !ids.includes(value.target) : value.target !== '') return null;

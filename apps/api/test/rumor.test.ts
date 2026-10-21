@@ -61,4 +61,22 @@ describe('open rumor inference', () => {
     expect(run).not.toHaveBeenCalled();
     expect((await worker.fetch(new Request('https://api.test/rumor', { method: 'OPTIONS', headers: { Origin: origin } }), env)).status).toBe(204);
   });
+  it.each(['porn,Tom', 'Tom,sex', 'Tom said f.u.c.k', 'Tom said f\u200bu\u200bc\u200bk'])(
+    'rejects blocked story prose before Turnstile, ledger or model: %s', async text => {
+      const { worker, env, run, mock, store } = await setup();
+      expect((await worker.fetch(request(text), env)).status).toBe(400);
+      expect(run).not.toHaveBeenCalled();
+      expect(mock.calls).toHaveLength(0);
+      expect(store.calls).toHaveLength(0);
+    });
+  it('rejects blocked generated questions from both inference tiers and settles the paid attempt', async () => {
+    const output = { ...meaning, question: 'porn,Tom?' };
+    const { worker, env, store, run, mock } = await setup(output);
+    expect(validateRumor(output, 'someone killed tom')).toBeNull();
+    expect(await (await worker.fetch(request(), env)).json()).toEqual({ reason: 'invalid' });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(mock.calls.filter(c => c.url.includes('completions'))).toHaveLength(1);
+    expect(store.calls.filter(c => c.method === 'settle')).toHaveLength(1);
+    expect(store.calls.some(c => c.method === 'cachePut')).toBe(false);
+  });
 });

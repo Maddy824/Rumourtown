@@ -1,4 +1,5 @@
 import { apiBase, fields, record } from './types.js';
+import { blockedSharedText } from '../../../shared/moderation.js';
 export interface PlayContext {
   speaker: string | null;
   nearby: { id: string; activity: string; mood: number }[];
@@ -11,7 +12,7 @@ export interface PlayContext {
 export interface PlayReply { reply: string; action: 'none' | 'move' | 'approach' | 'pause' | 'resume' | 'look'; target: string }
 export function readPlayReply(value: unknown, places: readonly string[], people: readonly string[]): PlayReply | null {
   if (!record(value) || !fields(value, ['reply', 'action', 'target'], ['reply', 'action', 'target']) ||
-      typeof value.reply !== 'string' || !value.reply.trim() || value.reply.length > 240 || /[\u0000-\u001f\u007f]/u.test(value.reply) ||
+      typeof value.reply !== 'string' || !value.reply.trim() || value.reply.length > 240 || /[\u0000-\u001f\u007f<>]/u.test(value.reply) || blockedSharedText(value.reply) ||
       typeof value.target !== 'string' || value.target.length > 64 || typeof value.action !== 'string' ||
       !['none', 'move', 'approach', 'pause', 'resume', 'look'].includes(value.action)) return null;
   if (value.action === 'move' ? !places.includes(value.target) : value.action === 'approach' ? !people.includes(value.target) : value.target !== '') return null;

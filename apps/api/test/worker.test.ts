@@ -18,6 +18,52 @@ function setup(config: Partial<Env> = {}, output: unknown = provider()) {
 afterEach(() => { vi.useRealTimers(); for (const s of stores.splice(0)) s.db.close(); });
 
 describe('Worker routes', () => {
+  it.each(['/interpret', '/rumor', '/play'])('cannot reset the hourly %s allowance by rotating User-Agent', async path => {
+    const output = path === '/play' ? { reply: 'Hello there.', action: 'none', target: '' } : path === '/rumor'
+      ? { actor: 'mira', affected: 'tom', valence: -1, severity: 2, question: 'Who saw it?' } : good;
+    const { worker, env, mock, s } = setup({ PER_VISITOR_PER_HOUR: '1', PLAY_PER_VISITOR_PER_HOUR: '1' }, provider(output));
+    const body = (i: number) => path === '/play'
+      ? { text: `hello ${i}`, turnstileToken: 'test-token', context: { speaker: null, nearby: [], places: [], voice: '', history: [] } }
+      : { text: `Mira stole bread from Tom ${i}`, turnstileToken: 'test-token', ...(path === '/interpret' ? { castVersion: 'v1' } : {}) };
+    const request = (i: number) => new Request(`https://api.test${path}`, { method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1', 'User-Agent': `rotating-${i}` }, body: JSON.stringify(body(i)) });
+    expect((await worker.fetch(request(1), env)).status).toBe(200);
+    const denied = await worker.fetch(request(2), env);
+    expect(denied.status).toBe(429);
+    expect(await denied.json()).toEqual({ reason: 'limit-visitor' });
+    expect(mock.calls.filter(c => c.url.includes('completions'))).toHaveLength(1);
+    const holds = s.calls.filter(c => c.method === 'reserve');
+    expect(holds[0]?.body.visitorKey).toBe(holds[1]?.body.visitorKey);
+  });
+  it.each(['/interpret', '/rumor', '/play'])('rejects client overrides of money controls on %s before external work', async path => {
+    for (const override of [{ kind: 'play' }, { model: 'unpriced-model' }, { max_tokens: 1000000 }, { now: 0 }]) {
+      const { worker, env, mock, s } = setup();
+      const request = new Request(`https://api.test${path}`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Mira stole bread from Tom', turnstileToken: 'test-token',
+          ...(path === '/interpret' ? { castVersion: 'v1' } : path === '/play' ? { context: { speaker: null, nearby: [], places: [], voice: '', history: [] } } : {}), ...override }) });
+      expect((await worker.fetch(request, env)).status).toBeGreaterThanOrEqual(400);
+      expect(mock.calls).toHaveLength(0);
+      expect(s.calls).toHaveLength(0);
+    }
+  });
+  it('sets security headers on successful, denied, error and preflight responses', async () => {
+    const { worker, env } = setup();
+    const requests = [
+      new Request('https://api.test/health', { headers: { Origin: origin } }),
+      new Request('https://api.test/health'),
+      new Request('https://api.test/missing', { headers: { Origin: origin } }),
+      new Request('https://api.test/play', { method: 'OPTIONS', headers: { Origin: origin } }),
+      interpretRequest('', {}),
+    ];
+    for (const request of requests) {
+      const response = await worker.fetch(request, env);
+      expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+      expect(response.headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    }
+  });
   it('rejects the reported unknown-killer rumor before any model or cache lookup', async () => {
     const { worker, env, mock, s } = setup({}, provider({ ...good, kind: 'kindness', about: 'rosa', target: 'ada', valence: 1 }));
     const response = await worker.fetch(interpretRequest('someone killed tom'), env);
@@ -185,6 +231,12 @@ describe('fail-closed execution and billing', () => {
     const { env } = setup();
     const worker = createWorker({ fetch: (async () => Response.json({ success: true, hostname: 'evil.test' })) as Fetcher });
     expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ reason: 'turnstile' });
+  });
+  it.each([undefined, null, true, 123])('requires the expected Turnstile hostname even on success (%#)', async hostname => {
+    const { env, s } = setup();
+    const worker = createWorker({ fetch: (async () => Response.json({ success: true, hostname })) as Fetcher });
+    expect(await (await worker.fetch(interpretRequest(), env)).json()).toEqual({ reason: 'turnstile' });
+    expect(s.calls).toHaveLength(0);
   });
   it('returns ledger if namespace throws and never calls the model', async () => {
     const { worker, env, mock } = setup();

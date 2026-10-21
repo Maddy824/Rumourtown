@@ -53,7 +53,7 @@ async function turnstile(request: Request, token: string, env: Env, fetcher: Fet
     const response = await fetcher('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body, signal: controller.signal });
     const result: unknown = await response.json();
     if (!response.ok || !record(result) || result.success !== true) throw new Error('turnstile');
-    if (typeof result.hostname === 'string' && result.hostname !== new URL(request.headers.get('Origin')!).hostname) throw new Error('hostname');
+    if (result.hostname !== new URL(request.headers.get('Origin')!).hostname) throw new Error('hostname');
   } catch { throw new Failure('turnstile'); }
   finally { clearTimeout(timer); }
 }
@@ -129,7 +129,8 @@ async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () =>
   if (!env.AI) openRouterBody();
   // Conversation is counted separately from stories, so chatting never uses up a visitor's story allowance.
   const kind = route === 'play' ? 'play' : 'story';
-  const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', request.headers.get('User-Agent') ?? '', kind]));
+  // User-Agent is caller-controlled and must not create a fresh hourly allowance.
+  const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', kind]));
   const reserved = await ledger(env, 'reserve', { visitorKey, worstCaseUsd, now: now(), kind });
   if (reserved.ok === false && ['limit-visitor', 'limit-global', 'budget'].includes(reserved.reason as string)) {
     const reason = reserved.reason as FailureReason;
@@ -197,9 +198,15 @@ async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () =>
 export function createWorker(deps: Dependencies = {}) {
   return {
     async fetch(request: Request, env: Env, ctx?: Pick<ExecutionContext, 'waitUntil'>): Promise<Response> {
+      const securityHeaders = {
+        'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+        'Strict-Transport-Security': 'max-age=31536000', 'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
+      };
       const origin = request.headers.get('Origin');
-      if (!env.ALLOWED_ORIGIN || !origin || !allowedOrigins(env).includes(origin)) return Response.json({ reason: 'invalid' }, { status: 403, headers: { Vary: 'Origin' } });
+      if (!env.ALLOWED_ORIGIN || !origin || !allowedOrigins(env).includes(origin)) return Response.json({ reason: 'invalid' }, { status: 403, headers: { ...securityHeaders, Vary: 'Origin', 'Cache-Control': 'no-store' } });
       const headers = {
+        ...securityHeaders,
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400',
@@ -224,7 +231,7 @@ export function createWorker(deps: Dependencies = {}) {
           if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken'].includes(key)) ||
               typeof input.turnstileToken !== 'string' || !input.turnstileToken.trim() || input.turnstileToken.length > 2048) throw new Failure('invalid', 400);
           const text = rumorText(input.text);
-          if (!text) throw new Failure('invalid', 400);
+          if (!text || blockedReason(text)) throw new Failure('invalid', 400);
           await turnstile(request, input.turnstileToken, env, deps.fetch ?? fetch);
           usage.track = true;
           // No raw story, generated question or annotations enter a shared server cache.
