@@ -19,6 +19,7 @@ import { drawCurrent } from './water.js';
 import { IdleQueue } from './idle.js';
 import { signVisible, type PresentationOptions } from './presentation.js';
 import { daylight, drawDaylight, drawShadow, type TintContext } from './daylight.js';
+import { drawNight } from './night.js'; // 22: night wiring, applied last.
 import { drawBuildingLight, drawOccupiedSmoke, occupiedBuildings } from './lighting.js';
 import { paperTag, type PaperTag } from './paper.js';
 import { BOARD_PAD } from './board.js';
@@ -615,6 +616,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       }
     }
 
+    drawNight(ctx, map, cur, camera, view, options, occupied); // 22: night wiring, applied last.
     drawOccupiedSmoke(ctx, buildings, occupied, view, camera);
     drawBuildingLight(ctx, buildings, map, occupied, view, light, camera);
     drawDaylight(lightCtx, camera.width, camera.height, { ...light, vignette: zoom >= CLOSE_ZOOM ? .06 : Math.max(.12, light.vignette) });

@@ -27,10 +27,10 @@ describe('daylight', () => {
     expect(Math.abs(a.multiplyAlpha - b.multiplyAlpha)).toBeLessThan(0.01);
   });
 
-  it('holds the nearest keyframe outside the day and tolerates bad input', () => {
-    expect(at(3)).toEqual(at(7));
-    expect(at(23, 30)).toEqual(at(22));
-    expect(daylight(Number.NaN)).toEqual(at(7));
+  it('joins the midnight endpoints and tolerates bad input', () => {
+    expect(at(3).multiplyAlpha).toBe(.7);
+    expect(at(23, 30).multiplyAlpha).toBe(.62);
+    expect(daylight(Number.NaN)).toEqual(at(0));
   });
 
   it('draws two tint passes and a vignette with blend modes, restoring the context', () => {

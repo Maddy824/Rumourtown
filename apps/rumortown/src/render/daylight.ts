@@ -35,12 +35,19 @@ const KEYS: readonly Key[] = [
   { minute: 18 * 60, multiply: hex('#F7D9A8'), multiplyAlpha: 0.1, softLight: hex('#F2B45A'), softLightAlpha: 0.28, vignette: 0.08, shadow: { dx: 0.12, dy: 0.15, alpha: 0.2 }, windows: 0.5 },
   { minute: 20 * 60, multiply: hex('#3F5E8A'), multiplyAlpha: 0.35, softLight: hex('#8FA6D3'), softLightAlpha: 0.15, vignette: 0.18, shadow: { dx: 0.1, dy: 0.12, alpha: 0.12 }, windows: 1 },
   { minute: 22 * 60, multiply: hex('#2E4066'), multiplyAlpha: 0.5, softLight: hex('#7E93C4'), softLightAlpha: 0.12, vignette: 0.25, shadow: { dx: 0.08, dy: 0.1, alpha: 0.08 }, windows: 1 },
-];
+  // Night keys append to the existing daylight score; the endpoints meet at midnight.
+  { minute: 23 * 60 + 30, multiply: hex('#1E2A4A'), multiplyAlpha: .62, softLight: hex('#5B6FA6'), softLightAlpha: .14, vignette: .3, shadow: { dx: .05, dy: .07, alpha: .06 }, windows: 1 },
+  { minute: 0, multiply: hex('#1E2A4A'), multiplyAlpha: .6333333333333333, softLight: hex('#5B6FA6'), softLightAlpha: .14, vignette: .3, shadow: { dx: .05, dy: .07, alpha: .06 }, windows: 1 },
+  { minute: 3 * 60, multiply: hex('#1E2A4A'), multiplyAlpha: .7, softLight: hex('#5B6FA6'), softLightAlpha: .14, vignette: .3, shadow: { dx: .05, dy: .07, alpha: .06 }, windows: 1 },
+  { minute: 5 * 60, multiply: hex('#3F5E8A'), multiplyAlpha: .48, softLight: hex('#8FA6D3'), softLightAlpha: .2, vignette: .2, shadow: { dx: .05, dy: .08, alpha: .08 }, windows: .8 },
+  { minute: 6 * 60, multiply: hex('#8FA6D3'), multiplyAlpha: .2, softLight: hex('#F2B9A0'), softLightAlpha: .22, vignette: .1, shadow: { dx: .07, dy: .1, alpha: .12 }, windows: .45 },
+  { minute: 24 * 60, multiply: hex('#1E2A4A'), multiplyAlpha: .6333333333333333, softLight: hex('#5B6FA6'), softLightAlpha: .14, vignette: .3, shadow: { dx: .05, dy: .07, alpha: .06 }, windows: 1 },
+].sort((a, b) => a.minute - b.minute);
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 const lerpRgb = (a: Rgb, b: Rgb, t: number): Rgb => ({ r: Math.round(lerp(a.r, b.r, t)), g: Math.round(lerp(a.g, b.g, t)), b: Math.round(lerp(a.b, b.b, t)) });
 
-/** The light at `minuteOfDay` (minutes since midnight). Outside 07:00–22:00 the nearest keyframe holds. */
+/** The light at `minuteOfDay`; the appended endpoints meet continuously at midnight. */
 export function daylight(minuteOfDay: number): Daylight {
   const first = KEYS[0]!;
   const last = KEYS[KEYS.length - 1]!;

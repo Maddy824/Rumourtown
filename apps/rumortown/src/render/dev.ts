@@ -369,7 +369,8 @@ const devApi = {
   },
   /** Freeze any clock light without advancing the driver or touching simulation state. */
   minute(value: number) {
-    current = { ...current, minuteOfDay: Math.max(420, Math.min(1320, value)) };
+    if (!Number.isFinite(value)) return;
+    current = { ...current, minuteOfDay: ((value % 1440) + 1440) % 1440 };
     previous = current;
   },
   /** Hit-tests every villager at its body centre; returns the misses and what empty ground gives. */
