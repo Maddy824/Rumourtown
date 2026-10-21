@@ -48,5 +48,6 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 11 | Expand the world and cast | done; 36 residents, 42 places, four districts, two bridges and new replay verified |
 | 12 | Easier controls, local agents and credit controls | done; developer tools, $0 local planner, bounded replay API and yearly pacing verified; owner deferred phone activation |
 | 13 | Prepare delivery and optional API for larger audiences | done; CDN cache policy, independent deployment, early admission, bounded inputs, edge cache and retention verified locally; production capacity remains unmeasured |
+| 14 | A town you can read: legibility, wayfinding and flow | implemented A–E; local checks pass; directory commits blocked by read-only `.git`; browser review pending, see report |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.

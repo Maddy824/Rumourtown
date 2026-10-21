@@ -14,6 +14,7 @@ import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
 import { hashString, makeCork, makeGrain } from './grain.js';
 import { INK, MUSTARD, PAPER, mix, rgba } from './palette.js';
+import { conversationGroups } from './conversations.js';
 import { drawCurrent } from './water.js';
 import { IdleQueue } from './idle.js';
 
@@ -388,7 +389,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
   }
 
-  function drawPlayer(cur: WorldSnapshot, layerZoom: number, stretch: number, now: number): void {
+  function drawPlayer(cur: WorldSnapshot, layerZoom: number, stretch: number, now: number, reducedMotion: boolean): void {
     const zoom = view.zoom;
     const x = view.ox + playerX * zoom;
     const y = view.oy + playerY * zoom;
@@ -397,14 +398,17 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (!sp) return;
     // A persistent gold footprint makes the controllable traveller easy to find.
     ctx.save();
-    ctx.fillStyle = MUSTARD;
-    ctx.strokeStyle = PAPER;
+    const pulse = reducedMotion ? 1 : 1 + .06 * Math.sin(now / 700);
+    ctx.fillStyle = rgba(MUSTARD, .25);
+    ctx.strokeStyle = MUSTARD;
+    ctx.setLineDash([Math.max(1, zoom * .1), Math.max(1, zoom * .065)]);
     ctx.lineWidth = Math.max(1, zoom * .045);
     ctx.beginPath();
-    ctx.ellipse(x, y, zoom * .38, zoom * .16, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, zoom * .48 * pulse, zoom * .23 * pulse, 0, 0, Math.PI * 2);
     ctx.fill(); ctx.stroke();
-    if (zoom >= 14) {
-      ctx.font = `700 ${Math.max(10, zoom * .33)}px sans-serif`;
+    ctx.setLineDash([]);
+    if (zoom > 0) {
+      ctx.font = `700 ${Math.max(10, zoom * .33)}px 'Bricolage Grotesque', sans-serif`;
       ctx.textAlign = 'center';
       ctx.lineWidth = 3;
       ctx.strokeStyle = PAPER; ctx.fillStyle = INK;
@@ -484,6 +488,15 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (view.ox > 0.5 || view.oy > 0.5 || mapRight < camera.width - 0.5 || mapBottom < camera.height - 0.5) drawTable(camera);
     drawGround(layer, stretch, camera);
     drawCurrent(ctx, map, camera, view.ox, view.oy, options.reducedMotion ? 0 : now / 1000);
+    const groups = conversationGroups(cur, { x: playerX, y: playerY });
+    groups.forEach((g, rank) => {
+      ctx.save(); ctx.fillStyle = PAPER; ctx.globalAlpha = rank < 3 ? .25 : .125;
+      for (const id of g.ids) {
+        const i = curIndex.get(id); if (i === undefined) continue;
+        ctx.beginPath(); ctx.ellipse(view.ox + fx[i]! * zoom, view.oy + fy[i]! * zoom, zoom * .65, zoom * .28, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    });
     if (options.selected) drawSelection(cur, options.selected);
 
     // Depth-sorted pass: trees and roofs from the layer, villagers and the stranger.
@@ -499,7 +512,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera, cur, options.selected, layer.zoom);
       else if (vY <= pY) drawVillager(cur, order[vi++] as number, layer.zoom, stretch, now, camera);
       else {
-        drawPlayer(cur, layer.zoom, stretch, now);
+        drawPlayer(cur, layer.zoom, stretch, now, options.reducedMotion);
         playerDone = true;
       }
     }

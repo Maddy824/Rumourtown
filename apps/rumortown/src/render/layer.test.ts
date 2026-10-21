@@ -24,6 +24,7 @@ beforeEach(() => {
       createLinearGradient: () => { command(); return gradient; },
       createRadialGradient: () => { command(); return gradient; },
       getTransform: () => ({ a: 1 }),
+      measureText: (text: string) => { command(); return { width: text.length * 7 }; },
     }, { get: (target, key) => Reflect.get(target, key) ?? command });
     return { width: 0, height: 0, getContext: () => context };
   } });

@@ -17,6 +17,7 @@ function canvasStub(): HTMLCanvasElement & { blits: Blit[] } {
     drawImage(image: unknown, ...args: number[]) { blits.push({ image, args, alpha: state.globalAlpha }); },
     save() { alphas.push(state.globalAlpha); },
     restore() { state.globalAlpha = alphas.pop() ?? 1; },
+    measureText: (text: string) => ({ width: text.length * 7 }),
     createPattern: () => ({}),
     createLinearGradient: () => gradient,
     createRadialGradient: () => gradient,

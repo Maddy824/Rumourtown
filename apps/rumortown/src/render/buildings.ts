@@ -21,6 +21,7 @@ export interface Building {
   h: number;
   kind: BuildingKind;
   id: string;
+  name?: string;
   /** Door tiles in this building's top wall: the façade gets a doorway there. */
   topDoors: number[];
   /** True if the building touches water on its east or west side (a water mill). */
@@ -71,6 +72,7 @@ export function findBuildings(map: VillageMap): Building[] {
       h: c.h,
       kind,
       id: best?.id ?? `building-${c.x}-${c.y}`,
+      name: best?.name,
       topDoors,
       waterSide: east > 0 ? 'e' : west > 0 ? 'w' : null,
     });

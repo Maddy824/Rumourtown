@@ -5,6 +5,7 @@ import type { ClaimId } from 'rumormind';
 import { createWrittenClaim, MAX_WRITTEN_TEXT } from '../sim/registered-claim.js';
 import type { GameClaim, Simulation, VillagerId, VillagerView, WorldSnapshot } from '../sim/types.js';
 import { conceal, h, reveal } from './dom.js';
+import { CORE_PEOPLE } from './name-labels.js';
 import { faceImg } from './faces.js';
 import { glyphSvg } from './glyphs.js';
 import { closeIcon } from './icons.js';
@@ -33,14 +34,16 @@ export interface WhisperSheet {
   destroy(): void;
 }
 
-export function inReach(snap: WorldSnapshot): VillagerView[] {
+export function nearbyPeople(snap: WorldSnapshot, range = 6): VillagerView[] {
   const p = snap.player.pos;
   return snap.villagers
     .map((v) => ({ v, d: Math.hypot(v.pos.x - p.x, v.pos.y - p.y) }))
-    .filter((x) => x.d <= WHISPER_RANGE)
-    .sort((a, b) => a.d - b.d)
+    .filter((x) => x.d <= range)
+    .sort((a, b) => a.d - b.d || (a.v.id < b.v.id ? -1 : a.v.id > b.v.id ? 1 : 0))
     .map((x) => x.v);
 }
+
+export const inReach = (snap: WorldSnapshot): VillagerView[] => nearbyPeople(snap, WHISPER_RANGE);
 
 export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const content = h('div', { class: 'whisper-content' });
@@ -120,23 +123,20 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     feedback.textContent = '';
     listener = preferred && near.some((v) => v.id === preferred) ? preferred : near[0]?.id ?? null;
 
+    const nearby = nearbyPeople(snap);
+    const listed = nearby.length ? nearby : snap.villagers.filter(v => (CORE_PEOPLE as readonly string[]).includes(v.id));
+    const people = h('div', { class: 'nearby-people' },
+      nearby.length ? h('p', { class: 'sheet-note' }, 'People within six tiles, nearest first.')
+        : h('p', { class: 'whisper-empty-lead' }, 'Nobody is close. Walk to the square or tap a name.'),
+      listed.map(v => {
+        const distance = Math.hypot(v.pos.x - snap.player.pos.x, v.pos.y - snap.player.pos.y);
+        return h('div', { class: 'nearby-person' }, faceImg(v.id, v.look, 34),
+          h('span', null, h('strong', null, v.name), h('small', null, `${sim.cast.get(v.id)?.role ?? 'Neighbour'}, ${distance.toFixed(1)} tiles`)),
+          h('button', { class: 'button button-quiet walk-to', type: 'button', 'aria-label': `Walk to ${v.name}`, onclick: () => { api.close(); ctx.walkTo(v.id); } }, 'Walk to'));
+      }));
     if (near.length === 0) {
-      const p = snap.player.pos;
-      const nearest = [...snap.villagers]
-        .sort((a, b) => Math.hypot(a.pos.x - p.x, a.pos.y - p.y) - Math.hypot(b.pos.x - p.x, b.pos.y - p.y))
-        .slice(0, 3);
-      content.replaceChildren(
-        h('div', { class: 'whisper-empty' },
-          h('p', { class: 'whisper-empty-lead' }, 'Walk closer to someone first.'),
-          h('p', null, ctx.isPhone() ? 'Tap the village to walk there, or go to someone nearby:' : 'Click the village or use the arrow keys to walk, or go to someone nearby:'),
-          h('div', { class: 'walk-list' },
-            nearest.map((v) =>
-              h('button', { class: 'button button-quiet walk-to', type: 'button', onclick: () => { api.close(); ctx.walkTo(v.id); } },
-                faceImg(v.id, v.look, 24), `Walk to ${v.name}`)))));
-      form.dataset.empty = 'true';
-      claimId = null;
-      update();
-      return;
+      content.replaceChildren(people);
+      form.dataset.empty = 'true'; claimId = null; update(); return;
     }
 
     form.dataset.empty = 'false';
@@ -232,13 +232,13 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       what.querySelectorAll<HTMLInputElement>('input').forEach((input) => { input.checked = false; });
       describe();
     });
-    const suggestions = h('details', { class: 'whisper-suggestions' }, h('summary', null, 'Or choose a village story'), what);
-    content.replaceChildren(who,
+    const suggestions = h('details', { class: 'whisper-suggestions', open: true }, h('summary', null, 'Choose a village story'), what);
+    content.replaceChildren(people, who, suggestions,
       h('label', { class: 'own-claim', for: 'rt-own-story' }, h('span', null, 'Write your whisper'), typed),
       h('p', { class: 'sheet-note' }, 'Write it in your own words. Choose how the villagers should treat it.'),
       h('div', { class: 'story-meaning' },
         h('label', null, 'About', aboutSelect), h('label', null, 'Kind of story', meaningSelect), h('label', null, 'Weight', weightSelect)),
-      preview, suggestions);
+      preview);
     describe();
     update();
   };
@@ -254,7 +254,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         ctx.onOpenChange(true);
       }
       // Start with writing; with nobody in reach, offer the first walk-to button.
-      const target = ['.own-claim textarea', '.walk-to', '.close']
+      const target = ['.whisper-what input', '.walk-to', '.close']
         .map((sel) => el.querySelector<HTMLElement>(sel))
         .find((x): x is HTMLElement => x !== null);
       target?.focus({ preventScroll: true });

@@ -4,10 +4,12 @@ import { CONDITIONS, eventsCsv, exportRun, observe, pairedExperiment, SOURCES, t
 import { h, svg } from './dom.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
+import { districtAt, districtViews, buildingIcons } from '../content/map/wayfinding.js';
+import { CORE_PEOPLE } from './name-labels.js';
 import { activityText, tickClock } from './format.js';
 
 type Mode = 'explore' | 'research';
-const colours: Record<string, string> = { grass: '#87936a', path: '#d5bc8b', water: '#2c7480', bridge: '#ae8052', field: '#9c9b52', floor: '#eee0bf', door: '#b49062', wall: '#705b50', tree: '#46694b', well: '#575e61' };
+const colours: Record<string, string> = { grass: '#6B8E4E', path: '#E8DCC3', water: '#3F5E8A', bridge: '#b7a785', field: '#a5a25f', floor: '#E8DCC3', door: '#b7a785', wall: '#A3323B', tree: '#5e7d45', well: '#2E2A22' };
 
 export function createFieldGuide(ctx: {
   sim: () => Simulation; snapshot: () => WorldSnapshot; map: VillageMap;
@@ -23,29 +25,49 @@ export function createFieldGuide(ctx: {
   tabs.append(exploreTab, researchTab);
 
   const mapEl = svg('svg', { class: 'atlas-map', viewBox: `0 0 ${ctx.map.width * 10} ${ctx.map.height * 10}`, role: 'img', 'aria-label': 'Live village map. Use the destination buttons below to travel by keyboard.' });
+  const defs = svg('defs', null,
+    svg('pattern', { id: 'atlas-cobbles', width: 8, height: 6, patternUnits: 'userSpaceOnUse' }, svg('rect', { width: 8, height: 6, fill: '#E8DCC3' }), svg('path', { d: 'M0 0H8V6H0Z M4 0V6', fill: 'none', stroke: '#b7a785', 'stroke-width': .6, 'stroke-dasharray': '1 1' })),
+    svg('pattern', { id: 'atlas-fields', width: 6, height: 6, patternUnits: 'userSpaceOnUse' }, svg('rect', { width: 6, height: 6, fill: '#89a56e' }), svg('path', { d: 'M0 2H6M0 5H6', stroke: '#6B8E4E', 'stroke-width': 1 })),
+    svg('pattern', { id: 'atlas-woods', width: 10, height: 10, patternUnits: 'userSpaceOnUse' }, svg('rect', { width: 10, height: 10, fill: '#5e7d45' }), svg('circle', { cx: 3, cy: 3, r: 2, fill: '#6B8E4E' }), svg('circle', { cx: 8, cy: 8, r: 2.5, fill: '#4c6b37' })));
+  mapEl.append(defs);
   // Run-length rows keep the static map small; live markers are updated in place.
   for (let y = 0; y < ctx.map.height; y++) for (let x = 0; x < ctx.map.width;) {
     const tile = ctx.map.tiles[y * ctx.map.width + x]!;
     let end = x + 1;
-    while (end < ctx.map.width && ctx.map.tiles[y * ctx.map.width + end] === tile) end++;
-    mapEl.append(svg('rect', { x: x * 10, y: y * 10, width: (end - x) * 10, height: 10, fill: colours[tile] ?? colours.grass }));
+    const district = districtAt({ x, y });
+    while (end < ctx.map.width && ctx.map.tiles[y * ctx.map.width + end] === tile && districtAt({ x: end, y }) === district) end++;
+    mapEl.append(svg('rect', { x: x * 10, y: y * 10, width: (end - x) * 10, height: 10, fill: tile === 'grass' ? district === 'commons' ? 'url(#atlas-fields)' : district === 'woodland' ? 'url(#atlas-woods)' : districtViews.find(d => d.id === district)!.ground : tile === 'path' && district === 'old-village' ? 'url(#atlas-cobbles)' : colours[tile] ?? colours.grass }));
     x = end;
+  }
+  for (const district of districtViews) {
+    const w = district.name.length * 8 + 16;
+    mapEl.append(svg('g', { class: 'atlas-district', 'data-destination': district.id, transform: `translate(${district.tag.x * 10} ${district.tag.y * 10})` },
+      svg('rect', { x: -w / 2, y: -12, width: w, height: 23, rx: 2, fill: '#F6F0E4', stroke: '#2E2A22', 'stroke-width': .8, 'stroke-dasharray': '2 2' }),
+      svg('text', { 'text-anchor': 'middle', y: 4, fill: '#2E2A22', 'font-size': 16, 'font-weight': 700 }, district.name)));
+  }
+  for (const place of ctx.map.places.filter(p => buildingIcons[p.kind])) {
+    const name = `${buildingIcons[place.kind]} ${place.name}`;
+    const w = name.length * 6.5 + 10;
+    const cx = Math.max(w / 2 + 2, Math.min(ctx.map.width * 10 - w / 2 - 2, (place.rect.x + place.rect.w / 2) * 10));
+    mapEl.append(svg('g', { class: 'atlas-building', 'data-place': place.id, transform: `translate(${cx} ${(place.rect.y + place.rect.h / 2) * 10})` },
+      svg('rect', { x: -w / 2, y: -9, width: w, height: 18, rx: 2, fill: '#F6F0E4', stroke: '#2E2A22', 'stroke-width': .5 }),
+      svg('text', { 'text-anchor': 'middle', y: 4, fill: '#2E2A22', 'font-size': 12, 'font-weight': 650 }, name)));
   }
   const markers = new Map<string, { group: SVGGElement; dot: SVGCircleElement; title: SVGTitleElement }>();
   for (const d of ctx.sim().cast.values()) {
     const title = svg('title', null, d.name);
-    const dot = svg('circle', { r: 4, fill: '#faf1dc', stroke: '#382f29', 'stroke-width': 1 });
-    const group = svg('g', { 'data-villager': d.id }, dot, svg('text', { y: -6, 'text-anchor': 'middle', fill: '#241e1a', 'font-size': 7, 'font-weight': 700, 'paint-order': 'stroke', stroke: '#f5e9d2', 'stroke-width': 2 }, d.name), title);
+    const dot = svg('circle', { r: 4, fill: '#F6F0E4', stroke: '#2E2A22', 'stroke-width': 1 });
+    const group = svg('g', { 'data-villager': d.id, 'data-core': String((CORE_PEOPLE as readonly string[]).includes(d.id)) }, dot, svg('text', { y: -6, 'text-anchor': 'middle', fill: '#2E2A22', 'font-size': 13, 'font-weight': 700, 'paint-order': 'stroke', stroke: '#F6F0E4', 'stroke-width': 2 }, d.name), title);
     markers.set(d.id, { group, dot, title }); mapEl.append(group);
   }
-  const player = svg('g', null, svg('circle', { r: 5, fill: '#f1b942', stroke: '#382f29', 'stroke-width': 2 }), svg('text', { y: -8, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#241e1a', 'paint-order': 'stroke', stroke: '#fff1ce', 'stroke-width': 2 }, 'You'));
+  const player = svg('g', null, svg('circle', { r: 5, fill: '#D9A531', stroke: '#2E2A22', 'stroke-width': 2 }), svg('text', { y: -8, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 800, fill: '#2E2A22', 'paint-order': 'stroke', stroke: '#F6F0E4', 'stroke-width': 2 }, 'You'));
   mapEl.append(player);
   const nameToggle = h('input', { type: 'checkbox' });
   nameToggle.addEventListener('change', () => { mapEl.dataset.names = String(nameToggle.checked); });
   mapEl.dataset.names = 'false';
-  const districtNote = h('p', { class: 'district-note' }, 'Explore the whole town, or choose a neighbourhood for a closer look.');
+  const districtNote = h('p', { class: 'district-note' }, 'Tap a district tag to walk there. Choose a neighbourhood below for a closer look.');
   const districtButtons = h('div', { class: 'district-tabs', role: 'group', 'aria-label': 'Neighbourhoods' });
-  const districts = [{ id: '', name: 'Whole town', description: 'Explore both riverbanks and meet the neighbours along the way.' }, ...(ctx.map.districts ?? [])];
+  const districts = [{ id: '', name: 'Whole town', description: 'Explore both riverbanks and meet the neighbours along the way.' }, ...(ctx.map.districts ?? []).map(d => ({ ...d, name: districtViews.find(v => v.id === d.id)?.name ?? d.name }))];
   for (const district of districts) {
     districtButtons.append(h('button', { type: 'button', class: 'button button-quiet', 'aria-pressed': String(!district.id),
       'data-district': district.id, onclick: () => selectDistrict(district.id) }, district.name));
@@ -173,12 +195,18 @@ export function createFieldGuide(ctx: {
   }
   mapEl.addEventListener('click', ev => {
     const target = ev.target as Element;
+    const destination = target.closest('[data-destination]')?.getAttribute('data-destination');
+    if (destination) { const district = districtViews.find(d => d.id === destination); if (district) { api.close(); ctx.walkTo(district.door); return; } }
+    const placeId = target.closest('[data-place]')?.getAttribute('data-place');
+    if (placeId) { const place = ctx.map.places.find(p => p.id === placeId); if (place) { api.close(); ctx.walkTo(place.door); return; } }
     const id = target.closest('[data-villager]')?.getAttribute('data-villager');
     if (id) { api.close(); ctx.inspect(id); return; }
     const transform = mapEl.getScreenCTM();
     if (!transform) return;
     const point = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(transform.inverse());
     const tile = { x: Math.floor(point.x / 10), y: Math.floor(point.y / 10) };
+    const building = ctx.map.places.find(p => buildingIcons[p.kind] && tile.x >= p.rect.x && tile.x < p.rect.x + p.rect.w && tile.y >= p.rect.y && tile.y < p.rect.y + p.rect.h);
+    if (building) { api.close(); ctx.walkTo(building.door); return; }
     const kind = ctx.map.tiles[tile.y * ctx.map.width + tile.x];
     if (!kind || ['water', 'wall', 'tree', 'well'].includes(kind)) return;
     api.close(); ctx.walkTo(tile);
@@ -212,7 +240,7 @@ export function createFieldGuide(ctx: {
       for (const v of snapshot.villagers) {
         const marker = markers.get(v.id); if (!marker) continue;
         marker.group.setAttribute('transform', `translate(${v.pos.x * 10} ${v.pos.y * 10})`);
-        marker.dot.setAttribute('fill', v.bubble ? '#b34a40' : '#faf1dc');
+        marker.dot.setAttribute('fill', v.bubble ? '#A3323B' : '#F6F0E4');
         const status = `${v.moving ? 'Walking' : activityText(v.activity)}, ${placeName(v.pos)}`;
         marker.title.textContent = `${v.name}: ${status}`;
         const row = peopleStatus.get(v.id); if (row) row.textContent = status;

@@ -2393,3 +2393,84 @@ button.chain-actor:hover span {
 .atlas-name-toggle { display: flex; align-items: center; gap: 7px; font-size: var(--fs-s); margin: 8px 0; }
 .atlas-map[data-names='false'] [data-villager] text { display: none; }
 .atlas-map[data-names='false'] [data-villager]:hover text { display: block; }
+
+/* District entry uses its own quiet banner slot. */
+.district-banner { position: absolute; z-index: 45; top: calc(66px + var(--safe-t)); left: 50%; translate: -50% 0; padding: 7px 22px; background: var(--grain), var(--paper); box-shadow: var(--lift-pinned); border: 1px dashed var(--stitch); font-weight: 720; pointer-events: none; animation: banner-in .25s var(--ease-out); }
+@keyframes banner-in { from { opacity: 0; transform: translateY(-8px); } }
+
+/* Names stay under their people; speech always has a stitched tail to its speaker. */
+.rt-labels { position: absolute; inset: 0; z-index: 29; pointer-events: none; overflow: hidden; }
+.villager-name { position: absolute; left: 0; top: 0; padding: 1px 5px; background: var(--paper); color: var(--ink); border: 1px dashed var(--stitch); border-radius: 2px; font-size: 11px; line-height: 1.25; box-shadow: var(--lift-pinned); white-space: nowrap; }
+.bubble { pointer-events: auto; cursor: pointer; }
+.bubble-body { font-size: 15px; }
+.bubble-copy { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.bubble[data-expanded='true'] .bubble-copy { display: block; -webkit-line-clamp: unset; line-clamp: unset; max-height: 110px; overflow: auto; }
+.speaker-tail { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: var(--paper); stroke: var(--stitch); stroke-width: 1.2px; stroke-dasharray: 2 2; }
+
+/* One hierarchy: postbox, time ribbon, then the three paper pins. */
+.rt[data-layout] .quick-whisper { position: relative; width: 136px; height: 104px; min-height: 104px; padding: 0; border-radius: 7px; background: transparent; box-shadow: none; }
+.quick-whisper .postbox-art { position: absolute; left: 33px; bottom: 15px; width: 70px; height: 91px; }
+.postbox-label { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 8px; background: var(--berry); color: var(--paper); border: 1px dashed var(--oat); border-radius: 3px; font-size: 19px; box-shadow: var(--lift-pinned); }
+.postbox-label small { display: block; font-size: 11px; }
+.rt[data-layout] .timebar { background: var(--grain), var(--paper); height: 64px; }
+.strip-clock { flex: none; max-width: 90px; font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.ribbon { min-width: 0; }
+.ribbon-marks { z-index: 3; pointer-events: none; }
+.beat-pin { position: absolute; top: 0; width: 20px; height: 44px; margin-left: -10px; padding: 0; border: 0; background: transparent; pointer-events: auto; cursor: pointer; }
+.beat-pin::after { content: ''; position: absolute; left: 5px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--berry); box-shadow: 0 1px 2px var(--ink-soft); }
+.beat-pin[data-kind='confrontation']::after { background: var(--ink); }
+.beat-pin[data-kind='defence']::after { background: var(--denim); }
+.beat-pin[data-kind='apology']::after { background: var(--mustard); }
+.beat-pin[data-kind='exposure']::after { outline: 2px solid var(--berry); outline-offset: 2px; }
+.pin[data-pin='threads'] { position: relative; }
+.pin[data-pin='threads']::before { border: 2px dashed var(--berry); width: 16px; height: 6px; border-radius: 50%; background: none; box-shadow: none; rotate: -20deg; }
+.running-story { position: absolute; z-index: 39; top: calc(108px + var(--safe-t)); left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 5px; max-width: min(580px, calc(100% - 32px)); padding: 5px 9px; border: 1px dashed var(--stitch); border-radius: 3px; background: var(--grain), var(--paper); box-shadow: var(--lift-pinned); font-size: 13px; cursor: pointer; animation: note-in .2s var(--ease-out); }
+.running-story span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.running-story .face { flex: none; }
+.story-dare { margin: 0; padding: 8px 20px; border-bottom: 1px dashed var(--stitch); font-size: 13px; }
+.nearby-people { margin-bottom: 16px; }
+.nearby-person { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--stitch); }
+.nearby-person > span { flex: 1; min-width: 0; }
+.nearby-person strong, .nearby-person small { display: block; }
+.nearby-person small { font-size: 12px; }
+.nearby-person button { flex: none; min-height: 44px; }
+.rt[data-layout='desk'] .pins { max-width: calc(100% - 170px); }
+.rt[data-layout='desk'] .movement-hint { left: 168px; translate: 0 0; bottom: calc(88px + var(--safe-b)); margin: 0; }
+/* At 360px the clock uses 103px and the three pins fit in the remaining 225px.
+   The follow pin takes its own second row. No row can force horizontal overflow. */
+.rt[data-layout='phone'] .rt-top { flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.rt[data-layout='phone'] .clock { padding: 6px 8px; flex: none; }
+.rt[data-layout='phone'] .dial { display: none; }
+.rt[data-layout='phone'] .pins { flex: 1; width: auto; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; padding: 0; }
+.rt[data-layout='phone'] .pin { font-size: 12px; min-height: 44px; padding: 6px 8px 6px 21px; }
+.rt[data-layout='phone'] .pin::before { left: 6px; width: 10px; height: 10px; margin-top: -5px; }
+.rt[data-layout='phone'] .pin[data-pin='threads'] { margin-left: auto; }
+.rt[data-layout='phone'] .pin[data-pin='threads']::before { width: 13px; height: 6px; margin-top: -3px; }
+.rt[data-layout='phone'] .rt-bottom { justify-content: center; padding-bottom: calc(10px + var(--safe-b)); }
+.rt[data-layout='phone'] .quick-whisper { flex: none; }
+.rt[data-layout='phone'] .time-tab { position: absolute; right: 12px; bottom: calc(18px + var(--safe-b)); width: 66px; height: 48px; flex: none; }
+.rt[data-layout='phone'] .movement-hint { bottom: calc(126px + var(--safe-b)); margin: 0; font-size: 12px; }
+.rt[data-layout='phone'] .district-banner { top: calc(108px + var(--safe-t)); }
+.rt[data-layout='phone'] .running-story { top: calc(150px + var(--safe-t)); width: calc(100% - 24px); }
+.rt[data-layout='phone'] .sheet, .rt[data-layout='phone'] .drawer { bottom: calc(124px + var(--safe-b)); max-height: calc(100% - 244px - var(--safe-t) - var(--safe-b)); }
+.rt[data-layout='phone'] .tag { bottom: calc(124px + var(--safe-b)); }
+.rt[data-layout='phone'] .tag-paper { max-height: calc(100vh - 244px - var(--safe-t) - var(--safe-b)); }
+.rt[data-layout='phone'] .timedrawer .timebar { height: auto; margin-bottom: 12px; }
+.rt[data-layout='phone'] .story { height: calc(100% - 244px - var(--safe-t) - var(--safe-b)); }
+.rt[data-layout='phone'] .rumor-trail { bottom: calc(124px + var(--safe-b)); }
+.rt[data-layout='phone'] .toast, .rt[data-layout='phone'] .agent-notice { bottom: calc(126px + var(--safe-b)); }
+
+/* The world keeps running under the one-time paper introduction. */
+.opening { position: absolute; z-index: 90; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(46, 42, 34, .25); }
+.opening-paper { width: min(410px, 100%); max-height: calc(100dvh - 36px); overflow: auto; padding: 24px; border: 1px dashed var(--stitch); border-radius: 5px; background: var(--grain), var(--paper); box-shadow: var(--lift-card); }
+.opening h1 { margin: 0 0 18px; font-size: 24px; }
+.opening p { display: flex; gap: 12px; align-items: center; margin: 14px 0; font-size: 19px; }
+.opening p span { color: var(--berry); width: 24px; text-align: center; }
+.opening .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 16px; }
+.opening .button { min-height: 44px; }
+.opening footer { border-top: 1px dashed var(--stitch); padding-top: 12px; font-size: 13px; }
+
+.atlas-map[data-names='false'] [data-core='true'] text { display: block; }
+.atlas-district, .atlas-building { cursor: pointer; }
+.atlas-map { border-color: var(--ink); background: var(--moss); font-family: var(--font); }
+.rt[data-layout='phone'] .field-guide { bottom: calc(124px + var(--safe-b)); }

@@ -3,6 +3,7 @@
  * each evening's summary, grouped by day. Names open that villager's tag.
  */
 import type { SimEvent, Simulation, VillagerId } from '../sim/types.js';
+import { eventKey } from './story-beats.js';
 import { conceal, h, reveal } from './dom.js';
 import { ENDING_TITLE, RUMOR_ACTS, actVerb, dayIndexOfTick, listNames, sentence, tickClock } from './format.js';
 import { closeIcon } from './icons.js';
@@ -10,6 +11,7 @@ import type { Layers } from './layers.js';
 
 export interface StoryContext {
   sim: () => Simulation;
+  dare?: string;
   layers: Layers;
   reducedMotion: () => boolean;
   isPhone: () => boolean;
@@ -22,12 +24,13 @@ export interface Story {
   push(events: readonly SimEvent[]): void;
   reset(events: readonly SimEvent[]): void;
   open(opener?: Element | null): void;
+  openAt(event: SimEvent, opener?: Element | null): void;
   close(): void;
   isOpen(): boolean;
   cover(): number;
 }
 
-type Entry = Extract<SimEvent, { kind: 'line' | 'witness' | 'whisper' | 'day-end' }>;
+type Entry = Extract<SimEvent, { kind: 'line' | 'witness' | 'whisper' | 'day-end' | 'relationship' }>;
 
 const PAGE = 250;
 
@@ -43,7 +46,7 @@ export function createStory(ctx: StoryContext): Story {
         h('h2', { id: 'rt-story-title', class: 'drawer-title' }, 'Story so far'),
         h('label', { class: 'switch' }, onlyRumor, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', null, 'Only the rumor')),
         h('button', { class: 'close', type: 'button', 'aria-label': 'Close the story', onclick: () => api.close() }, closeIcon())),
-      scroller));
+      ctx.dare ? h('p', { class: 'story-dare' }, `Your dare: ${ctx.dare}`) : null, scroller));
 
   const entries: Entry[] = [];
   let rendered = 0;
@@ -51,7 +54,7 @@ export function createStory(ctx: StoryContext): Story {
   let open = false;
   let lastDay = -1;
 
-  const keep = (e: SimEvent): e is Entry => e.kind === 'line' || e.kind === 'witness' || e.kind === 'whisper' || e.kind === 'day-end';
+  const keep = (e: SimEvent): e is Entry => e.kind === 'line' || e.kind === 'witness' || e.kind === 'whisper' || e.kind === 'day-end' || (e.kind === 'relationship' && e.to === 'stranger' && e.why.endsWith('did not hold up'));
   const visible = (e: Entry): boolean => {
     if (!onlyRumor.checked) return true;
     if (e.kind === 'line') return e.claimId !== undefined || RUMOR_ACTS.has(e.act);
@@ -83,6 +86,8 @@ export function createStory(ctx: StoryContext): Story {
         return h('li', { class: 'log-entry', 'data-kind': 'line', 'data-rumor': e.claimId ? 'true' : 'false' },
           time, h('div', null, h('p', { class: 'log-head' }, head), h('p', { class: 'log-quote' }, `“${e.text}”`)));
       }
+      case 'relationship':
+        return h('li', { class: 'log-entry', 'data-kind': 'exposure' }, time, h('p', null, who(e.from), ': ', e.why));
       case 'witness':
         return h('li', { class: 'log-entry', 'data-kind': 'witness' },
           time, h('div', null, h('p', { class: 'log-head' }, who(e.villager), ' saw something'), h('p', { class: 'log-quote' }, sentence(e.what))));
@@ -114,7 +119,7 @@ export function createStory(ctx: StoryContext): Story {
         frag.appendChild(dayHeading(day));
         lastDay = day;
       }
-      frag.appendChild(row(e));
+      const entry = row(e); entry.dataset.event = eventKey(e); frag.appendChild(entry);
     }
     list.appendChild(frag);
     rendered = entries.length;
@@ -195,6 +200,16 @@ export function createStory(ctx: StoryContext): Story {
       scroller.scrollTop = scroller.scrollHeight;
       el.querySelector<HTMLElement>('.drawer-title')?.setAttribute('tabindex', '-1');
       el.querySelector<HTMLElement>('.drawer-title')?.focus({ preventScroll: true });
+    },
+    openAt(event, opener) {
+      api.open(opener);
+      let target = Array.from(list.children).find(row => (row as HTMLElement).dataset.event === eventKey(event));
+      if (!target) { list.replaceChildren(); lastDay = -1; appendRows(0); earlier.hidden = true; target = Array.from(list.children).find(row => (row as HTMLElement).dataset.event === eventKey(event)); }
+      if (!target) {
+        const entry = row(event as Entry); entry.dataset.event = eventKey(event); list.append(entry); target = entry;
+      }
+      target.scrollIntoView({ block: 'center' });
+      (target as HTMLElement).tabIndex = -1; (target as HTMLElement).focus({ preventScroll: true });
     },
     close() {
       if (!open) return;

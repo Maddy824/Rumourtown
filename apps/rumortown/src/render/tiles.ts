@@ -9,6 +9,7 @@ import { hash, seeded } from './grain.js';
 import { components, traceContours, type Inside } from './regions.js';
 import { feltPieceSteps, fibreFieldSteps, groundOf, mottleSteps, placeAt, roundRectPath, sampler, type Ground } from './felt.js';
 import { paintRiver } from './water.js';
+import { paintDistricts, paintWayfinding, oldVillagePath } from './wayfinding.js';
 import { bridge, treeShadowsSteps, well } from './landmarks.js';
 
 /** Tiles of felt sheet beyond the map edge, seen only at the far zoom. */
@@ -47,6 +48,8 @@ export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap
   if (u >= 0.35) yield* fibreFieldSteps(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 26, 12);
   if (u >= 0.5) yield* grassDetails(ctx, map, g, k, z);
 
+  yield* paintDistricts(ctx, map, z);
+
   const isField: Inside = (x, y) => g(x, y) === 'field';
   const isPath: Inside = (x, y) => g(x, y) === 'path';
 
@@ -80,6 +83,7 @@ export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap
   }
   yield* treeShadowsSteps(ctx, map, k, z, s);
 
+  yield* paintWayfinding(ctx, map, z);
   ctx.restore();
   if (u >= 0.3) yield* sheetEdge(ctx, -ov, -ov, W * z + ov * 2, H * z + ov * 2, u);
 }
@@ -249,7 +253,7 @@ function* cobbles(ctx: CanvasRenderingContext2D, shape: Path2D, map: VillageMap,
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       yield;
-      if (!isPath(x, y) || !plazas.some((p) => x >= p.rect.x && y >= p.rect.y && x < p.rect.x + p.rect.w && y < p.rect.y + p.rect.h)) continue;
+      if (!isPath(x, y) || !oldVillagePath(x, y) && !plazas.some((p) => x >= p.rect.x && y >= p.rect.y && x < p.rect.x + p.rect.w && y < p.rect.y + p.rect.h)) continue;
       for (let j = 0; j < 3; j++) {
         for (let i = 0; i < 3; i++) {
           const h = hash(x * 3 + i, y * 3 + j, 131);
@@ -273,6 +277,7 @@ function* cobbles(ctx: CanvasRenderingContext2D, shape: Path2D, map: VillageMap,
   ctx.lineCap = 'round';
   ctx.lineWidth = 0.9 * u;
   ctx.strokeStyle = rgba(FELT.pathLight, 0.75);
+  ctx.setLineDash([2 * u, 1.5 * u]);
   ctx.stroke(rim);
   ctx.restore();
 }

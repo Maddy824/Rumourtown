@@ -3,6 +3,7 @@
  * phone, opened from the time tab. Scrubbing asks the app to rebuild the run up to the chosen minute.
  */
 import { MINUTES_PER_DAY, type Intervention } from '../sim/types.js';
+import { mergeBeatPins, type StoryBeat } from './story-beats.js';
 import { clamp, conceal, h, reveal } from './dom.js';
 import { tickClock, tickLabel } from './format.js';
 import { closeIcon } from './icons.js';
@@ -29,6 +30,7 @@ export interface TimeState {
   maxTick: number;
   runTicks: number;
   marks: readonly Intervention[];
+  beats?: readonly StoryBeat[];
   speed: Speed;
   /** True while something else holds time, such as an open whisper sheet. */
   held: boolean;
@@ -65,8 +67,9 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
   const marks = h('div', { class: 'ribbon-marks' });
   const readout = h('output', { class: 'ribbon-readout', hidden: true });
   const input = h('input', { type: 'range', class: 'ribbon-input', min: '0', max: String(3 * MINUTES_PER_DAY), step: '1', value: '0', 'aria-label': 'Timeline' });
-  const ribbon = h('div', { class: 'ribbon' }, h('div', { class: 'ribbon-track', 'aria-hidden': 'true' }, reached, days, marks), input, readout);
-  const bar = h('div', { class: 'timebar' }, speed, ribbon);
+  const ribbon = h('div', { class: 'ribbon' }, h('div', { class: 'ribbon-track', 'aria-hidden': 'true' }, reached, days), input, marks, readout);
+  const clock = h('span', { class: 'strip-clock' });
+  const bar = h('div', { class: 'timebar' }, clock, speed, ribbon);
 
   const tabSpeed = h('span', { class: 'time-tab-speed' }, '1×');
   const tab = h('button', { class: 'time-tab', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-time-drawer' },
@@ -168,11 +171,19 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
         days.replaceChildren(...Array.from({ length: dayCount }, (_, i) =>
           h('span', { class: 'ribbon-day', style: `left: ${(i / dayCount) * 100}%; width: ${100 / dayCount}%` }, `Day ${i + 1}`)));
       }
-      const key = s.marks.map((m) => `${m.tick}:${m.listener}`).join(',') + `/${runTicks}`;
+      clock.textContent = tickLabel(s.tick);
+      const pins = mergeBeatPins(s.beats ?? []);
+      const key = pins.map(p => `${p.tick}:${p.kind}:${p.count}`).join(',') + s.marks.map((m) => `${m.tick}:${m.listener}`).join(',') + `/${runTicks}`;
       if (key !== lastMarksKey) {
         lastMarksKey = key;
-        marks.replaceChildren(...s.marks.map((m) =>
-          h('i', { class: 'ribbon-mark', style: `left: ${(m.tick / runTicks) * 100}%`, title: `You whispered to ${ctx.nameOf(m.listener)} at ${tickClock(m.tick)}` })));
+        marks.replaceChildren(...pins.map(p => h('button', {
+          type: 'button', class: 'beat-pin', 'data-kind': p.kind,
+          style: `left: ${(p.tick / runTicks) * 100}%`,
+          title: `${p.text}. ${tickLabel(p.tick)}${p.count > 1 ? `, ${p.count} story beats` : ''}`,
+          'aria-label': `${p.text}. ${tickLabel(p.tick)}`,
+          onclick: () => { begin(); ctx.onScrub(p.tick); finishSoon(); },
+        })));
+
       }
       if (!interacting) {
         input.value = String(s.tick);

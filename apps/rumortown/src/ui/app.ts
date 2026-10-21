@@ -20,6 +20,9 @@ import {
   type WorldSnapshot,
 } from '../sim/types.js';
 import { createRumorTrail, createTrailHistory } from './rumor-trail.js';
+import { createOpening } from './opening.js';
+import { createNameLabels } from './name-labels.js';
+import { createDistrictTrigger } from './district-banner.js';
 import { createBubbles } from './bubbles.js';
 import { createCameraRig } from './camera.js';
 import { createFieldGuide } from './field-guide.js';
@@ -27,7 +30,9 @@ import { createDayEnd } from './day-end.js';
 import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js';
 import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
-import { dialArt } from './icons.js';
+import { faceImg } from './faces.js';
+import { createBeatTicker, storyBeat, type StoryBeat } from './story-beats.js';
+import { dialArt, postboxArt } from './icons.js';
 import { createLayers } from './layers.js';
 import { advanceTicks } from './loop.js';
 import { newVillageUrl } from './new-village.js';
@@ -151,7 +156,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const focusFrame = h('div', { class: 'rt-focus-frame', 'aria-hidden': 'true' });
   const stringPath = svg('path', { class: 'tag-string', d: '' });
   const strings = svg('svg', { class: 'rt-strings', 'aria-hidden': 'true', focusable: 'false' }, stringPath);
-  const bubbleLayer = h('div', { class: 'rt-bubbles', 'aria-hidden': 'true' });
+  const bubbleLayer = h('div', { class: 'rt-bubbles' });
+  const districtBanner = h('div', { class: 'district-banner', role: 'status', hidden: true });
+  const districtEntry = createDistrictTrigger(performance.now());
+  let bannerUntil = 0;
+  const labelLayer = h('div', { class: 'rt-labels', 'aria-hidden': 'true' });
+  const updateLabels = createNameLabels(labelLayer);
   const marker = h('div', { class: 'rt-marker', 'aria-hidden': 'true', hidden: true });
   const live = h('div', { class: 'sr-only', 'aria-live': 'polite' });
   const actionLive = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
@@ -164,20 +174,21 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const timeText = h('span', { class: 'clock-time' });
   const dayText = h('span', { class: 'clock-day' });
   const clock = h('div', { class: 'clock', role: 'group', 'aria-label': 'Clock' }, dial.root, h('span', { class: 'clock-text' }, timeText, dayText));
-  const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false' }, 'Follow a rumor');
-  const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Story so far');
+  const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false', hidden: true }, 'Follow a rumor');
+  const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Story');
   const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Share this village');
   const exploreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Explore');
   const researchBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Notebook');
   const moreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'More');
-  const pins = h('nav', { class: 'pins', 'aria-label': 'Village tools' }, exploreBtn, threadsBtn, moreBtn);
-  const dareNote = h('details', { class: 'dare-note' },
-    h('summary', null, 'Your dare'), h('p', null, reflection.dare.text));
-  const top = h('header', { class: 'rt-top' }, clock, pins, dareNote);
+  const pins = h('nav', { class: 'pins', 'aria-label': 'Village tools' }, exploreBtn, storyBtn, moreBtn, threadsBtn);
+  const top = h('header', { class: 'rt-top' }, clock, pins);
+  const runningStory = h('button', { class: 'running-story', type: 'button', hidden: true });
+  let runningBeat: StoryBeat | null = null;
+  let storyFade: Animation | null = null;
+  runningStory.addEventListener('click', () => { if (runningBeat) { closeSheetsForPhone('story'); story.openAt(runningBeat.event, runningStory); } });
 
   const nearbyNote = h('small', { class: 'nearby-note', 'aria-hidden': 'true' }, 'Meet someone');
-  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Whisper', 'aria-haspopup': 'dialog' }, h('span', null, 'Whisper'), nearbyNote);
-  const pauseBtn = h('button', { class: 'quick-pause', type: 'button', onclick: () => setSpeed(speed === 0 ? lastPlaying : 0) }, 'Pause');
+  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Whisper', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper', nearbyNote));
 
   const toast = h('p', { class: 'toast', role: 'status', hidden: true });
   const rewindText = h('span', { class: 'rewind-text' });
@@ -209,6 +220,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let lastPausedNote = 0;
   let lastMinute = -1;
   let lastTimeKey = '';
+  let beats: StoryBeat[] = [];
+  const beatTicker = createBeatTicker();
   const positions = new Map<VillagerId, Vec2>();
 
   const effectiveRate = (): number => (holds.size > 0 || rewinding ? 0 : RATE[speed]);
@@ -295,6 +308,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   });
 
   const story = createStory({
+    dare: reflection.dare.text,
     sim: () => sim,
     layers,
     reducedMotion,
@@ -376,19 +390,25 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const trailFrom = h('span', { class: 'trail-map-name' });
   const trailTo = h('span', { class: 'trail-map-name' });
   const trailMarkers = h('div', { class: 'trail-markers', 'aria-hidden': 'true', hidden: true }, trailFrom, trailTo);
-  const tools = createTools({ layers, actions: [researchBtn, storyBtn, shareBtn], onAgent: startAgent, onOpenChange: open => {
+  const tools = createTools({ layers, actions: [researchBtn, shareBtn], onAgent: startAgent, onOpenChange: open => {
     heldKeys.clear();
     if (open) { hold('tools'); hideToast(); } else release('tools');
     syncScrim();
   } });
-  for (const button of [researchBtn, storyBtn, shareBtn]) button.className = 'button button-quiet';
+  for (const button of [researchBtn, shareBtn]) button.className = 'button button-quiet';
   const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'Tap a path to walk. Gold is you. Explore shows the whole town.');
   const agentText = h('span');
   const agentNotice = h('div', { class: 'agent-notice', hidden: true },
     h('span', { role: 'status', 'aria-live': 'polite' }, agentText),
     h('button', { type: 'button', class: 'button button-quiet', onclick: () => stopAgent() }, 'Take over'));
-  const bottom = h('div', { class: 'rt-bottom' }, postbox, pauseBtn, time.bar, time.tab);
-  root.append(canvas, focusFrame, strings, bubbleLayer, marker, top, trail.el, trailMarkers, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, live, actionLive);
+  let guidedArrival = false;
+  const opening = createOpening(layers, reflection.dare.text, () => {
+    const bakery = map.places.find(p => p.id === 'bakery');
+    if (bakery) { walkTo(bakery.door); guidedArrival = true; }
+    else walkToVillager('mira');
+  });
+  const bottom = h('div', { class: 'rt-bottom' }, postbox, time.bar, time.tab);
+  root.append(canvas, opening.el, labelLayer, runningStory, districtBanner, focusFrame, strings, bubbleLayer, marker, top, trail.el, trailMarkers, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, dayEnd.el, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, live, actionLive);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
@@ -478,7 +498,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function walkTo(point: Vec2, automated = false): void {
     if (rewinding) return;
-    if (!automated) stopAgent();
+    if (!automated) { stopAgent(); guidedArrival = false; }
     const requested = tileOf(point);
     const kind = map.tiles[requested.y * map.width + requested.x];
     if (kind === 'water') { say('The river is deep. Cross at the bridge.'); return; }
@@ -498,6 +518,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function walkToVillager(id: VillagerId): void {
     stopAgent();
+    guidedArrival = false;
     const v = cur.villagers.find((x) => x.id === id);
     if (!v || rewinding) return;
     heldKeys.clear();
@@ -517,7 +538,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       return;
     }
     const p = cur.player.pos;
-    if (Math.hypot(v.pos.x - p.x, v.pos.y - p.y) <= 1.5) {
+    if (Math.hypot(v.pos.x - p.x, v.pos.y - p.y) <= 2) {
       const done = follow;
       follow = null;
       sim.movePlayer(tileOf(p));
@@ -545,6 +566,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const next = { x: base.x + dir.x, y: base.y + dir.y };
     if (!walkable(next)) return;
     destination = null;
+    guidedArrival = false;
     keyTarget = { tile: next, at: now };
     follow = null;
     sim.movePlayer(next);
@@ -577,7 +599,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const fresh = consumeEvents();
     if (fresh.length) story.push(fresh);
     trail.focus(claimId);
-    showTrail(true);
     bubbles.boost(listener, 5000);
     tag.refresh(true);
     return true;
@@ -591,7 +612,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     threadsBtn.setAttribute('aria-pressed', String(open));
     trail.el.hidden = !open;
     trailMarkers.hidden = !open;
-    if (open) { hideToast(); dareNote.open = false; trail.update(); }
+    if (open) { hideToast(); trail.update(); }
     measureInsets();
   }
 
@@ -613,7 +634,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       for (const e of fresh) if (e.tick === last.tick) n += 1;
       cursor = { tick: last.tick, seen: n };
     }
+    recordBeats(out);
     return out;
+  }
+
+  function recordBeats(events: readonly SimEvent[]): void {
+    const fresh = events.map(e => storyBeat(e, sim)).filter((b): b is StoryBeat => b !== null);
+    beats.push(...fresh); beatTicker.push(fresh);
   }
 
   function resyncEvents(): SimEvent[] {
@@ -626,6 +653,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     } else {
       cursor = { tick: 0, seen: 0 };
     }
+    beats = []; beatTicker.reset(); recordBeats(all);
     return all;
   }
 
@@ -652,7 +680,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     whisper.close();
     const whispered = interventions.some((i) => i.tick <= sim.tick);
     const dareResult = `${reflection.dare.text} ${evaluateDare(sim, reflection.dare, ev)}`;
-    dareNote.querySelector('p')!.textContent = dareResult;
     dayEnd.show(ev, whispered ? averageTrust() : null, {
       finished: sim.tick >= runTicks,
       dare: dareResult,
@@ -742,7 +769,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (story.isOpen()) story.close();
     else {
       closeSheetsForPhone('story');
-      story.open(moreBtn);
+      story.open(storyBtn);
     }
   });
   shareBtn.addEventListener('click', () => {
@@ -823,7 +850,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function measureInsets(): void {
     const height = root.clientHeight || window.innerHeight;
-    const topBottom = Math.max(clock.getBoundingClientRect().bottom, pins.getBoundingClientRect().bottom, dareNote.getBoundingClientRect().bottom);
+    const topBottom = Math.max(clock.getBoundingClientRect().bottom, pins.getBoundingClientRect().bottom);
     const bottomTop = Math.min(postbox.getBoundingClientRect().top, phone ? time.tab.getBoundingClientRect().top : time.bar.getBoundingClientRect().top);
     insets = { top: Math.round(topBottom + 6), bottom: Math.round(Math.max(0, height - bottomTop + 6)) };
   }
@@ -851,7 +878,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   phoneQuery.addEventListener('change', applyLayout);
   const onResize = (): void => resize();
   window.addEventListener('resize', onResize);
-  dareNote.addEventListener('toggle', measureInsets);
   applyLayout();
 
   /* ---------------- Frame ---------------- */
@@ -865,7 +891,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function sheetCover(): number {
     if (!phone) return 0;
-    return Math.max(tag.cover(), whisper.cover(), story.cover(), time.cover(true));
+    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [story.el, story.isOpen()], [time.drawer, time.isDrawerOpen()]] as const;
+    return Math.max(0, ...panels.filter(([, open]) => open).map(([el]) => rig.camera.height - el.getBoundingClientRect().top));
   }
 
   function renderWorld(alpha: number): void {
@@ -916,6 +943,12 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       const arrived = Math.hypot(cur.player.pos.x - destination.pos.x, cur.player.pos.y - destination.pos.y) < .7;
       movementHint.textContent = arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.';
       destination = null;
+      if (guidedArrival) {
+        guidedArrival = false;
+        const mira = cur.villagers.find(v => v.id === 'mira');
+        if (arrived && mira && Math.hypot(mira.pos.x - cur.player.pos.x, mira.pos.y - cur.player.pos.y) <= 2) whisper.open({ listener: 'mira', opener: postbox });
+        else if (arrived) walkToVillager('mira');
+      }
     }
     if (agentTour && effectiveRate() > 0 && !layers.anyModal()) {
       if (sim.tick >= agentTour.untilTick) stopAgent();
@@ -931,6 +964,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     });
     const player = lerp(prev?.player.pos ?? cur.player.pos, cur.player.pos, alpha);
 
+    const entered = districtEntry(player, now);
+    if (entered) { districtBanner.textContent = entered; bannerUntil = now + 2500; districtBanner.hidden = false; }
+    if (now >= bannerUntil) districtBanner.hidden = true;
     trail.update();
     const cover = sheetCover();
     rig.far = threadsOn || scrubFar;
@@ -958,16 +994,18 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       compact: phone,
       topLimit: phone ? Math.min(insets.top, 64) : insets.top,
       // Projected positions are canvas-relative; DOM rectangles use viewport coordinates.
-      exclusions: phone ? (() => {
+      exclusions: (() => {
         const origin = canvas.getBoundingClientRect();
-        return [clock, pins, dareNote].map((control) => {
+        return [clock, pins, districtBanner, runningStory].filter(control => !control.hidden).map((control) => {
           const r = control.getBoundingClientRect();
           return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
         });
-      })() : [],
+      })(),
       bottomLimit: cam.height - (phone ? Math.max(cover, insets.bottom) : insets.bottom),
       now,
     });
+
+    updateLabels(interpolatedSnapshot(), player, project, cam.width, insets.top, cam.height - Math.max(cover, insets.bottom), bubbles.visible(), threadsOn || layers.anyModal());
 
     const currentLink = threadsOn ? trail.link() : undefined;
     trailMarkers.hidden = !currentLink;
@@ -1008,23 +1046,35 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       markerAt = null;
     }
 
+    const nextBeat = beatTicker.update(now);
+    if (nextBeat !== runningBeat) {
+      runningBeat = nextBeat;
+      storyFade?.cancel();
+      if (nextBeat && !reducedMotion()) storyFade = runningStory.animate([{ opacity: 0 }, { opacity: 1, offset: .04 }, { opacity: 1, offset: .9 }, { opacity: 0 }], { duration: 8000 });
+      runningStory.hidden = !nextBeat;
+      if (nextBeat) runningStory.replaceChildren(...nextBeat.faces.map(id => {
+        const look = id === 'stranger' ? 'stranger' as const : sim.cast.get(id)?.look ?? 'stranger' as const;
+        return faceImg(id, look, 22);
+      }), h('span', null, nextBeat.text));
+    }
+    const hideThreads = !beats.some(b => b.event.kind === 'whisper');
+    if (threadsBtn.hidden !== hideThreads) { threadsBtn.hidden = hideThreads; measureInsets(); }
     updateClock();
     const nearby = inReach(cur).length;
     nearbyNote.textContent = nearby ? `${nearby} nearby` : 'Find someone';
     postbox.dataset.reach = String(nearby > 0);
-    pauseBtn.textContent = speed === 0 ? 'Resume' : 'Pause';
-    pauseBtn.disabled = holds.size > 0 || rewinding || sim.tick >= runTicks;
     const held = holds.size > 0 || rewinding;
-    const key = `${cur.tick}|${maxTick}|${speed}|${held}|${interventions.length}`;
+    const key = `${cur.tick}|${maxTick}|${speed}|${held}|${interventions.length}|${beats.length}`;
     if (key !== lastTimeKey) {
       lastTimeKey = key;
-      time.update({ tick: cur.tick, maxTick, runTicks: Math.max(runTicks, Math.ceil((maxTick + 1) / MINUTES_PER_DAY) * MINUTES_PER_DAY), marks: interventions, speed, held });
+      time.update({ tick: cur.tick, maxTick, runTicks: Math.max(runTicks, Math.ceil((maxTick + 1) / MINUTES_PER_DAY) * MINUTES_PER_DAY), marks: interventions, beats, speed, held });
     }
   }
 
   story.reset(resyncEvents());
   updateClock();
   if (arrivalNote) window.setTimeout(() => say(arrivalNote ?? '', 6500), 400);
+  opening.show();
   rafId = window.requestAnimationFrame(frame);
 
   return {
@@ -1036,6 +1086,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       return p ? renderer.project(p, rig.camera) : null;
     },
     destroy() {
+      storyFade?.cancel();
+      opening.close();
       tools.close();
       guide.destroy();
       whisper.destroy();
