@@ -2,6 +2,8 @@ import { askVillage, type PlayContext, type PlayReply } from '../net/play.js';
 import { loadTurnstile, type TurnstileClient } from '../net/turnstile.js';
 import type { Simulation, VillageMap, WorldSnapshot } from '../sim/types.js';
 import { nearbyPeople } from './whisper.js';
+import { orchestrate } from '../agentic/orchestrator.js';
+import { newestStoryEntries, nowSentence, storyBeat } from './story-beats.js';
 import { h } from './dom.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
@@ -37,12 +39,15 @@ export function createPlay(ctx: {
     h('div', { class: 'sheet-paper' }, h('header', { class: 'sheet-head' }, title,
       h('button', { type: 'button', class: 'close', 'aria-label': 'Close conversation', onclick: () => api.close() }, closeIcon())),
     h('p', { class: 'sheet-note' }, 'Talk naturally. Ask to visit someone or walk somewhere.'), quick, form,
-    h('p', { class: 'play-footnote' }, 'AI replies are improvised. Actions happen only when you choose them. Conversation stays in this tab and is sent to AI only when you press Send.')));
+    h('p', { class: 'play-footnote' }, 'Walking, visiting and questions about the village are answered by the village itself. Open conversation is voiced by AI from what that villager knows. Actions happen only when you choose them.')));
   let turnstile: TurnstileClient | undefined, controller: AbortController | undefined;
-  let history: PlayContext['history'] = [], revision = 0;
+  // Each villager remembers their own conversation with you; the village narrator has its own.
+  const histories = new Map<string, PlayContext['history']>();
+  let revision = 0;
+  const historyKey = (): string => person.value || 'village';
   const baseUrl = import.meta.env.VITE_API_BASE_URL, siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
   function execute(reply: PlayReply): void { api.close(); ctx.act(reply); }
-  function clearConversation(): void { history = []; transcript.replaceChildren(); revision++; controller?.abort(); controller = undefined; send.disabled = false; input.disabled = false; form.removeAttribute('aria-busy'); status.textContent = ''; }
+  function clearConversation(): void { transcript.replaceChildren(); revision++; controller?.abort(); controller = undefined; send.disabled = false; input.disabled = false; form.removeAttribute('aria-busy'); status.textContent = ''; }
   person.addEventListener('change', clearConversation);
   function context(): PlayContext {
     const nearby = conversationChoices(ctx.snapshot(), person.value).people;
@@ -51,43 +56,66 @@ export function createPlay(ctx: {
     return { speaker, nearby: nearby.map(p => ({ id: p.id, mood: p.mood, activity: p.activity })),
       places: ctx.map.places.map(p => ({ id: p.id, name: p.name })),
       voice: dossier ? [dossier.voice, dossier.character?.aspiration, dossier.character?.worry, dossier.character?.habit].filter(Boolean).join(' ').slice(0, 700) : '',
-      history: history.slice(-3) };
+      history: (histories.get(historyKey()) ?? []).slice(-3) };
+  }
+  function news(): string[] {
+    const sim = ctx.sim();
+    try {
+      return newestStoryEntries(sim.events(Math.max(0, sim.tick - 720)), sim).map(e => storyBeat(e, sim)).filter((b): b is NonNullable<typeof b> => !!b)
+        .slice(0, 4).map(b => nowSentence(b, sim));
+    } catch { return []; }
+  }
+  function turn(text: string): HTMLElement {
+    const entry = h('article', { class: 'play-turn' }, h('p', null, h('strong', null, 'You: '), text));
+    transcript.append(entry);
+    while (transcript.childElementCount > 3) transcript.firstElementChild?.remove();
+    entry.scrollIntoView({ block: 'nearest' });
+    return entry;
+  }
+  function answer(entry: HTMLElement, name: string, reply: PlayReply, route: 'local' | 'model'): void {
+    entry.dataset.route = route;
+    entry.append(h('p', null, h('strong', null, `${name}: `), reply.reply));
+    if (reply.action !== 'none') {
+      const label = reply.action === 'move' ? `Walk to ${ctx.map.places.find(p => p.id === reply.target)!.name}` :
+        reply.action === 'approach' ? `Visit ${ctx.sim().cast.get(reply.target)!.name}` :
+        reply.action === 'pause' ? 'Pause the village' : reply.action === 'resume' ? 'Let time flow' : 'Look around';
+      entry.append(h('button', { class: 'button button-primary', type: 'button', onclick: () => execute(reply) }, label));
+    }
+    const key = historyKey(); const list = [...(histories.get(key) ?? []), { you: entry.querySelector('p')!.textContent!.replace(/^You: /, ''), reply: reply.reply.slice(0, 240) }];
+    histories.set(key, list.slice(-3));
+    entry.scrollIntoView({ block: 'nearest' });
   }
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const text = input.value.trim().replace(/[\r\n\t]+/g, ' ');
     if (!text || text.length > 280 || controller) return;
-    if (!baseUrl || !siteKey) { status.textContent = 'AI conversation is available on rumourtown.dev. You can still use the walking buttons or spread a ready-made rumor here.'; return; }
+    const current = context();
+    const name = current.speaker ? ctx.sim().cast.get(current.speaker)?.name ?? 'Villager' : 'Village';
+    const route = orchestrate({ text, speaker: current.speaker, sim: ctx.sim(), snapshot: ctx.snapshot(), map: ctx.map, news: news() });
+    const entry = turn(text);
+    input.value = ''; status.textContent = '';
+    // The village answers from its own state whenever it can: instant, exact and free.
+    if (route.kind === 'local') { answer(entry, name, { reply: route.reply, action: route.action, target: route.target }, 'local'); input.focus(); return; }
+    if (!baseUrl || !siteKey) { entry.append(h('p', { class: 'play-error' }, 'Open conversation needs rumourtown.dev. Walking, visiting and questions about the village work here.')); return; }
     const ownRevision = ++revision, request = new AbortController(); controller = request;
     const timer = window.setTimeout(() => request.abort(), 30_000);
-    send.disabled = true; input.disabled = true; form.setAttribute('aria-busy', 'true');
-    status.textContent = 'Checking your connection…';
+    send.disabled = true; form.setAttribute('aria-busy', 'true');
+    const thinking = h('p', { class: 'play-thinking' }, h('strong', null, name), h('span', { class: 'play-thinking-text' }, ' is thinking'), h('span', { class: 'dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')));
+    entry.append(thinking); entry.scrollIntoView({ block: 'nearest' });
+    const slow = window.setTimeout(() => { thinking.querySelector('.play-thinking-text')!.textContent = ' is still thinking'; }, 4_000);
     try {
       turnstile ??= loadTurnstile(siteKey, form);
       const token = await turnstile.getToken(request.signal);
       if (request.signal.aborted) return;
-      status.textContent = 'AI is thinking. This uses the shared, capped allowance.';
-      const current = context();
-      const answer = await askVillage(text, current, { baseUrl, token, signal: request.signal, people: [...ctx.sim().cast.keys()] });
+      const reply = await askVillage(text, { ...current, facts: route.facts }, { baseUrl, token, signal: request.signal, people: [...ctx.sim().cast.keys()] });
       if (request.signal.aborted || ownRevision !== revision || el.hidden) return;
-      history.push({ you: text, reply: answer.reply }); history = history.slice(-3);
-      const name = current.speaker ? ctx.sim().cast.get(current.speaker)?.name ?? 'Villager' : 'Village';
-      const entry = h('article', { class: 'play-turn' }, h('p', null, h('strong', null, 'You: '), text), h('p', null, h('strong', null, `${name}: `), answer.reply));
-      if (answer.action !== 'none') {
-        const label = answer.action === 'move' ? `Walk to ${ctx.map.places.find(p => p.id === answer.target)!.name}` :
-          answer.action === 'approach' ? `Visit ${ctx.sim().cast.get(answer.target)!.name}` :
-          answer.action === 'pause' ? 'Pause the village' : answer.action === 'resume' ? 'Let time flow' : 'Look around';
-        entry.append(h('button', { class: 'button button-primary', type: 'button', onclick: () => execute(answer) }, label));
-      }
-      transcript.append(entry);
-      while (transcript.childElementCount > 3) transcript.firstElementChild?.remove();
-      input.value = ''; status.textContent = 'AI reply received.';
-      entry.scrollIntoView({ block: 'nearest' });
+      thinking.remove();
+      answer(entry, name, reply, 'model');
     } catch (error) {
-      if (ownRevision === revision && !el.hidden) status.textContent = request.signal.aborted ? 'The reply took too long. Try again.' : error instanceof Error ? error.message : 'Could not connect. Try again.';
+      if (ownRevision === revision && !el.hidden) thinking.replaceWith(h('p', { class: 'play-error' }, request.signal.aborted ? 'The reply took too long. Try again.' : error instanceof Error ? error.message : 'Could not connect. Try again.'));
     } finally {
-      window.clearTimeout(timer);
-      if (ownRevision === revision) { controller = undefined; send.disabled = false; input.disabled = false; form.removeAttribute('aria-busy'); if (!el.hidden) input.focus(); }
+      window.clearTimeout(timer); window.clearTimeout(slow);
+      if (ownRevision === revision) { controller = undefined; send.disabled = false; form.removeAttribute('aria-busy'); if (!el.hidden) input.focus(); }
     }
   });
   const api = {
@@ -99,13 +127,14 @@ export function createPlay(ctx: {
       person.value = choices.selected; status.textContent = choices.notice;
       el.hidden = false; el.dataset.open = ''; ctx.layers.open({ id: 'play', el, modal: true, close: () => api.close() }, opener);
       ctx.onOpenChange(true); input.focus({ preventScroll: true });
+      if (baseUrl && siteKey) { turnstile ??= loadTurnstile(siteKey, form); void turnstile.warm().catch(() => undefined); }
     },
     close() {
       if (el.hidden) return;
       revision++; controller?.abort(); controller = undefined; send.disabled = false; input.disabled = false; form.removeAttribute('aria-busy');
       el.hidden = true; delete el.dataset.open; ctx.layers.closed('play'); ctx.onOpenChange(false);
     },
-    destroy() { api.close(); turnstile?.destroy(); history = []; el.remove(); },
+    destroy() { api.close(); turnstile?.destroy(); histories.clear(); el.remove(); },
   };
   return api;
 }

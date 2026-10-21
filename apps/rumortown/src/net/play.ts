@@ -5,6 +5,8 @@ export interface PlayContext {
   places: { id: string; name: string }[];
   voice: string;
   history: { you: string; reply: string }[];
+  /** What the speaker (or the village) actually knows, built by the orchestrator. */
+  facts?: string[];
 }
 export interface PlayReply { reply: string; action: 'none' | 'move' | 'approach' | 'pause' | 'resume' | 'look'; target: string }
 export function readPlayReply(value: unknown, places: readonly string[], people: readonly string[]): PlayReply | null {

@@ -9,7 +9,7 @@ import { systemPrompt } from './prompt';
 import { publicKey, sign, verify } from './sign';
 import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
 import { schema, validate } from './validate';
-import { workersAi } from './workers-ai';
+import { workersAi, modelFor, type Route } from './workers-ai';
 import { playPrompt, playSchema, readPlayContext, validatePlay, type PlayReply } from './play';
 export { BudgetLedger } from './ledger';
 
@@ -111,7 +111,8 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
 
 /** Both typed routes share the same exact admission, reservation and settlement boundary. */
 async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () => number, usage: Usage, defer: Defer,
-  messages: { role: string; content: string }[], outputSchema: unknown, validateOutput: (value: unknown) => T | null, temperature = 0): Promise<T> {
+  messages: { role: string; content: string }[], outputSchema: unknown, validateOutput: (value: unknown) => T | null, temperature = 0,
+  route: Route = 'interpret'): Promise<T> {
   // Gate both tiers through the exact ledger limits; a free attempt holds $0.
   let models: string[] = [];
   let body: Record<string, unknown> = {};
@@ -126,8 +127,10 @@ async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () =>
     worstCaseUsd = reservationCost(models, estimatePromptTokens(body));
   }
   if (!env.AI) openRouterBody();
-  const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', request.headers.get('User-Agent') ?? '']));
-  const reserved = await ledger(env, 'reserve', { visitorKey, worstCaseUsd, now: now() });
+  // Conversation is counted separately from stories, so chatting never uses up a visitor's story allowance.
+  const kind = route === 'play' ? 'play' : 'story';
+  const visitorKey = await hash(JSON.stringify([request.headers.get('CF-Connecting-IP') ?? 'unknown', request.headers.get('User-Agent') ?? '', kind]));
+  const reserved = await ledger(env, 'reserve', { visitorKey, worstCaseUsd, now: now(), kind });
   if (reserved.ok === false && ['limit-visitor', 'limit-global', 'budget'].includes(reserved.reason as string)) {
     const reason = reserved.reason as FailureReason;
     throw new Failure(reason, reason === 'budget' ? 503 : 429, reason === 'limit-visitor' ? 3600 : 60);
@@ -145,7 +148,7 @@ async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () =>
     if (env.AI) {
       usage.dispatched = true;
       usage.workersAi = true;
-      const claim = await workersAi(env, messages, { schema: outputSchema, validate: validateOutput, temperature });
+      const claim = await workersAi(env, messages, { schema: outputSchema, validate: validateOutput, temperature, model: modelFor(env, route) });
       if (claim) {
         settled = true;
         await defer(finish(env, 'settle', { reservationId, actualUsd: 0 }));
@@ -227,7 +230,7 @@ export function createWorker(deps: Dependencies = {}) {
           // No raw story, generated question or annotations enter a shared server cache.
           const result = await infer(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer,
             [{ role: 'system', content: rumorPrompt }, { role: 'user', content: JSON.stringify({ story: text }) }],
-            rumorSchema, value => validateRumor(value, text), .3);
+            rumorSchema, value => validateRumor(value, text), .3, 'rumor');
           return json(result);
         }
         if (request.method === 'POST' && path === '/play') {
@@ -244,7 +247,7 @@ export function createWorker(deps: Dependencies = {}) {
           // No prose, context or generated reply enters either cache or the ledger.
           const result = await infer(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer,
             [{ role: 'system', content: playPrompt }, { role: 'user', content: JSON.stringify({ text: input.text, context }) }],
-            playSchema, value => validatePlay(value, context), .7);
+            playSchema, value => validatePlay(value, context), .7, 'play');
           return json(result);
         }
         if (request.method === 'POST' && path === '/interpret') {

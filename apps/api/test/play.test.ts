@@ -49,11 +49,19 @@ describe('creative conversation and bounded action proposals', () => {
     expect(mock.calls.some(c => c.url.includes('completions'))).toBe(false);
     expect(store.db.prepare('SELECT reserved, spent FROM days').all()).toEqual([{ reserved: 0, spent: 0 }]);
   });
-  it('counts conversation and interpretation against the same visitor quota', async () => {
-    const { worker, env, run } = await setup(reply, { PER_VISITOR_PER_HOUR: '1' });
+  it('gives conversation its own hourly allowance, independent of the story allowance', async () => {
+    const { worker, env, run } = await setup(reply, { PER_VISITOR_PER_HOUR: '1', PLAY_PER_VISITOR_PER_HOUR: '2' });
     expect((await worker.fetch(request(), env)).status).toBe(200);
-    expect((await worker.fetch(request('Why are you worried?'), env)).status).toBe(429);
-    expect(run).toHaveBeenCalledTimes(1);
+    expect((await worker.fetch(request('Why are you worried?'), env)).status).toBe(200);
+    expect((await worker.fetch(request('And then?'), env)).status).toBe(429);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+  it('accepts grounded facts and rejects oversized fact lists', async () => {
+    const { worker, env } = await setup();
+    const facts = ['I am fairly sure that Tom stole bread from the bakery (Mira told me at 10:30).'];
+    expect((await worker.fetch(request('hello', { context: { ...context, facts } }), env)).status).toBe(200);
+    expect((await worker.fetch(request('hello', { context: { ...context, facts: Array(13).fill('x') } }), env)).status).toBe(400);
+    expect((await worker.fetch(request('hello', { context: { ...context, facts: ['x'.repeat(221)] } }), env)).status).toBe(400);
   });
   it('rejects forged speakers, oversized history and malformed context before inference', async () => {
     const { worker, env, run } = await setup();

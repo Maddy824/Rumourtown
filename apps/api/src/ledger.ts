@@ -59,7 +59,7 @@ export class BudgetLedger {
     const hour = Math.floor(body.now / 3_600_000);
     const minute = Math.floor(body.now / 60_000);
     const amount = units(body.worstCaseUsd);
-    const visitorLimit = limit(this.env.PER_VISITOR_PER_HOUR, 5);
+    const visitorLimit = body.kind === 'play' ? limit(this.env.PLAY_PER_VISITOR_PER_HOUR, 30) : limit(this.env.PER_VISITOR_PER_HOUR, 5);
     const globalLimit = limit(this.env.GLOBAL_PER_MINUTE, 20);
     const allowance = units(this.env.DAILY_ALLOWANCE_USD === undefined ? 0.019 : Number(this.env.DAILY_ALLOWANCE_USD));
     const lifetime = units(this.env.LIFETIME_ALLOWANCE_USD === undefined ? 7 : Number(this.env.LIFETIME_ALLOWANCE_USD));

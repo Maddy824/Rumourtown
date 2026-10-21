@@ -27,11 +27,14 @@ simple = { limit = 60, period = 60 }
 [vars]
 ALLOWED_ORIGIN = "https://rumortown.example"
 WORKERS_AI_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+WORKERS_AI_RUMOR_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+WORKERS_AI_PLAY_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 MODELS = "liquid/lfm-2.5-2.6b:free,google/gemini-2.5-flash-lite"
 AI_ENABLED = "false"
 DAILY_ALLOWANCE_USD = "0.019"
 LIFETIME_ALLOWANCE_USD = "7"
 PER_VISITOR_PER_HOUR = "5"
+PLAY_PER_VISITOR_PER_HOUR = "30"
 GLOBAL_PER_MINUTE = "20"
 
 # Set secrets with wrangler secret put: TURNSTILE_SECRET, OPENROUTER_API_KEY, SIGNING_KEY_JWK
@@ -49,11 +52,14 @@ binding = "AI"
 [env.production.vars]
 ALLOWED_ORIGIN = "https://rumourtown.dev"
 WORKERS_AI_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+WORKERS_AI_RUMOR_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+WORKERS_AI_PLAY_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 MODELS = "liquid/lfm-2.5-2.6b:free,google/gemini-2.5-flash-lite"
 AI_ENABLED = "true"
 DAILY_ALLOWANCE_USD = "0.019"
 LIFETIME_ALLOWANCE_USD = "7"
 PER_VISITOR_PER_HOUR = "5"
+PLAY_PER_VISITOR_PER_HOUR = "30"
 GLOBAL_PER_MINUTE = "20"
 
 [[env.production.durable_objects.bindings]]
