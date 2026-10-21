@@ -90,14 +90,14 @@ export function createTag(ctx: TagContext): Tag {
     return m;
   };
 
-  const actorEl = (actor: ChainActor): HTMLElement => {
+  const actorEl = (actor: ChainActor, controlKey: string): HTMLElement => {
     if (actor.kind === 'stranger') {
       return h('span', { class: 'chain-actor' }, faceImg('stranger', 'stranger', 26), h('span', null, 'Stranger'));
     }
     if (actor.kind === 'unknown') {
       return h('span', { class: 'chain-actor' }, h('span', { class: 'face face-blank', 'aria-hidden': 'true' }, actor.name.charAt(0)), h('span', null, actor.name));
     }
-    return h('button', { class: 'chain-actor', type: 'button', 'aria-label': `${actor.name}: open their tag`, onclick: () => ctx.onSelect(actor.id) },
+    return h('button', { class: 'chain-actor', type: 'button', 'data-tag-control': `${controlKey}:${actor.id}`, 'aria-label': `${actor.name}: open their tag`, onclick: () => ctx.onSelect(actor.id) },
       faceImg(actor.id, lookOf(actor.id), 26), h('span', null, actor.name));
   };
 
@@ -106,7 +106,7 @@ export function createTag(ctx: TagContext): Tag {
     const names = nameToId();
     const list = h('ol', { class: 'chain', 'aria-label': 'How I came to hear it' });
     let lastActor: string | null = null;
-    for (const line of belief.chain) {
+    for (const [index, line] of belief.chain.entries()) {
       const link = parseChainLine(line, names);
       if (link.kind === 'text') {
         list.appendChild(h('li', { class: 'chain-text' }, sentence(link.text)));
@@ -117,11 +117,11 @@ export function createTag(ctx: TagContext): Tag {
       const key = from.kind === 'villager' ? from.id : from.kind === 'stranger' ? 'stranger' : from.name;
       if (key !== lastActor) {
         if (lastActor !== null) list.appendChild(h('li', { class: 'chain-break', 'aria-hidden': 'true' }));
-        list.appendChild(h('li', null, actorEl(from)));
+        list.appendChild(h('li', null, actorEl(from, `chain:${belief.claimId}:${index}:from`)));
       }
       if (link.kind === 'told') {
         list.appendChild(h('li', { class: 'chain-told' }, h('span', { class: 'chain-verb' }, 'told'), toldArrow(), link.time ? h('time', null, link.time) : null));
-        list.appendChild(h('li', null, actorEl(link.to)));
+        list.appendChild(h('li', null, actorEl(link.to, `chain:${belief.claimId}:${index}:to`)));
         lastActor = link.to.kind === 'villager' ? link.to.id : link.to.kind === 'stranger' ? 'stranger' : link.to.name;
       } else {
         list.appendChild(h('li', { class: 'chain-told chain-saw' }, h('span', { class: 'chain-verb' }, 'saw it'), link.time ? h('time', null, link.time) : null));
@@ -156,13 +156,13 @@ export function createTag(ctx: TagContext): Tag {
     const shown = showAll ? ranked : ranked.slice(0, SECTION_LIMIT);
     const items = shown.map((r) =>
       h('li', { class: 'rel' },
-        h('button', { class: 'rel-who', type: 'button', 'aria-label': `${r.name}: open their tag`, onclick: () => ctx.onSelect(r.to) }, faceImg(r.to, lookOf(r.to), 28), h('span', null, r.name)),
+        h('button', { class: 'rel-who', type: 'button', 'data-tag-control': `relation:${r.to}`, 'aria-label': `${r.name}: open their tag`, onclick: () => ctx.onSelect(r.to) }, faceImg(r.to, lookOf(r.to), 28), h('span', null, r.name)),
         h('span', { class: 'bar bar-trust', role: 'img', 'aria-label': `Trust ${percent(r.trust)}`, style: `--v: ${clamp(r.trust, 0, 1).toFixed(3)}` }),
         h('span', { class: 'bar bar-like', role: 'img', 'aria-label': `Liking: ${likingWord(r.affinity).toLowerCase()}`, style: `--v: ${clamp(r.affinity, -1, 1).toFixed(3)}` }),
         r.why ? h('p', { class: 'rel-why' }, sentence(r.why)) : null));
     const head = h('li', { class: 'rel rel-head', 'aria-hidden': 'true' }, h('span'), h('span', { class: 'bar-label' }, 'Trust'), h('span', { class: 'bar-label' }, 'Liking'));
     const more = ranked.length > SECTION_LIMIT
-      ? h('button', { class: 'text-button', type: 'button', onclick: () => { showAll = !showAll; api.refresh(true); } }, showAll ? 'Show fewer' : `Show all ${ranked.length}`)
+      ? h('button', { class: 'text-button', type: 'button', 'data-tag-control': 'relations-toggle', onclick: () => { showAll = !showAll; api.refresh(true); } }, showAll ? 'Show fewer' : `Show all ${ranked.length}`)
       : null;
     return section('How I feel about people', items.length ? [h('ul', { class: 'rels' }, head, items), more] : empty('Nobody on my mind.'));
   };
@@ -197,7 +197,7 @@ export function createTag(ctx: TagContext): Tag {
         h('span', { class: 'bar-label' }, 'Trusts you'),
         h('span', { class: 'bar bar-trust', role: 'img', 'aria-label': `Trusts you ${percent(ins.trustInStranger)}`, style: `--v: ${clamp(ins.trustInStranger, 0, 1).toFixed(3)}` }),
         h('span', { class: 'tag-trust-n' }, percent(ins.trustInStranger))));
-    body.replaceChildren(beliefsEl(ins), relationsEl(ins), moodsEl(ins, now), decisionsEl(ins));
+    replaceTagBody(body, [beliefsEl(ins), relationsEl(ins), moodsEl(ins, now), decisionsEl(ins)], nameEl);
   };
 
   const api: Tag = {
@@ -291,6 +291,19 @@ export function createTag(ctx: TagContext): Tag {
     },
   };
   return api;
+}
+
+/** Restore a refreshed control by identity, or move to the persistent tag heading if it disappeared. */
+export function replaceTagBody(body: HTMLElement, content: HTMLElement[], fallback: HTMLElement): void {
+  const active = body.ownerDocument.activeElement;
+  const hadFocus = active !== null && body.contains(active);
+  const key = hadFocus ? active.getAttribute('data-tag-control') : null;
+  body.replaceChildren(...content);
+  if (!hadFocus) return;
+  const replacement = key === null ? undefined : Array.from(body.querySelectorAll<HTMLElement>('[data-tag-control]'))
+    .find((control) => control.getAttribute('data-tag-control') === key);
+  // Expanding relations moves its toggle down the page; keep that replacement in view.
+  (replacement ?? fallback).focus({ preventScroll: replacement !== undefined && key !== 'relations-toggle' });
 }
 
 function section(title: string, content: HTMLElement | (HTMLElement | null)[]): HTMLElement {

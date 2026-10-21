@@ -9,7 +9,7 @@ import { KIND_LABEL, dayIndexOfTick, moodWord, percent } from './format.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
 import { drawShareCard, type ShareCardData, type ShareFace } from './share-card.js';
-import { shareUrl } from './share-link.js';
+import { decodeShare, shareUrl } from './share-link.js';
 
 export interface ShareContext {
   sim: () => Simulation;
@@ -137,14 +137,29 @@ export function createShare(ctx: ShareContext): SharePanel {
   const canvas = document.createElement('canvas');
 
   const copy = async (): Promise<void> => {
+    let decoded: ShareState | null = null;
+    try {
+      decoded = decodeShare(new URL(url.value).hash.slice(1));
+    } catch {
+      /* An empty or invalid link cannot be copied or offered as a fallback. */
+    }
+    if (!decoded) {
+      url.value = '';
+      status.textContent = 'This village cannot be shared right now.';
+      return;
+    }
+    const trimmed = decoded.interventions.length < ctx.shareState().interventions.length;
+    const description = trimmed
+      ? `It includes the most recent ${decoded.interventions.length} whispers.`
+      : 'It replays this village exactly, whispers and all.';
     try {
       if (!navigator.clipboard) throw new Error('no clipboard');
       await navigator.clipboard.writeText(url.value);
-      status.textContent = 'Link copied. It replays this village exactly, whispers and all.';
+      status.textContent = `Link copied. ${description}`;
     } catch {
       url.focus();
       url.select();
-      status.textContent = 'Copy the link below. It replays this village exactly, whispers and all.';
+      status.textContent = `Copy the link below. ${description}`;
     }
   };
   copyBtn.addEventListener('click', () => void copy());
@@ -176,7 +191,11 @@ export function createShare(ctx: ShareContext): SharePanel {
   const api: SharePanel = {
     el,
     open(opener) {
-      url.value = shareUrl(ctx.shareState());
+      try {
+        url.value = shareUrl(ctx.shareState());
+      } catch {
+        url.value = '';
+      }
       status.textContent = '';
       if (!open) {
         open = true;

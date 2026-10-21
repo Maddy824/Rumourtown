@@ -25,6 +25,7 @@ import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
 import { dialArt, postboxArt } from './icons.js';
 import { createLayers } from './layers.js';
+import { advanceTicks } from './loop.js';
 import { createShare } from './share.js';
 import { readShareFromLocation, writeShareToLocation } from './share-link.js';
 import { createStory } from './story.js';
@@ -750,18 +751,19 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function frame(now: number): void {
     rafId = window.requestAnimationFrame(frame);
-    const dt = Math.min(0.25, Math.max(0, (now - lastNow) / 1000));
+    const elapsed = Math.max(0, (now - lastNow) / 1000);
+    const dt = Math.min(0.25, elapsed);
     lastNow = now;
 
     if (effectiveRate() > 0) {
-      acc += dt * effectiveRate();
+      const budget = advanceTicks(acc, elapsed, effectiveRate(), MAX_STEPS_PER_FRAME);
+      acc = budget.remaining + budget.steps;
       let steps = 0;
-      while (acc >= 1 && steps < MAX_STEPS_PER_FRAME && effectiveRate() > 0) {
-        acc -= 1;
+      while (steps < budget.steps && effectiveRate() > 0) {
+        acc = Math.max(0, acc - 1);
         steps += 1;
         if (stepOnce()) break;
       }
-      acc = clamp(acc, 0, 1);
     }
     const alpha = clamp(acc, 0, 1);
 
@@ -791,6 +793,14 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       far: rig.far,
       compact: phone,
       topLimit: phone ? Math.min(insets.top, 64) : insets.top,
+      // Projected positions are canvas-relative; DOM rectangles use viewport coordinates.
+      exclusions: phone ? (() => {
+        const origin = canvas.getBoundingClientRect();
+        return [clock, pins, threadsBtn, storyBtn, shareBtn].map((control) => {
+          const r = control.getBoundingClientRect();
+          return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
+        });
+      })() : [],
       bottomLimit: cam.height - (phone ? Math.max(cover, insets.bottom) : insets.bottom),
       now,
     });

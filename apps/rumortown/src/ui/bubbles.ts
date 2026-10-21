@@ -17,7 +17,39 @@ export interface BubbleFrame {
   /** Bubbles may not rise above this line (the top strip) or sit below this one (the bottom controls). */
   topLimit: number;
   bottomLimit: number;
+  /** Canvas-relative control rectangles, including the taller phone pin stack. */
+  exclusions: readonly BubbleRect[];
   now: number;
+}
+
+export interface BubbleRect { x: number; y: number; w: number; h: number }
+
+/** Try above the speaker, then below, keeping the paper and tail clear of controls and other bubbles. */
+export function placeBubble(
+  anchor: { x: number; y: number; foot: number },
+  size: { w: number; h: number },
+  bounds: { width: number; top: number; bottom: number },
+  obstacles: readonly BubbleRect[],
+): (BubbleRect & { flip: boolean }) | null {
+  const { w, h: height } = size;
+  const x = Math.round(clamp(anchor.x - w / 2, 8, bounds.width - 8 - w));
+  const overlaps = (y: number): BubbleRect | undefined => obstacles.find((r) =>
+    x < r.x + r.w + 6 && x + w + 6 > r.x && y < r.y + r.h + 6 && y + height + 6 > r.y);
+  let y = Math.floor(anchor.y - height - 7);
+  for (let tries = 0; tries <= obstacles.length; tries++) {
+    const hit = overlaps(y);
+    if (!hit) break;
+    y = Math.floor(hit.y - height - 7);
+  }
+  if (y >= bounds.top && y + height <= bounds.bottom && !overlaps(y)) return { x, y, w, h: height, flip: false };
+  y = Math.ceil(Math.max(anchor.foot + 7, bounds.top));
+  for (let tries = 0; tries <= obstacles.length; tries++) {
+    const hit = overlaps(y);
+    if (!hit) break;
+    y = Math.ceil(hit.y + hit.h + 7);
+  }
+  if (y < bounds.top || y + height > bounds.bottom || overlaps(y)) return null;
+  return { x, y, w, h: height, flip: true };
 }
 
 interface Bubble {
@@ -137,7 +169,7 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
       }
 
       // Place the most important first; later ones step up out of the way, or drop out.
-      const placed: { x: number; y: number; w: number; h: number }[] = [];
+      const placed: BubbleRect[] = [...f.exclusions];
       for (const c of chosen) {
         let b = shown.get(c.id);
         if (!b) {
@@ -155,36 +187,18 @@ export function createBubbles(layer: HTMLElement, live: HTMLElement): BubbleLaye
         }
         const w = b.w;
         const hgt = b.h;
-        let left = clamp(c.x - w / 2, 8, f.camera.width - 8 - w);
-        const overlaps = (t: number) => placed.find((r) => left < r.x + r.w + 4 && left + w + 4 > r.x && t < r.y + r.h + 4 && t + hgt + 4 > r.y);
-        let top = c.y - hgt - 7;
-        for (let tries = 0; tries < 4; tries++) {
-          const hit = overlaps(top);
-          if (!hit) break;
-          top = hit.y - hgt - 6;
+        const placement = placeBubble(c, { w, h: hgt },
+          { width: f.camera.width, top: f.topLimit, bottom: f.bottomLimit }, placed);
+        if (!placement) {
+          b.el.style.visibility = 'hidden';
+          continue;
         }
-        // No room above (the top strip is in the way): hang the bubble under their feet instead.
-        let flip = false;
-        if (top < f.topLimit) {
-          flip = true;
-          top = Math.max(c.foot + 7, f.topLimit);
-          for (let tries = 0; tries < 4; tries++) {
-            const hit = overlaps(top);
-            if (!hit) break;
-            top = hit.y + hit.h + 6;
-          }
-          if (top + hgt > f.bottomLimit) {
-            b.el.style.visibility = 'hidden';
-            continue;
-          }
-        }
+        const { x: left, y: top, flip } = placement;
         b.el.style.visibility = '';
         b.el.dataset.flip = flip ? 'true' : 'false';
         const detached = flip ? top > c.foot + 9 : top + hgt + 7 < c.y - 2;
         b.el.dataset.detached = detached ? 'true' : 'false';
         placed.push({ x: left, y: top, w, h: hgt });
-        left = Math.round(left);
-        top = Math.round(top);
         b.el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
         b.el.style.setProperty('--tail-x', `${Math.round(clamp(c.x - left, 10, w - 10))}px`);
       }

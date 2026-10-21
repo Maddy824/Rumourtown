@@ -9,11 +9,32 @@ const MAX_ENCODED = 16_000;
 const MAX_INTERVENTIONS = 400;
 const MAX_TICK = 1_000_000;
 
-export function encodeShare(state: ShareState): string {
+function encode(state: ShareState): string {
   const bytes = new TextEncoder().encode(JSON.stringify(state));
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Keep the largest suffix of recent whispers that the decoder can accept. */
+export function encodeShare(state: ShareState): string {
+  const recent = [...state.interventions].sort((a, b) => a.tick - b.tick).slice(-MAX_INTERVENTIONS);
+  const valid = validate({ ...state, interventions: recent });
+  if (!valid) throw new Error('This village cannot be shared.');
+  const suffix = (count: number): string => encode({
+    ...valid,
+    interventions: count === 0 ? [] : valid.interventions.slice(-count),
+  });
+  let low = 0;
+  let high = valid.interventions.length;
+  while (low < high) {
+    const count = Math.ceil((low + high) / 2);
+    if (suffix(count).length <= MAX_ENCODED) low = count;
+    else high = count - 1;
+  }
+  const encoded = suffix(low);
+  if (!decodeShare(encoded)) throw new Error('This village cannot be shared.');
+  return encoded;
 }
 
 export function decodeShare(encoded: string): ShareState | null {
@@ -68,7 +89,13 @@ export function shareUrl(state: ShareState): string {
 
 /** Keeps the address bar in step with the run, without adding history entries. */
 export function writeShareToLocation(state: ShareState): string {
-  const encoded = encodeShare(state);
+  let encoded: string;
+  try {
+    encoded = encodeShare(state);
+  } catch {
+    // Keep an unsupported state out of the address bar; the share panel explains it on copy.
+    return window.location.hash.replace(/^#/, '');
+  }
   if (window.location.hash.replace(/^#/, '') !== encoded) {
     window.history.replaceState(window.history.state, '', `#${encoded}`);
   }
