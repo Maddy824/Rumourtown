@@ -149,7 +149,7 @@ export function createFieldGuide(ctx: {
 
   function download(suffix: string, content: string, mime: string): void {
     const url = URL.createObjectURL(new Blob([content], { type: mime }));
-    const a = h('a', { href: url, download: `rumortown-${ctx.seed}-${suffix}` });
+    const a = h('a', { href: url, download: `rumourtown-${ctx.seed}-${suffix}` });
     document.body.append(a); a.click(); a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }

@@ -38,7 +38,7 @@ export function createTools(ctx: {
     h('p', null, 'Send JSON tool calls over standard input. Tool schemas and a TypeScript adapter are included. Your agent controls the traveller; the townspeople keep their authored social rules.'),
     h('p', null, h('a', { href: `${repo}docs/agents.md`, target: '_blank', rel: 'noopener noreferrer' }, 'Read the agent guide and protocol')),
     h('h3', null, 'Keep credits under control'),
-    h('p', null, 'The local agent uses no AI credits. Optional AI interpretation is off by default, with daily pacing, a $7 total live allowance and phone alerts before requests. Phone alerts need a one-time setup.'),
+    h('p', null, 'The local agent uses no AI credits. AI interpretation has daily pacing and a $7 total live allowance. It is off in local defaults and enabled in production. Optional phone digests report daily use.'),
     h('p', null, h('a', { href: `${repo}docs/credit-controls.md`, target: '_blank', rel: 'noopener noreferrer' }, 'Set up the $10 budget and phone alerts')),
     h('h3', null, 'Build with the belief engine'),
     h('p', null, 'Use Rumormind separately for trust, beliefs, source memory, gossip and corrections in your own characters. It has no runtime dependencies.'),

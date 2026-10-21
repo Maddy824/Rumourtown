@@ -342,7 +342,7 @@ export function drawShareCard(canvas: HTMLCanvasElement, data: ShareCardData): v
   // The name and the day, on the hills.
   ctx.fillStyle = C.paper;
   ctx.font = `800 60px ${FONT}`;
-  ctx.fillText('RumorTown', 64, 596);
+  ctx.fillText('Rumourtown', 64, 596);
   ctx.font = `600 26px ${FONT}`;
   ctx.textAlign = 'right';
   ctx.fillText(`Day ${data.day}`, CARD_W - 64, 592);

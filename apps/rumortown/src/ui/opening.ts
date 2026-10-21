@@ -16,6 +16,7 @@ export function createOpening(layers: Layers, dare: string, showMe: () => void) 
   const show = h('button', { class: 'button button-primary', type: 'button', onclick: () => { close(); showMe(); } }, 'Show me');
   const el = h('section', { class: 'opening', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-opening-title', hidden: true },
     h('div', { class: 'opening-paper' },
+      h('p', { class: 'sheet-note' }, 'Rumourtown'),
       h('h1', { id: 'rt-opening-title' }, 'A story starts with you'),
       h('p', null, h('span', { 'aria-hidden': 'true' }, '♧'), 'Walk to someone.'),
       h('p', null, h('span', { 'aria-hidden': 'true' }, '✉'), 'Whisper a rumor.'),

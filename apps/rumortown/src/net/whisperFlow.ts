@@ -43,16 +43,21 @@ export function createWhisperFlow(deps: WhisperFlowDependencies): WhisperFlow {
   async function run(text: string): Promise<InterpretResult> {
     transition({ status: 'checking' });
     let result: InterpretResult;
+    const deadlineMs = Math.min(deps.timeoutMs ?? 5_800, 5_800);
+    const started = performance.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), deadlineMs); });
     try {
-      const turnstileToken = await deps.turnstile.getToken();
+      const turnstileToken = await Promise.race([deps.turnstile.getToken(), timeout]);
       if (!turnstileToken.trim()) throw new Error('turnstile');
       transition({ status: 'asking' });
       // interpretWhisper verifies before exposing a successful claim to any caller.
-      result = await interpretWhisper(text, {
+      result = await Promise.race([interpretWhisper(text, {
         baseUrl: deps.baseUrl, castVersion: deps.castVersion, fetch: deps.fetch,
-        timeoutMs: deps.timeoutMs, turnstileToken,
-      });
-    } catch { result = { ok: false, reason: 'turnstile' }; }
+        timeoutMs: Math.max(0, deadlineMs - (performance.now() - started)), turnstileToken,
+      }), timeout]);
+    } catch (error) { result = { ok: false, reason: error instanceof Error && error.message === 'timeout' ? 'timeout' : 'turnstile' }; }
+    finally { if (timer !== undefined) clearTimeout(timer); }
     if (result.ok && 'claim' in result) transition({ status: 'done', result });
     else transition({ status: 'resting', result, line: lineFor(result) });
     return result;

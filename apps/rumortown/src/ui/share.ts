@@ -121,7 +121,7 @@ export function createShare(ctx: ShareContext): SharePanel {
   const status = h('p', { class: 'share-status', role: 'status' });
   const url = h('input', { class: 'share-url', id: 'rt-share-url', type: 'text', readonly: true, spellcheck: 'false' });
   const copyBtn = h('button', { class: 'button button-primary', type: 'button' }, 'Copy link');
-  const download = h('a', { class: 'button button-quiet', download: 'rumortown.png', href: '#' }, 'Download picture');
+  const download = h('a', { class: 'button button-quiet', download: 'rumourtown.png', href: '#' }, 'Download picture');
   const el = h('section', { class: 'card share', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-share-title', hidden: true },
     h('div', { class: 'card-paper' },
       h('header', { class: 'card-head' },
@@ -184,7 +184,7 @@ export function createShare(ctx: ShareContext): SharePanel {
       objectUrl = URL.createObjectURL(blob);
       img.src = objectUrl;
       download.href = objectUrl;
-      download.setAttribute('download', `rumortown-day-${data.day}.png`);
+      download.setAttribute('download', `rumourtown-day-${data.day}.png`);
     }, 'image/png');
   };
 
