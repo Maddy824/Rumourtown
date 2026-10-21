@@ -1,6 +1,6 @@
 # Architecture
 
-RumorTown separates a dependency-free behaviour library, a browser simulation and an optional interpretation Worker. The shared game contract is [apps/rumortown/src/sim/types.ts](../apps/rumortown/src/sim/types.ts). Modules exchange typed commands, snapshots, inspection views and ordered events through that contract.
+Rumourtown separates a dependency-free behaviour library, a browser simulation and an optional interpretation Worker. The shared game contract is [apps/rumortown/src/sim/types.ts](../apps/rumortown/src/sim/types.ts). Modules exchange typed commands, snapshots, inspection views and ordered events through that contract.
 
 ## Module map
 
@@ -192,8 +192,8 @@ a successful custom claim. Unsupported input returns an unsigned refusal with
                  |
                  v
 +----------------------------------+
-| Check secrets, require ntfy     |
-| message receipt, dispatch model |
+| Check secrets, dispatch model    |
+| No notification gate             |
 | Six-second timeout, no retries   |
 +----------------+-----------------+
                  |
@@ -215,7 +215,7 @@ payload; the ledger does not store the typed words.
 
 Traffic admission, byte/time bounds, an authenticated edge cache and transient-record retention protect this deliberately small coordinator. Static delivery is independent of the API. See [capacity assumptions, limits and load checks](scale.md).
 
-Before dispatch, the Worker requires a phone-notification receipt; failed or missing alert configuration releases the unused reservation. The phone may still be offline, so receipt is service acceptance rather than confirmed device delivery. See [credit controls and notification setup](credit-controls.md).
+After uncached requests settle, aggregate counters schedule optional daily ntfy digests outside the request path. Durable Object alarms send the end-of-day digest when there was spend and retry failed delivery once the next day. Alert faults are separate from billing faults and cannot release money or stop inference. See [credit controls and notification setup](credit-controls.md).
 
 The price table rejects unpriced models, and provider price caps reject more expensive routes. The reservation covers the most expensive
 configured model, a conservative prompt-token bound and up to 200 output tokens.

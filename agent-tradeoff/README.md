@@ -51,3 +51,4 @@ Change the file name for each task. Review tasks use `-s read-only` and `-o <rep
 | 14 | A town you can read: legibility, wayfinding and flow | implemented A–E; local checks pass; directory commits blocked by read-only `.git`; browser review pending, see report |
 
 Update this table as tasks complete. Things only the owner can do are in `owner-checklist.md`.
+| 15 | AI whispers inside the website | implemented A–E; 609 tests, typecheck, build, bundle and setup rehearsal pass; commits blocked by read-only `.git`, live browser/local Worker checks pending, see report |

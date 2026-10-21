@@ -1,6 +1,6 @@
-# RumorTown
+# Rumourtown
 
-RumorTown is a browser game about a village of 36 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
+Rumourtown is a browser game about a village of 36 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
 
 Whisper to Mira that Tom stole bread, open “Follow a rumor”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Open “Explore” to travel through four neighbourhoods, cross the river at either bridge and watch conversations around the village. Eastbank brings pottery, boat repairs and a market; the south commons adds a reading room, posthouse, teahouse and community gardens. Woodland paths connect quiet clearings beyond the orchard. Hold WASD or an arrow key to walk. Each villager has a private worry, an ambition and social motives. Rewind the timeline or share the run with a link.
 
@@ -8,7 +8,7 @@ Under “More”, the “Notebook” exports synthetic observations as JSON/CSV 
 
 Built by [Madhav Sunil](https://github.com/Maddy824).
 
-![RumorTown's expanded village with two bridges, Eastbank homes, woodland paths and a focused rumor trail.](docs/images/village-v3.png)
+![Rumourtown's expanded village with two bridges, Eastbank homes, woodland paths and a focused rumor trail.](docs/images/village-v3.png)
 
 ## Run locally
 
@@ -22,7 +22,7 @@ npm run build
 npm run bench
 ```
 
-Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. Both player-written whispers and the ready-made rumor menu work locally. Write up to 100 characters, choose the subject, story category and weight, then follow its tellings one at a time. The original words stay in replay links and research exports.
+Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. Both player-written whispers and the ready-made rumor menu work locally. Write up to 100 characters, choose the subject, story category and weight, then follow its tellings one at a time. Your words stay in the writing session. Only the chosen claim sentence enters stories, replay links and research exports.
 
 The default game runs the real village simulation. `?fake=1` opens the UI fixture; `?renderer=stub` selects the plain development renderer. No account or API key is needed to play or write your own stories.
 
@@ -30,7 +30,7 @@ The default game runs the real village simulation. `?fake=1` opens the UI fixtur
 
 Open **More → For developers** in the game for a free local agent tour, or run `npm run agent:demo` from this checkout. The headless adapter exposes observe, move, approach, whisper and wait tools, with bounded actions and exact replay. `npm run --silent agent:serve` accepts JSON tool calls from your controller. See the [agent guide](docs/agents.md). The supplied planner runs locally and uses **$0 AI credits**.
 
-Optional AI interpretation is disabled by default. A $0.019 daily allowance paces the $7 lifetime live budget across a year; a separate $2 development key leaves $1 headroom from a $10 prepaid balance. Phone alerts must be connected before external model requests can run. See [credit controls and phone setup](docs/credit-controls.md).
+AI interpretation is disabled in local Worker defaults and enabled only in its production environment. A $0.019 daily allowance paces the $7 lifetime live budget across a year; a separate $2 development key leaves $1 headroom from a $10 prepaid balance. Optional phone digests report daily use without blocking requests. See [credit controls and phone setup](docs/credit-controls.md).
 
 ## Repository map
 
@@ -59,7 +59,7 @@ These eight rules describe the main belief and gossip mechanisms. “Measured di
 | Bad news is more likely to be passed on. | Negative content gets sharing odds of `1.5`, represented by a `ln(1.5)` score bonus. Confidence, closeness and whether the listener already knows also affect telling. Measured sharing effect; tuned score mapping. Acerbi 2022; Dores Cruz et al. 2021. |
 | Trust falls faster than it recovers. | Negative trust adjustments count twice; exposure can impose a lasting ceiling of `0.75` of full trust. Measured direction; tuned multiplier and ceiling. Schweitzer 2006. |
 
-Dialogue is authored and selected by rules. Player-written text uses the subject, category and weight you select; the game does not infer its meaning. The optional interpretation Worker remains a separate service and is not called by the current writing form. Inspection exposes remembered sources, moods and reasons for decisions.
+Dialogue is authored and selected by rules. When the API URL and Turnstile public key are configured, the writing form asks the interpreter for a signed taxonomy claim and verifies it before showing a confirmation. You can change its meaning using manual choices. Without those settings, or when interpretation is unavailable, choose the subject, category and weight locally. Inspection exposes remembered sources, moods and reasons for decisions.
 
 ## Stay within a $10 AI budget
 
@@ -67,7 +67,7 @@ The intended deployment uses four layers. The account and hosting settings must 
 
 1. Prepaid credit: load $10 on OpenRouter and leave automatic top-up off. Exhausted credit stops interpretation; the ready-made menu remains available.
 2. Capped keys: cap the live key at $7 and the development key at $2, leaving $1 unallocated. These are provider-side stops outside the application.
-3. The ledger: one SQLite Durable Object reserves the worst-case cost before any model call, then settles usage. Its defaults are $0.019 per UTC day, $7 for the lifetime of the ledger, 20 calls per minute globally and 5 per hour per hashed visitor bucket. Phone notification acceptance is required before model dispatch, and paid inference is off by default. Cache hits avoid another model call. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
+3. The ledger: one SQLite Durable Object reserves the worst-case cost before any model call, then settles usage. Its defaults are $0.019 per UTC day, $7 for the lifetime of the ledger, 20 calls per minute globally and 5 per hour per hashed visitor bucket. Notifications are optional daily digests sent outside the request path. AI is off in local defaults and enabled only in production. Cache hits avoid another model call. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
 4. Free hosting with no card: deploy the static game and optional Worker on Cloudflare's free offering, with no paid upgrade or card attached. Quota exhaustion should stop service rather than enable paid usage. An optional custom domain is a separate recurring cost outside the AI budget.
 
 These are deployment requirements, not a claim that a live account has been audited. See [the request and ledger order](docs/architecture.md#the-workers-request-path).

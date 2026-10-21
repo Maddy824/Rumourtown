@@ -39,4 +39,4 @@ jobs:
       - name: Deploy the API Worker
         if: vars.DEPLOY_OPTIONAL_API == 'true'
         working-directory: apps/api
-        run: npx --no-install wrangler deploy
+        run: npx --no-install wrangler deploy --env production

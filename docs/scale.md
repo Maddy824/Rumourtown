@@ -1,6 +1,6 @@
 # Traffic and capacity
 
-RumorTown delivers a static application through a CDN. Each browser runs its own village, local agent, replay and research tools. Walking, conversations, typed rumors and exports make no server requests. Share state travels in the URL fragment. This release has no accounts, shared live villages or server-side saves.
+Rumourtown delivers a static application through a CDN. Each browser runs its own village, local agent, replay and research tools. Walking, conversations, manual rumor choices and exports run locally. With both public API settings present, typed rumors call the separate interpreter. Share state travels in the URL fragment. This release has no accounts, shared live villages or server-side saves.
 
 This removes central simulation work as the audience grows. It does **not** establish a measured capacity of one million concurrent players. Delivery, first-load traffic, device performance and optional API traffic need separate measurements.
 
@@ -12,16 +12,16 @@ flowchart LR
   E --> T[Bounded input and Turnstile]
   T --> C[Signed edge cache]
   C -->|Miss| L[Global ledger and durable claim cache]
-  L -->|Approved reservation| N[Phone notification receipt]
-  N --> M[Model provider]
+  L -->|Approved reservation| M[Model provider]
   M --> S[Settle, validate and sign]
+  S -. Background aggregate counters .-> N[Optional daily digest and alarm]
 ```
 
 ## Static delivery
 
 The game has no Worker script, SSR, `run_worker_first`, database or model gateway in its delivery path. Hashed `/assets/*` files have a one-year immutable browser cache policy. HTML and unversioned files retain revalidation, so releases can point to new hashes. Cloudflare currently lists static asset requests as free and unlimited; Worker invocations have separate billing and quotas. This is platform policy, not a load-test result. See [asset billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) and [headers](https://developers.cloudflare.com/workers/static-assets/headers/).
 
-The production workflow deploys the optional API only when repository variable `DEPLOY_OPTIONAL_API` is `true`. The API is disabled by default, and the current writing form does not call it. API outages do not interrupt local play.
+The production workflow deploys the optional API only when repository variable `DEPLOY_OPTIONAL_API` is `true`. The default/local API is disabled; its production environment enables it. The writing form calls it when both public build settings are present. API outages do not interrupt local play.
 
 ## Optional API limits
 

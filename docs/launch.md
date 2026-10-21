@@ -10,7 +10,7 @@ Prepared 21 October 2026. Publish after owner playtests, deployment and the live
 
 ## Show HN body
 
-I built RumorTown to make social simulation visible. Twenty-four fictional adults follow schedules, trade stories and remember who told them what. Whisper that Tom stole bread, watch the story travel, then ask each villager why they believed it. Beliefs track provenance, so two tellers can still lead back to one source. Corrections leave residue, friendships affect gossip, and exposure damages trust in the stranger. The simulation is deterministic, with authored dialogue and research-informed rules whose tuned parameters are documented. An optional interpreter turns typed whispers into a fixed taxonomy, with a deployment designed around a prepaid $10 cap. Ready-made whispers work offline. Each shared link preserves the seed and recorded whispers. Try Mira first, enable the threads, then rewind. [Library](https://github.com/Maddy824/Rumourtown/tree/build/village/packages/rumormind).
+I built Rumourtown to make social simulation visible. Twenty-four fictional adults follow schedules, trade stories and remember who told them what. Whisper that Tom stole bread, watch the story travel, then ask each villager why they believed it. Beliefs track provenance, so two tellers can still lead back to one source. Corrections leave residue, friendships affect gossip, and exposure damages trust in the stranger. The simulation is deterministic, with authored dialogue and research-informed rules whose tuned parameters are documented. An optional interpreter turns typed whispers into a fixed taxonomy, with a deployment designed around a prepaid $10 cap. Ready-made whispers work offline. Each shared link preserves the seed and recorded whispers. Try Mira first, enable the threads, then rewind. [Library](https://github.com/Maddy824/Rumourtown/tree/build/village/packages/rumormind).
 
 ## Fifteen-second muted clip
 
@@ -26,8 +26,8 @@ Use cuts between recorded moments rather than implying the whole day lasts fifte
 
 ## X / Bluesky posts
 
-1. I built a village of 24 people who gossip. Tell Mira that Tom stole bread, trace the story through the town, then ask each person why they believed it. RumorTown runs in your browser. https://github.com/Maddy824/Rumourtown
-2. Two tellers can still be one source. RumorTown tracks remembered origins, corrections and trust in a deterministic social simulation. The belief engine is a zero-dependency TypeScript library. https://github.com/Maddy824/Rumourtown
+1. I built a village of 24 people who gossip. Tell Mira that Tom stole bread, trace the story through the town, then ask each person why they believed it. Rumourtown runs in your browser. https://github.com/Maddy824/Rumourtown
+2. Two tellers can still be one source. Rumourtown tracks remembered origins, corrections and trust in a deterministic social simulation. The belief engine is a zero-dependency TypeScript library. https://github.com/Maddy824/Rumourtown
 3. Three days of gossip, 24 villagers, about 0.53 seconds of simulation on my M4 Max. Rendering has its own budget. I published the code, measured results and a small belief engine here: https://github.com/Maddy824/Rumourtown
 
 ## README GIF plan
