@@ -1,6 +1,10 @@
 # Rumourtown
 
-Rumourtown is a browser game about a village of 36 fictional adults, where a whispered lie can spread, divide friends and leave a grudge. Its villagers use a deterministic simulation built on research-informed rules, while the reusable `rumormind` library tracks beliefs, remembered sources and relationships.
+Rumourtown is a browser game about 36 fictional villagers whose beliefs, friendships and grudges change as they pass on a rumor.
+
+**[Play at rumourtown.dev](https://rumourtown.dev)** | [How it works](docs/how-it-works.md) | [Research](docs/research/README.md) | [MIT license](LICENSE)
+
+Built by [Madhav Sunil](https://github.com/Maddy824). Each village runs locally in your browser; optional AI helps interpret stories and voice conversations.
 
 Whisper to Mira that Tom stole bread, open “Follow a rumor”, and watch the story meet the people who know what happened. Tap a villager to inspect their beliefs, remembered sources and reasons. Open “Explore” to travel through four neighbourhoods, cross the river at either bridge and watch conversations around the village. Eastbank brings pottery, boat repairs and a market; the south commons adds a reading room, posthouse, teahouse and community gardens. Woodland paths connect quiet clearings beyond the orchard. Hold WASD or an arrow key to walk. Each villager has a private worry, an ambition and social motives. Rewind the timeline or share the run with a link.
 
@@ -10,25 +14,55 @@ Read [How it works](docs/how-it-works.md) for walking, whispers, the thread, sha
 
 Under “More”, the “Notebook” exports synthetic observations as JSON/CSV and compares three-day runs across one or five seeds with an assumption removed. See the [research model, evidence and limitations](docs/research-model.md).
 
-Built by [Madhav Sunil](https://github.com/Maddy824).
-
 ![Rumourtown's expanded village with two bridges, Eastbank homes, woodland paths and a focused rumor trail.](docs/images/village-v3.png)
+
+## Engineering at a glance
+
+- **Deterministic simulation:** seeded randomness, fixed-order maths and stable updates keep the same pinned raw replay hash across supported Node versions and browsers. The simulation owns schedules, actions and belief changes.
+- **Beliefs with provenance:** the dependency-free `rumormind` library tracks confidence, remembered sources, trust and corrections. A repeated story can have one origin even when it has several tellers.
+- **Bounded AI:** supported moves, visits, source questions and news use local state. Remote story interpretation and open conversation share a fail-closed spending ledger: $0.019 per UTC day and $7 lifetime, backed by provider key caps.
+- **Epistemic verifier:** a rule-based guard compares reply sentences with the speaker's beliefs. It can remove unsupported sentences, but has known limits with implication and paraphrases; it is not a guarantee of factual dialogue.
+- **Small language model study:** the [SLM harness](bench/slm/README.md) tests dialogue against simulation-owned beliefs, separating faithfulness to a character from truth in the world. The harness and fixtures are implemented; model comparisons and human validation remain research work.
+
+```mermaid
+flowchart LR
+  R[rumormind: beliefs and sources] --> S[Browser: deterministic village]
+  S --> U[Canvas, inspection and replay]
+  S --> O[Local conversation routing]
+  O -->|Open conversation| A[Optional Worker: budget ledger and AI]
+  S -->|Story meaning| A
+  A -->|Story annotations| S
+  A -->|Conversation reply| V[Browser: reply verifier]
+  V --> U
+  S --> B[SLM study: snapshots and probes]
+```
+
+See [architecture and request paths](docs/architecture.md) for the module boundaries and [research status](docs/research/README.md) for measured results and open questions.
 
 ## Run locally
 
-From the repository root:
+Use Node **22.12 or later in the 22.x line, or Node 24+**, and npm. CI checks Node 22 and 25. From the repository root:
 
 ```sh
-npm install
+npm ci
 npm run dev
-npm test
-npm run build
-npm run bench
 ```
 
 Open the local address printed by Vite. `npm test` runs the test suite; `npm run build` creates the browser build. Both player-written whispers and the ready-made rumor menu work locally. Write up to 100 characters and preview the exact story before sending. Without inference, the story spreads with neutral meaning. Confirmed wording appears in dialogue, replay links and research exports; unsent input does not.
 
 The default game runs the real village simulation. `?fake=1` opens the UI fixture; `?renderer=stub` selects the plain development renderer. No account or API key is needed to play or write your own stories.
+
+## Test and build
+
+```sh
+npm run typecheck
+npm test
+npm run bench:slm:smoke
+npm run build
+node .github/workflows/check-bundle.mjs
+```
+
+These checks need no model service or AI credits. The build writes `apps/rumortown/dist`; the bundle gate allows at most 400,000 bytes gzipped for game assets. Run `npm run bench` for simulation timings. The optional API has a [local setup guide](docs/workspaces.md#api-worker); production setup is in [deployment](docs/deploy.md).
 
 ## For developers
 
@@ -45,8 +79,10 @@ AI interpretation is disabled in local Worker defaults and enabled only in its p
 | [packages/rumormind](packages/rumormind/README.md) | Dependency-free TypeScript for belief, provenance, trust, gossip, mood and repair. |
 | [apps/rumortown](apps/rumortown) | Vite browser game, simulation, authored content, canvas rendering and controls. |
 | [apps/api](apps/api) | Cloudflare Worker for optional typed-rumor interpretation, signing and a durable budget ledger. |
+| [bench/slm](bench/slm/README.md) | Seeded scenarios, stress probes and model evaluation methods. |
+| [docs/research](docs/research/README.md) | Study plan, verifier findings, limitations and production uses. |
 
-See [the architecture](docs/architecture.md) for module boundaries, replay and the request path.
+See [workspace setup](docs/workspaces.md) for scoped commands and [the architecture](docs/architecture.md) for module boundaries, replay and the request path.
 
 The game runs each village in the browser and deploys as CDN-served static assets. The optional AI service has separate traffic admission and spending limits. See [capacity assumptions and load checks](docs/scale.md); million-user capacity still needs production validation.
 
@@ -69,7 +105,7 @@ Background dialogue is selected locally using beliefs, speech acts and character
 
 ## Stay within a $10 AI budget
 
-Remote inference tries Workers AI first, then OpenRouter’s free-model and capped paid fallback. The configured models are Llama 3.2 3B, `liquid/lfm-2.5-2.6b:free`, and Gemini Flash Lite. Provider availability and free quotas can change. All routes share the existing reservation ledger and daily/lifetime limits; errors and invalid outputs fall through. `/rumor` uses temperature 0.3 and a 120-token output cap; Talk or act uses 0.7 with the same cap. Typed stories bypass the legacy taxonomy matcher entirely. The old `/interpret` endpoint remains for compatible clients. Raw story and conversation prose is not cached or logged by the API. Background play, library stories and the neutral fallback use no inference credits.
+Remote inference tries Workers AI first, then OpenRouter’s free-model and capped paid fallback. The configured Workers AI model is Llama 3.3 70B for `/rumor` and `/play`, and Llama 3.2 3B for legacy `/interpret`. OpenRouter tries `liquid/lfm-2.5-2.6b:free`, then Gemini Flash Lite. Provider availability and free quotas can change. All routes share the existing reservation ledger and daily/lifetime limits; errors and invalid outputs fall through. `/rumor` uses temperature 0.3 and a 120-token output cap; Talk or act uses 0.7 with the same cap. Typed stories bypass the legacy taxonomy matcher entirely. The old `/interpret` endpoint remains for compatible clients. Raw story and conversation prose is not cached or logged by the API. Background play, library stories and the neutral fallback use no inference credits.
 
 Historical evaluation of the legacy matcher (no longer used for typed open stories): of all 200 whispers in `apps/api/evals/lies.json`: **140/140 local answers have the right kind and subject (100%)**, covering **140/156 in-scope items (89.74%)**. All **44/44 out-of-scope items abstain (100%; zero false claims)**. **35/200 items (17.5%) need the Worker**; the other 165 comprise 140 local confirmations and 25 local refusals. The lexicons and copied blocklists total **1,604 bytes gzipped**, below the 12 KB limit. These are fixture results, not measured live-traffic savings. See [the scoped implementation and verification report](agent-tradeoff/reports/19a-report.md).
 
@@ -77,10 +113,10 @@ The budget uses four layers. The account and hosting settings must be configured
 
 1. Prepaid credit: load $10 on OpenRouter and leave automatic top-up off. Exhausted credit stops interpretation; the ready-made menu remains available.
 2. Capped keys: cap the live key at $7 and the development key at $2, leaving $1 unallocated. These are provider-side stops outside the application.
-3. The ledger: one SQLite Durable Object admits Workers AI with a $0 hold and funds the worst-case cost before any OpenRouter call, then settles usage in `waitUntil`. Fallback shares the original request-limit admission. Its defaults are $0.019 per UTC day, $7 for the lifetime of the ledger, 20 calls per minute globally and 5 per hour per hashed visitor bucket. Optional daily digests report Workers AI requests/failures, OpenRouter dispatches, spend and remaining allowances outside the response path. Workers AI attempts are counted even at $0. AI is off in local defaults and enabled only in production. Legacy taxonomy cache hits avoid another model call; open stories are not cached. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
+3. The ledger: one SQLite Durable Object admits Workers AI with a $0 hold and funds the worst-case cost before any OpenRouter call, then settles usage in `waitUntil`. Fallback shares the original request-limit admission. Its defaults are $0.019 per UTC day, $7 for the lifetime of the ledger and 20 calls per minute globally. Hashed visitor buckets allow 5 story calls and a separate 30 conversation calls per hour. Optional daily digests report Workers AI requests/failures, OpenRouter dispatches, spend and remaining allowances outside the response path. Workers AI attempts are counted even at $0. AI is off in local defaults and enabled only in production. Legacy taxonomy cache hits avoid another model call; open stories are not cached. An unavailable ledger stops requests; uncertain dispatched costs consume their reservation.
 4. Free hosting with no card: deploy the static game and optional Worker on Cloudflare's free offering, with no paid upgrade or card attached. [Workers AI's free daily allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/) costs $0; quota exhaustion returns an error and falls back to the capped OpenRouter path. Keep Workers AI on Free: paid-plan overages are outside this ledger. An optional custom domain is a separate recurring cost outside the AI budget.
 
-These are deployment requirements, not a claim that a live account has been audited. See [credit controls and the three tiers](docs/credit-controls.md) and [the request and ledger order](docs/architecture.md#the-workers-request-path).
+These are deployment requirements, not a claim that a live account has been audited. See [credit controls and provider fallbacks](docs/credit-controls.md) and [the request and ledger order](docs/architecture.md#the-workers-request-path).
 
 ## What we deliberately did not build on
 
@@ -90,13 +126,15 @@ The design excludes the backfire effect, ego depletion, behavioural priming, the
 
 The [design evidence table](docs/superpowers/specs/2026-10-21-rumortown-design.md#8-simulation-rules-and-defaults) and [library evidence notes](packages/rumormind/README.md#evidence) explain which rules follow measured directions and which numbers are tuned. This is a game model, not a predictor of real people.
 
+The current [research program](docs/research/README.md) asks how small a model can be while speaking faithfully from a character's changing beliefs. A villager repeating a lie they believe is epistemically faithful even when the statement is false in the world. The study compares grounding, citations, planning, verifier-guided sampling and model cascades. Its synthetic labels and rule-based verifier still need independent human validation; fixture smoke tests are not model-quality results.
+
 ## Licence
 
-MIT.
+MIT. See [LICENSE](LICENSE).
 
 ## Benchmarks
 
-Measured 21 October 2026 on Apple M4 Max, macOS arm64, Node 25.8.2; seed 731. Each simulation runs three full days. These are desktop CPU measurements; phone rendering still needs device testing.
+Measured 21 October 2026 on Apple M4 Max, macOS arm64, Node 25.8.2; seed 731. Each simulation ran three historical 900-tick days, before the current 1,440-tick day was introduced. These are desktop CPU measurements; phone rendering still needs device testing.
 
 | Workload | Median | p95 | Total | Game-minutes/second |
 |---|---:|---:|---:|---:|

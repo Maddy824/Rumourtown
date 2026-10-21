@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run bench:slm:smoke
       - name: Build the game with public client settings
         run: npm run build
         env:

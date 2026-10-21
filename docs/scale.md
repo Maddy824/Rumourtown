@@ -1,6 +1,6 @@
 # Traffic and capacity
 
-Rumourtown delivers a static application through a CDN. Each browser runs its own village, local agent, replay and research tools. Walking, conversations, manual rumor choices and exports run locally. With both public API settings present, typed rumors call the separate interpreter. Share state travels in the URL fragment. This release has no accounts, shared live villages or server-side saves.
+Rumourtown delivers a static application through a CDN. Each browser runs its own village, local agent, replay and research tools. Walking, background gossip, supported local conversation commands, library stories and exports run locally. With both public API settings present, open conversation and semantic story annotations can call the separate Worker. Stories remain playable with neutral meaning without inference. Share state travels in the URL fragment. This release has no accounts, shared live villages or server-side saves.
 
 This removes central simulation work as the audience grows. It does **not** establish a measured capacity of one million concurrent players. Delivery, first-load traffic, device performance and optional API traffic need separate measurements.
 
@@ -10,10 +10,12 @@ flowchart LR
   CDN --> B[Independent browser simulations]
   D[Optional interpretation clients] --> E[Enabled check and edge admission]
   E --> T[Bounded input and Turnstile]
-  T --> C[Signed edge cache]
-  C -->|Miss| L[Global ledger and durable claim cache]
+  T --> R{Route}
+  R -->|Legacy interpret| C[Signed claim caches]
+  C -->|Miss| L[Global ledger]
+  R -->|Story or conversation| L
   L -->|Approved reservation| M[Model provider]
-  M --> S[Settle, validate and sign]
+  M --> S["Validate reply; sign legacy claims only"]
   S -. Background aggregate counters .-> N[Optional daily digest and alarm]
 ```
 
@@ -21,7 +23,7 @@ flowchart LR
 
 The game has no Worker script, SSR, `run_worker_first`, database or model gateway in its delivery path. Hashed `/assets/*` files have a one-year immutable browser cache policy. HTML and unversioned files retain revalidation, so releases can point to new hashes. Cloudflare currently lists static asset requests as free and unlimited; Worker invocations have separate billing and quotas. This is platform policy, not a load-test result. See [asset billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) and [headers](https://developers.cloudflare.com/workers/static-assets/headers/).
 
-The production workflow deploys the optional API only when repository variable `DEPLOY_OPTIONAL_API` is `true`. The default/local API is disabled; its production environment enables it. The writing form calls it when both public build settings are present. API outages do not interrupt local play.
+The production workflow deploys the optional API only when repository variable `DEPLOY_OPTIONAL_API` is `true`. The default/local API is disabled; its production environment enables it. The writing form can call `/rumor` for annotations when both public build settings are present; open conversation uses `/play`. API outages do not interrupt local play.
 
 ## Optional API limits
 
@@ -31,9 +33,9 @@ Cloudflare rate counters are approximate and local to a network location. They s
 
 Bodies have a 16 KiB byte limit, including streams with missing or false Content-Length, and a five-second read deadline. Malformed JSON returns 400, slow bodies 408, oversized bodies 413, unsupported formats 415 and throttling 429 with `Retry-After`. Clients should honor delays and avoid automatic inference retries.
 
-After Turnstile, signed edge-cache hits bypass the ledger, model and phone notification. Entries expire after an hour and are separated by claim hash, cast version and signing public key. Hits require signature and taxonomy validation. Only structured claims are cached; browser responses remain `no-store`. Cache failure falls back to the durable cache. Caches are per location, so cold misses can still converge on the ledger. See [Cache API behavior](https://developers.cloudflare.com/workers/runtime-apis/cache/).
+Only legacy `/interpret` uses the shared claim caches. `/rumor` and `/play` never cache story or conversation prose. After Turnstile, signed legacy edge-cache hits bypass the ledger, model and phone notification. Entries expire after an hour and are separated by claim hash, cast version and signing public key. Hits require signature and taxonomy validation. Only structured claims are cached; browser responses remain `no-store`. Cache failure falls back to the durable cache. Caches are per location, so cold misses can still converge on the ledger. See [Cache API behavior](https://developers.cloudflare.com/workers/runtime-apis/cache/).
 
-One exact ledger coordinates the deliberately small inference budget: five uncached calls/visitor/hour, twenty globally/minute, $0.019/day and $7 lifetime including outstanding holds. Concurrent cold misses can reserve separately for identical text, but every reservation must fit all caps. Do not shard this into independent $7 budgets. It is not a service for millions of simultaneous model calls.
+One exact ledger coordinates the deliberately small inference budget: five story calls and a separate thirty conversation calls per visitor/hour, twenty globally/minute, $0.019/day and $7 lifetime including outstanding holds. Concurrent cold misses can reserve separately for identical text, but every reservation must fit all caps. Do not shard this into independent $7 budgets. It is not a service for millions of simultaneous model calls.
 
 Visitor/minute records are pruned hourly, completed reservation IDs after 30 days, and the durable FIFO claim cache is capped at 2,048 entries. Daily balances, unresolved holds and billing faults remain. Cleanup cannot refund spent money or uncertain charges; retries against removed IDs fail closed. Investigate old holds manually.
 

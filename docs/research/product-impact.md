@@ -1,11 +1,11 @@
 # How the research feeds Rumourtown
 
-Every research output has a production use. Status is kept current here.
+Research outputs feed the game and its evaluation tools. “Implemented” describes repository code; deployment versions and live behavior need separate verification.
 
 | Research output | Use in the game | Status |
 |---|---|---|
-| Epistemic verifier (`apps/rumortown/src/agentic/verifier.ts`) | Runtime guard: every AI reply is checked sentence by sentence against what the speaking villager believes; unsupported or contradicting sentences are dropped, and if nothing faithful remains the villager says they don't know (`agentic/guard.ts`). | Live |
-| Orchestrator (`agentic/orchestrator.ts`) | Moves, visits, provenance and news answered from simulation state with no model call. | Live |
+| Epistemic verifier (`apps/rumortown/src/agentic/verifier.ts`) | Runtime guard for model conversation replies: sentences labelled unsupported or contradictory are dropped; an ignorance reply is used when none remain (`agentic/guard.ts`). The heuristic can miss errors; see [known limits](verifier-notes.md). | Implemented |
+| Orchestrator (`agentic/orchestrator.ts`) | Moves, visits, provenance and news answered from simulation state with no model call. | Implemented |
 | Smallest faithful model per route | Choose the model per route by measured faithfulness and latency, not by size; if a fine-tuned 1.7B model holds up, run it in the browser (WebLLM) for $0, offline, with no hourly limits. | Pending the baseline run |
 | Break points per stress axis | Production limits: facts sent per reply, conversation length before summarising, resistance to player pressure. | Pending |
 | Attack set from the red team | Regression tests against the live endpoints, including instructions hidden inside rumors. | Pending |

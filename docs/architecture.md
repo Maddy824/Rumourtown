@@ -1,6 +1,6 @@
 # Architecture
 
-Rumourtown separates a dependency-free behaviour library, a browser simulation and an optional interpretation Worker. The shared game contract is [apps/rumortown/src/sim/types.ts](../apps/rumortown/src/sim/types.ts). Modules exchange typed commands, snapshots, inspection views and ordered events through that contract.
+Rumourtown separates a dependency-free behaviour library, a browser simulation and an optional AI Worker. The shared game contract is [apps/rumortown/src/sim/types.ts](../apps/rumortown/src/sim/types.ts). Modules exchange typed commands, snapshots, inspection views and ordered events through that contract.
 
 ## Module map
 
@@ -40,14 +40,17 @@ visibility; `TalkApi` selects authored lines. The renderer reads snapshots, whil
 the interface issues `movePlayer` and `whisper` commands and reads `inspect`,
 `events` and `interventions`.
 
-`main.ts` mounts the real engine, world, talk and renderer by default; `?fake=1` selects the UI fixture. The browser currently writes claims locally. The optional Worker remains separate and is disabled by default.
+`main.ts` mounts the real engine, world, talk and renderer by default; `?fake=1` selects the UI fixture. Confirmed open stories become local claims; optional `/rumor` annotations can describe their social meaning. The Worker is disabled in local defaults and enabled in its production environment.
 
 The headless `agent/environment.ts` adapter provides bounded tools over the same engine. Ordinary agent observations expose nearby public state; research exports expose hidden state separately. The browser also has a local tour planner with a visible usage notice and manual takeover. See [the agent interface](agents.md).
 
 ## One simulation tick
 
-A tick is one game-minute. A day contains 900 ticks, representing 07:00 through
-22:00; the tick counter continues across days. The default run spans three days.
+A tick is one game-minute. A day contains 1,440 ticks, from 06:00 to the
+following dawn, including sleep and night activity. The tick counter continues
+across days. The browser starts at the visitor's local time, or the shared
+starting offset in a replay; the local clock is read outside the simulation.
+The default browser run spans three days from that offset.
 The interface controls playback speed and interpolates drawing between snapshots.
 Those frame updates do not advance beliefs independently of `step()`.
 
@@ -98,7 +101,7 @@ Those frame updates do not advance beliefs independently of `step()`.
 Agents are processed in cast order. Decisions are staggered every five ticks by
 agent index; conversations advance each tick. End-day work emits a summary,
 restores needs, reflects on memories, forgets source attribution and clears daily
-accusations. The engine currently runs it at `tick % 900 === 0`.
+accusations. The engine runs it at `tick % 1440 === 0`, at dawn.
 The library's source-memory default is 240 caller ticks; the engine overrides that
 value to `2` and calls `forget` once per day to approximate a two-day half-life.
 
@@ -120,10 +123,11 @@ consequences affect decisions a minute early.
 Live whispers require the player to be within two tiles. Replayed whispers bypass
 the range check and place the stranger at the listener; witnesses are computed
 from the listener's position. Player walking paths are absent from replay data.
-Because player position also participates in movement separation, the seed and
-intervention model alone should not be treated as proof that every live walking
-session reproduces a byte-identical event log. That guarantee needs integration
-validation with the real engine.
+Player position is excluded from villager movement separation, so walking does
+not perturb NPC paths or decisions. Replay tests pin the same raw event hash
+across supported Node versions and browser checks. This guarantee requires the
+same engine, content and ordered inputs; generated conversation text is not
+part of the replay.
 
 ## Share links
 
@@ -132,106 +136,110 @@ encoded as unpadded base64url, with this shape:
 
 ```json
 {
-  "v": 1,
+  "v": 2,
+  "start": 190,
   "seed": 42,
-  "cast": "v1",
+  "cast": "v4",
   "interventions": [
-    { "tick": 12, "listener": "mira", "claimId": "theft-tom" }
+    { "tick": 12, "listener": "mira", "claimId": "tom-stole-bread" }
   ]
 }
 ```
 
 The claim id above illustrates the shape; it must exist in the loaded claim map.
-`ui/share-link.ts` validates version 1, a 32-bit unsigned seed, a cast string of
-at most 32 characters and at most 400 interventions. Ticks must be integers from
+`ui/share-link.ts` accepts legacy version 1 and current version 2. Version 2
+also records `start`, an integer offset of 0–1,439 ticks from 06:00. Both versions
+validate a 32-bit unsigned seed, a cast string of at most 32 characters and at
+most 400 interventions. Ticks must be integers from
 0 through 1,000,000 and ids must match the bounded identifier pattern. Decoding
 rejects fragments longer than 16,000 characters, invalid encoding and malformed
 JSON. The interface also checks the cast version and known listener and claim ids.
 
-This format is encoded, not compressed. Player-written claims use a bounded `written_` base64url payload containing original text, subject, category and severity. The claim id therefore carries text for those claims, while authored and legacy interpreted claims remain taxonomy ids. Player-written claims are validated and registered at their intervention tick. For legacy interpreted claims it contains claim ids rather than typed
-text, player paths or generated dialogue. The design calls for signed custom
-claims and compression, but the current `ShareState` contract has no field for
-signed claims. Worker signatures therefore do not yet travel in this link format.
-Opening an existing claim-id replay requires no interpretation call.
+This format is encoded, not compressed. Authored claims use stable ids. Current
+open stories use bounded `story_` base64url payloads containing their confirmed
+wording and semantic annotations; legacy `written_` payloads are still accepted.
+The engine validates and registers custom claims at their intervention tick.
+Player paths and generated conversation replies are absent. The encoder keeps
+the largest suffix of recent whispers that fits the 16,000-character limit, so
+a long link can omit older interventions. Share links are not complete archives.
+
+Worker signatures do not travel in this format; the browser validates the
+embedded claim payload. Opening a replay needs no interpretation call. Confirmed
+story wording is visible to anyone with the link, as explained in
+[open stories](open-rumors.md).
+
+## Conversation routing and verification
+
+The browser's `agentic/orchestrator.ts` handles supported moves, visits, source
+questions and news from simulation state without inference. Open conversation
+passes a bounded set of character facts to `/play`; a proposed action requires
+player confirmation. Model output cannot directly update beliefs or world truth.
+
+`agentic/verifier.ts` compares reply sentences with belief records, confidence
+bands and source chains. `agentic/guard.ts` keeps sentences labelled supported
+or chatter, drops unsupported or contradictory sentences, and supplies an
+ignorance reply if none remain. These labels are heuristic. Implication,
+paraphrases and world-knowledge mappings can defeat the matcher; it is not a
+proof that a reply is true or calibrated. Research uses the same verifier through
+`bench/slm/verifier.ts`, with separate world-truth labels. See
+[development findings](research/verifier-notes.md) and [study status](research/README.md).
 
 ## The Worker's request path
 
-The Worker accepts `POST /interpret` with `{ text, turnstileToken, castVersion }`.
-It also exposes `GET /health` and `GET /pubkey`. All routes require the configured
-browser origin. The returned signed payload contains `claim`, `castVersion`,
-`issuedAt` and `sig`; signing uses ECDSA P-256. The browser helper in `net/interpret.ts` verifies signatures before returning
-a successful custom claim. Unsupported input returns an unsigned refusal with
-`unsupported`, `castVersion` and `issuedAt`; it is never applied as a claim.
+All routes require an allowed browser origin. `GET /health` reports service
+health and `GET /pubkey` exposes the ECDSA P-256 public key. The inference routes
+share Turnstile, bounded input, edge admission and the single `global-budget`
+SQLite Durable Object:
+
+| Route | Purpose | Cache and signing |
+|---|---|---|
+| `POST /rumor` | Semantic annotations for confirmed open stories | No shared prose cache; unsigned annotations reviewed by the player |
+| `POST /play` | Grounded conversation and a validated action proposal | No prose, context or reply cache |
+| `POST /interpret` | Legacy fixed-taxonomy claim interpretation | Validated and signed claims; hash-keyed edge and durable caches |
 
 ```text
-+----------------------------------+
-| Origin and route checks          |
-| Enabled check, edge rate limits  |
-| Body, length and blocked text    |
-+----------------+-----------------+
-                 |
-                 v
-+----------------------------------+
-| Verify Turnstile                 |
-| Hash normalised text             |
-+----------------+-----------------+
-                 |
-                 v
-+----------------------------------+
-| Edge cache, then ledger cacheGet |
-| Hit: validate, verify signature, |
-| re-sign for new cast if needed   |
-+----------------+-----------------+
-                 | cache miss
-                 v
-+----------------------------------+
-| Price allowlisted models         |
-| Hash visitor bucket              |
-| Ledger reserve worst-case cost   |
-+----------------+-----------------+
-                 |
-                 v
-+----------------------------------+
-| Check secrets, dispatch model    |
-| No notification gate             |
-| Six-second timeout, no retries   |
-+----------------+-----------------+
-                 |
-                 v
-+----------------------------------+
-| Ledger settle usage first        |
-| Then parse and validate claim    |
-| Sign, cachePut, return           |
-+----------------------------------+
+Origin, route, enabled-state and edge admission checks
+  -> bounded body and route-specific validation
+  -> Turnstile verification
+  -> legacy /interpret only: authenticated cache lookup
+  -> reserve request allowance and cost in the global ledger
+  -> Workers AI with a $0 hold
+  -> on failure: fund the same hold before OpenRouter fallback
+  -> validate provider output and return the route's response
+  -> settle/release in waitUntil; then record aggregate usage/digests
 ```
 
-One Durable Object named `global-budget` serves the whole deployment. Within a
-synchronous transaction, reservation checks the visitor's hourly count, the
-global minute count, the UTC day's spent plus reserved balance, and lifetime spend plus reservations, then records
-the hold and increments counts. Defaults are 5 requests per visitor per hour,
-20 globally per minute, $0.019 per day and $7 lifetime. A provider settlement above the reserved bound freezes further calls. Cache hits precede reservation and do
-not consume those model-call counts. The cache stores a hash and signed structured
-payload; the ledger does not store the typed words.
+The ledger checks the UTC day's spend plus reservations and lifetime spend plus
+reservations in a synchronous transaction. Defaults are $0.019 per day, $7
+lifetime and 20 requests per minute globally. Hashed visitor buckets allow
+5 story requests and a separate 30 conversation requests per hour. Workers AI
+attempts count even at $0. Legacy cache hits precede reservation and avoid model
+calls. A fallback funds the original reservation without charging admission twice.
 
-Traffic admission, byte/time bounds, an authenticated edge cache and transient-record retention protect this deliberately small coordinator. Static delivery is independent of the API. See [capacity assumptions, limits and load checks](scale.md).
+Workers AI defaults to Llama 3.3 70B for `/rumor` and `/play`, and Llama 3.2 3B
+for legacy `/interpret`. OpenRouter tries `liquid/lfm-2.5-2.6b:free`, then
+`google/gemini-2.5-flash-lite`. Route schemas and validators bound model outputs;
+the output ceiling is 120 tokens, with temperatures 0.3, 0.7 and 0 respectively.
+Each provider tier has a six-second deadline. Availability can change.
 
-After uncached requests settle, aggregate counters schedule optional daily ntfy digests outside the request path. Durable Object alarms send the end-of-day digest when there was spend and retry failed delivery once the next day. Alert faults are separate from billing faults and cannot release money or stop inference. See [credit controls and notification setup](credit-controls.md).
+The allowlisted price table and provider price caps reject unsupported prices.
+Before paid dispatch, a conservative prompt-token bound and maximum output cost
+must fit the hold. Invalid or refused output may already have cost money, so it
+is settled too. A pre-dispatch failure releases the hold; uncertain dispatched
+cost consumes the reserved amount. Failed settlement leaves the durable hold in
+place. Settlement above the bound freezes new calls. Ledger faults fail closed.
+Settlement and release run in `waitUntil` in production, outside the response
+path; usage digests follow the settlement attempt and cannot relax money limits.
 
-The price table rejects unpriced models, and provider price caps reject more expensive routes. The reservation covers the most expensive
-configured model, a conservative prompt-token bound and up to 200 output tokens.
-Returned usage is settled before output validation because an invalid or refused
-answer may already have cost money. A failure before dispatch releases the hold;
-a timeout or uncertain dispatched result settles the worst-case amount. Failed
-ledger settlement leaves its durable reservation held. Settlement and release are
-idempotent, and ledger errors stop the request.
+Only legacy accepted taxonomy claims are signed and cached. Refusals are neither.
+Cache hits require payload validation and signature verification; cast changes
+can re-sign a claim without another inference. Open-story and conversation prose
+are not stored in shared caches, the ledger or API logs. Confirmed story text
+still enters the browser's dialogue, exports and replay links.
 
-Only after settlement does the Worker validate the taxonomy, sign an accepted
-claim and cache it. Locally blocked text returns a refusal before Turnstile;
-model-generated refusals return after settlement without signing or caching. Cache hits are validated and signature-checked; a cast-version change
-re-signs the cached claim without another model call. Model requests use structured
-output, temperature zero and a free-first model list with a priced fallback.
-
-The ledger is one cost layer. Prepaid credit with auto top-up disabled, capped
-provider keys and free hosting with no card must be configured separately, as
-explained in [the root README](../README.md#the-10-guarantee). Rejections and outages
-leave the authored rumor menu as the intended browser fallback.
+See [traffic admission and capacity limits](scale.md) for bounds and retention.
+The ledger is one cost layer. Prepaid credit with auto top-up off, non-resetting
+provider key caps and a Cloudflare Free account must be configured separately;
+paid Workers AI overages are outside this ledger. See [credit controls](credit-controls.md)
+and [the root budget explanation](../README.md#stay-within-a-10-ai-budget).
+API failures leave local simulation and neutral-meaning stories playable.

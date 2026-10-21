@@ -1,7 +1,7 @@
 # Pushing small language models to their limits as epistemically faithful characters
 
 ## Thesis
-A deterministic simulation that owns every character's beliefs is an unlimited, perfectly labelled data source. Use it three ways: to **break** small models systematically, to **engineer** inference-time methods that make them faithful, and to **train** them on simulation-generated data. Falsifiable target: a fine-tuned or engineered model of at most 1.7B parameters, running on-device, reaches the epistemic faithfulness of grounded 70B on held-out stories and attacks, at under 10% of its cost and latency.
+A deterministic simulation that owns every character's beliefs can generate controlled synthetic states and operational labels. These labels describe the simulation; probe wording and verifier accuracy still require human validation. Use it three ways: to **break** small models systematically, to **engineer** inference-time methods that make them faithful, and to **train** them on simulation-generated data. Falsifiable target: a fine-tuned or engineered model of at most 1.7B parameters, running on-device, reaches the epistemic faithfulness of grounded 70B on held-out stories and attacks, at under 10% of its cost and latency.
 
 ## Task
 Input: a character's belief state (facts with ids, confidence band, source chain, and whether each is true in the world), persona card, last turns, the player's utterance. Output: a reply. Gold behaviour per probe: assert, hedge, deny, abstain ("I haven't heard"), name the source, refuse, or propose an action.

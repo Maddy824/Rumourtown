@@ -37,8 +37,8 @@ Verify all 2027 deadlines when announced.
 3. Synthetic world: rules are computational ground truth, not validated psychology; vary rule settings and network shapes, hold out story mechanisms, and run the player study.
 
 ## Build list (replaces 24-slm-agent-study.md items 1–3)
-1. `bench/agents/`: scenario generator (seeded villages, stories, conversations with known belief states), runner across conditions through a local Worker, outputs JSONL plus a results table.
-2. Claim extractor and dual verifier (epistemic vs world), with a hand-labelled development set.
+1. `bench/slm/`: scenario generator and runner implemented for Ollama and Workers AI, with JSONL output and summary tables. See [the harness](../../bench/slm/README.md). Comparative model runs and broader story coverage remain pending.
+2. Dual verifier (epistemic vs world) and small labelled development set implemented; expand independent human labels and report precision/recall. See [verifier notes](verifier-notes.md).
 3. Annotation tool: a small static page that shows one output with the character's belief state and collects labels (supported by belief / unsupported / contradicts belief / true-in-world), exported as CSV.
 4. Cascade in the Worker behind a flag, so it can be measured, not just shipped.
 5. Analysis notebook or script producing the tables and figures.

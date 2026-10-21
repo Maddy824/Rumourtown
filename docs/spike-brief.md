@@ -1,5 +1,7 @@
 # RumorTown spike: three villagers, one rumor
 
+Historical prototype brief, retained for context. The current 36-person game is described in the [README](../README.md) and [architecture](architecture.md); the prototype constraints below are not current product requirements.
+
 This is a throwaway go/no-go prototype. It answers one question: **can three rule-driven characters produce one disagreement that a stranger understands, and enjoys, within about 60 seconds, without reading a log?** Code quality can be prototype-grade, but keep the simulation core pure so it can be salvaged later.
 
 ## Hard constraints

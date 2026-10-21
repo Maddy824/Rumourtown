@@ -4,6 +4,9 @@
   "author": "Madhav Sunil",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/Maddy824/Rumourtown.git" },
+  "homepage": "https://rumourtown.dev",
+  "bugs": { "url": "https://github.com/Maddy824/Rumourtown/issues" },
+  "engines": { "node": "^22.12.0 || >=24.0.0" },
   "private": true,
   "type": "module",
   "workspaces": [

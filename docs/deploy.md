@@ -2,12 +2,12 @@
 
 The game lives at [rumourtown.dev](https://rumourtown.dev), with `www.rumourtown.dev` as a second game hostname and `api.rumourtown.dev` for interpretation. Wrangler declares the custom domains; the zone must belong to your Cloudflare account. The game Worker serves assets only. Hashed assets retain the immutable cache policy in `apps/rumortown/public/_headers`.
 
-Use Node 22, npm, Wrangler (from `npm ci`) and the GitHub CLI. The local town always works without an API. With both public build settings present, typed whispers use Turnstile, interpretation and signature verification, then ask the player to confirm. A refusal or unavailable API leaves manual choices available. Only taxonomy claims enter stories and replay links.
+Use Node 22.12+ in the 22.x line or Node 24+, npm, Wrangler (from `npm ci`) and the GitHub CLI. The local town always works without an API. With both public build settings present, typed stories can use Turnstile and `/rumor` for semantic annotations before confirmation. Confirmed wording enters dialogue, research exports and replay links; unsent text does not. An unavailable API leaves the same story playable with neutral meaning. Only legacy `/interpret` returns signed taxonomy claims. See [open stories](open-rumors.md).
 
 ## First production setup
 
 1. Add the domain to Cloudflare and create an invisible Turnstile widget for **both** `rumourtown.dev` and `www.rumourtown.dev`. Keep its public site key for the game build. Store the secret only in the API.
-2. Prepay OpenRouter credit, turn off auto top-up, and cap the live key at **$7 with no periodic reset**. The Worker also enforces **$0.019 per UTC day**, **$7 lifetime**, **5 calls per visitor per hour** and **20 calls globally per minute**. The free model is tried first; the paid fallback stays within its priced reservation. See [credit controls](credit-controls.md).
+2. Prepay OpenRouter credit, turn off auto top-up, and cap the live key at **$7 with no periodic reset**. The Worker also enforces **$0.019 per UTC day**, **$7 lifetime** and **20 calls globally per minute**. Visitor buckets have separate allowances of **5 story calls** and **30 conversation calls per hour**. Workers AI is tried first, then the free OpenRouter model and reserved paid fallback. Keep Cloudflare on Free; paid Workers AI overages are outside the ledger. See [credit controls](credit-controls.md).
 3. Log in and run the setup script from the repository:
 
    ```sh
@@ -45,9 +45,9 @@ Use Node 22, npm, Wrangler (from `npm ci`) and the GitHub CLI. The local town al
 
    Scope the token to Workers Scripts edit and Workers Routes edit in the account. Pushes to `main` deploy game assets. To deploy the API in that workflow too, set `gh variable set DEPLOY_OPTIONAL_API --body true`; its command selects `--env production`. Keep the declared Durable Object and both rate-limit bindings. Reuse the same ledger to preserve the lifetime allowance. See [traffic and capacity](scale.md) before a large launch.
 
-## Local evaluation
+## Legacy taxonomy evaluation
 
-`apps/api/.dev.vars` is ignored. Use a separate development OpenRouter key, a development signing JWK and Turnstile's always-pass test secret `1x0000000000000000000000000000000AA`. `.dev.vars` supplies secrets to a local Worker; it does not enable AI. The following commands explicitly enable local AI and make **200 model requests**, so run them only when that development spend is authorized. Never run the corpus against production. Optional ntfy can be left unset.
+This corpus measures legacy `/interpret`, not open-story annotations or conversation quality. `apps/api/.dev.vars` is ignored. Use a separate development OpenRouter key, a development signing JWK and Turnstile's always-pass test secret `1x0000000000000000000000000000000AA`. `.dev.vars` supplies secrets to a local Worker; it does not enable AI. The following commands explicitly enable local AI and make **200 model requests**, so run them only when that development spend is authorized. Never run the corpus against production. Optional ntfy can be left unset.
 
 ```sh
 # Terminal 1, from the root; fresh storage isolates the evaluation ledger/cache.

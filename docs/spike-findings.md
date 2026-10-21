@@ -1,5 +1,7 @@
 # Spike findings (2026-10-21)
 
+Historical observations from the three-person prototype in `spike/`. They do not describe the current game's behavior or validation status. See [current architecture](architecture.md) and [research status](research/README.md).
+
 Played in Chromium via Playwright, seed 731, whisper "Tom stole the bread" to Mira at tick 5, witness off and on.
 
 ## Verdict: go on mechanics, not yet on drama

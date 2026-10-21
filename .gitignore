@@ -7,3 +7,7 @@ dist
 .superpowers
 .agent-runs
 .wrangler/
+*.tsbuildinfo
+coverage/
+*.log
+/apps/api/evals/last-run.md
