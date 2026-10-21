@@ -31,4 +31,4 @@ Production-preview Chrome checks passed for unknown-killer and moon stories at 1
 - Live asset: `/assets/main-DbOSUlxP.js`.
 - Live API health returned `{"ok":true}`. No production secrets, provider configuration or spending limits changed.
 - Live desktop/360×800/360×640 checks passed for both stories: exact wording, disclosed sharing, no premature registration, visible interpretation, keyboard confirmation, neutral replay payload, no overflow or page errors. External requests were deliberately blocked to exercise free fallback; these checks did not spend inference credits or measure live model quality. See `open-rumors-live-browser-results.json` and six live screenshots.
-- GitHub CI pending push. Local total includes 12 pre-existing untracked SEO tests; the committed suite contains 855 tests across 73 files.
+- GitHub CI [39653917608](https://github.com/Maddy824/Rumourtown/actions/runs/39653917608) passed on Node 22 and Node 25 for release head `e29a282`. Local total includes 12 pre-existing untracked SEO tests; the committed suite contains 855 tests across 73 files.
