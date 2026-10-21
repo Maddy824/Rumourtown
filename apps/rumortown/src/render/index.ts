@@ -381,12 +381,12 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     // Only figures standing behind the house (feet above the façade's bottom edge) are hidden by
     // its roof; people inside the room already show through the cut-away, so the roof stays solid.
     const behind = (footY: number): boolean => footY < s.y + s.h - 0.2 * zoom;
-    if (behind(playerY) && roofOverlaps(s, playerX, playerY, zoom)) return 0.35;
+    if (behind(playerY) && roofOverlaps(s, playerX, playerY, zoom)) return 0.55;
     for (let i = 0; i < count; i++) {
       const v = cur.villagers[i] as WorldSnapshot['villagers'][number];
       if (v.id !== selected && !recentlySpoke.has(v.id)) continue;
       const footY = fy[i] as number;
-      if (behind(footY) && roofOverlaps(s, fx[i] as number, footY, zoom, v.tier === 'core' ? CORE_SCALE : 1)) return 0.35;
+      if (behind(footY) && roofOverlaps(s, fx[i] as number, footY, zoom, v.tier === 'core' ? CORE_SCALE : 1)) return 0.55;
     }
     return 1;
   }
