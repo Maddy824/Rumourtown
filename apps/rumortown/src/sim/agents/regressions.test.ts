@@ -437,6 +437,40 @@ it('does not use an unrelated bread errand to disprove typed coin theft', () => 
   expect(mira.ledger.confidence(coins.id)).toBe(before);
 });
 
+it('allows a new teller to corroborate a known rumor while stifling a repeated teller', () => {
+  const ctx = fixture(['mira', 'tom', 'ada']);
+  const mira = agent(ctx, 'mira'), ada = agent(ctx, 'ada');
+  hear(ctx, mira, harmful, 'origin', 4);
+  hear(ctx, ada, harmful, 'stranger');
+  expect(tellingFor(ctx, mira, ada, new Set())?.act).toBe('confide');
+  hearFrom(ctx, mira, ada, harmful, false);
+  expect(tellingFor(ctx, mira, ada, new Set())).toBeNull();
+});
+
+it('keeps second-source corroboration when a telling approach reaches the listener', () => {
+  const ctx = fixture(['mira', 'tom', 'ada']);
+  const mira = agent(ctx, 'mira'), ada = agent(ctx, 'ada');
+  ada.mover.pos = { x: mira.mover.pos.x + 1, y: mira.mover.pos.y };
+  hear(ctx, mira, harmful, 'origin', 4); hear(ctx, ada, harmful, 'stranger');
+  mira.goal = { kind: 'gossip', target: 'ada', claimId: harmful.id, act: 'gossip', since: 0 };
+  startConversation(ctx, mira, ada, true);
+  tick(ctx, 2);
+  expect(ctx.events.some(e => e.kind === 'line' && e.speaker === 'mira' && e.claimId === harmful.id && e.act === 'confide')).toBe(true);
+  expect(ada.ledger.beliefs.get(harmful.id)?.provenance.some(p => p.source === 'mira')).toBe(true);
+});
+
+it('can correct a known truth with new first-hand evidence from the same teller', () => {
+  const ctx = fixture(['mira', 'tom', 'ada']);
+  const mira = agent(ctx, 'mira'), ada = agent(ctx, 'ada');
+  hear(ctx, mira, truth, 'origin', 4);
+  hear(ctx, ada, harmful, 'stranger', 4);
+  hearFrom(ctx, mira, ada, truth, false);
+  expect(tellingFor(ctx, mira, ada, new Set())).toBeNull();
+  ctx.tick = 5;
+  mira.ledger.see(truth, ctx.claims, ctx.tick);
+  expect(tellingFor(ctx, mira, ada, new Set())?.act).toBe('defend');
+});
+
 it.each([['fallback', createMover], ['world', worldMover]] as const)('uses the %s mover to walk at one tile per minute and stop on arrival', (_, makeMover) => {
   const mover = makeMover({ x: 1.5, y: 1.5 }); mover.setPath([{ x: 2, y: 1 }, { x: 3, y: 1 }]);
   mover.update(1, 1, []); expect(mover.pos).toEqual({ x: 2.5, y: 1.5 }); expect(mover.moving).toBe(true);

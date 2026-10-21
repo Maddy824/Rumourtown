@@ -58,8 +58,12 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
     const confidence = speaker.ledger.confidence(claim.id);
     if (confidence < 0.15) continue;
     const listenerKnows = listener.ledger.knows(claim.id);
-    // Known claims are never presented as fresh news; repeated whispers remain a player intervention.
-    if (listenerKnows) continue;
+    const defending = claim.valence >= 0 && (claim.contradicts ?? []).some(id => listener.ledger.confidence(id) > 0.5);
+    if (listenerKnows && claim.valence >= 0 && !defending) continue;
+    const previous = listener.ledger.beliefs.get(claim.id)?.provenance.filter(p => p.kind === 'heard' && p.source === s).at(-1);
+    const newEvidence = previous && speaker.ledger.beliefs.get(claim.id)?.provenance.some(p => p.kind === 'saw' && p.tick > previous.tick);
+    // New tellers can corroborate a known rumor. The same teller needs new first-hand evidence.
+    if (previous && !newEvidence) continue;
     const closenessLT = ctx.rel.closeness(l, claim.about);
     const score = tellScore(
       {
@@ -72,16 +76,17 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
       },
       ctx.tuning,
     );
-    if (score < tellThreshold) continue;
-    let utility = 0.35 + 0.4 * (score - tellThreshold);
+    if (score < tellThreshold && !defending) continue;
+    let utility = 0.4 + 0.4 * (score - tellThreshold);
     let act: SpeechAct;
     if (claim.valence < 0) {
       // Honesty lowers gossip, extraversion raises it: at most about 10% each way.
       utility *= (1 - 0.2 * (t.honesty - 0.5)) * (1 + 0.2 * (t.extraversion - 0.5));
-      if (claim.target === l || closenessLT >= 0.6) act = 'warn';
+      if (listenerKnows) act = 'confide';
+      else if (claim.target === l || closenessLT >= 0.6) act = 'warn';
       else if (confidence < 0.6 && closenessSL >= CLOSE) act = 'confide';
       else act = 'gossip';
-    } else if ((claim.contradicts ?? []).some((id) => listener.ledger.confidence(id) > 0.5)) {
+    } else if (defending) {
       // The truth travels when it sets a record straight.
       utility += 0.25;
       act = 'defend';
@@ -101,7 +106,7 @@ export function tellingFor(ctx: Ctx, speaker: Agent, listener: Agent, present: R
             : `${listenerName} has not heard it yet`;
     // Decompose the very same tellScore and utility used above, including trait scaling and cap.
     const factor = claim.valence < 0 ? (1 - 0.2 * (t.honesty - 0.5)) * (1 + 0.2 * (t.extraversion - 0.5)) : 1;
-    const base = (0.35 - 0.4 * tellThreshold) * factor;
+    const base = (0.4 - 0.4 * tellThreshold) * factor;
     const terms: Term[] = [
       { text: `${percent(confidence)} sure ${claim.text}`, value: base + 0.4 * confidence * factor },
       { text: listenerTerm, value: 0.4 * (0.3 * closenessSL - (listenerKnows ? 0.6 : 0) - (claim.valence < 0 ? 0.3 * closenessLT : 0)) * factor },

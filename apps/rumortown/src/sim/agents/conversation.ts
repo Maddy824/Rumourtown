@@ -268,9 +268,11 @@ function intentLine(ctx: Ctx, conv: Conversation, m: Agent, members: Agent[]): Q
       return { speaker: m.d.id, listener: target.d.id, act: 'forgive', why: `The sting of being accused has faded; still fond of ${targetName}` };
     case 'gossip': {
       const claim = g.claimId !== undefined ? ctx.claims.get(g.claimId) : undefined;
-      if (!claim || claim.about === target.d.id || target.ledger.knows(claim.id) || conv.members.includes(claim.about)) return null;
+      if (!claim || claim.about === target.d.id || conv.members.includes(claim.about)) return null;
+      const telling = tellingFor(ctx, m, target, new Set(conv.members));
+      if (telling?.claim.id !== claim.id) return null;
       const conf = m.ledger.confidence(claim.id);
-      return { speaker: m.d.id, listener: target.d.id, act: g.act ?? 'gossip', claimId: claim.id, why: `${percent(conf)} sure ${claim.text}; ${targetName} would want to know` };
+      return { speaker: m.d.id, listener: target.d.id, act: telling.act, claimId: claim.id, why: `${percent(conf)} sure ${claim.text}; ${targetName} would want to know` };
     }
     default:
       return null;
@@ -358,6 +360,7 @@ function chooseLine(ctx: Ctx, conv: Conversation, speaker: Agent, members: Agent
 /* ---------------- Speaking and its effects ---------------- */
 
 function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
+  const activeConversation = conv;
   // A counter-accusation may have replaced the live conversation's accusation while this reply waited.
   if (line.decideSide) conv = { ...conv, accusation: line.decideSide.accusation };
   const speaker = agentOf(ctx, line.speaker);
@@ -388,6 +391,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
   speaker.bubble = { text: spoken.text, untilTick: ctx.tick + BUBBLE_TICKS, to: listener.d.id };
   face(speaker, listener);
   conv.lastSpeaker = speaker.d.id;
+  activeConversation.lastSpeaker = speaker.d.id;
   if (NOTABLE.has(line.act) && line.why) recordDecision(ctx, speaker, line.act, line.why);
 
   const isPublic = isPublicAround(ctx, conv, speaker, listener);
@@ -432,6 +436,7 @@ function speak(ctx: Ctx, conv: Conversation, line: QueuedLine): void {
     default:
       break;
   }
+  if (activeConversation.accusation === conv.accusation) activeConversation.lastClaim = conv.lastClaim;
 }
 
 /** Everyone present hears the claim; `evidence` marks a public, first-hand account. */

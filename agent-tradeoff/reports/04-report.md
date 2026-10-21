@@ -28,3 +28,11 @@ Seed 731, Mira, `tom-stole-bread`, tick 60, 900 steps. The test pins this review
 ## Parked minor findings
 
 Retell distortion, content decay, correction timing/origin multipliers, separate trust dimensions, broader appraisal/side-taking/reflection and per-claim dare verdicts remain model scope debt; each needs a deliberate model/contract change rather than a release-fix patch. A larger seed/claim/route sample and external playtests remain useful calibration work. Renderer command-budget tests are not named-phone performance evidence. Cooldown fallback and app-shell refactoring remain follow-up maintenance. Live AI evals and external account caps require owner credentials/configuration.
+
+## Rereview follow-up
+
+The first rereview found that skipping every known claim was too broad. Revised the rule: a new direct teller can corroborate a known rumor (voiced as confiding), while the same direct teller needs newer first-hand evidence to repeat it. Known positive news stays suppressed, but an alternative can still defend against an active harmful belief. The approach-to-utterance path rechecks the same rules when the speaker arrives. Regression tests distinguish new teller, repeated teller, stronger same-teller correction, and an actual approach conversation. Telling base utility is now 0.40 after restoring corroboration. Initial 0.35/18-of-20 measurements above describe the earlier intermediate fix.
+
+Queued replies now retain live turn bookkeeping while their effects remain attached to the original accusation. Pending typed submissions disable input choices and the text field, preserving Close and restoring fields on failure. The independent review's remaining concerns and follow-up disposition are in `04-rereview.md`.
+
+The reviewed final seed-731 smoke log has 1,700 lines, 545 belief changes, 79 defences across all claims, and an **exposed** ending. New hash after restoring evidence paths and turn bookkeeping: `d5b44d1cc69d48f865963192513b83b0244dad204b3183d20ec7b69dad8619f9`. The earlier hash above is historical. The sample test includes defences using the linked innocent alternative, since those are meaningful responses to the allegation too.

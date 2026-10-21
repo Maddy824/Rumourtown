@@ -72,6 +72,9 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
 
   const update = (): void => {
     sendBtn.disabled = busy || !(listener && (claimId || (ctx.client && ownText.trim())));
+    content.querySelectorAll<HTMLInputElement>('input').forEach(input => {
+      input.disabled = busy || (input.type === 'text' && !ctx.client);
+    });
   };
 
   form.addEventListener('submit', async (ev) => {
