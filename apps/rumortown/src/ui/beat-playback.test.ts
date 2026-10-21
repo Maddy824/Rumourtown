@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../sim/types.js';
 import { createFakeSimulation } from '../sim/fake.js';
-import { createExchanges, followsExchange, longestChain } from './exchanges.js';
+import { createExchanges, followsExchange, focusedScript, longestChain } from './exchanges.js';
 import { advanceToBeat, createBeatPlayback, PLAY_RATES } from './beat-playback.js';
 import { advanceTicks } from './loop.js';
 const sim = createFakeSimulation(731);
@@ -19,6 +19,20 @@ const recorded: SimEvent[] = [
 function exchange() { const history = createExchanges(sim); return history.push(recorded.slice(0, 2))[0]!; }
 
 describe('recorded rumor exchanges', () => {
+  it('keeps the live script on the followed rumor while preserving unrelated topics in history', () => {
+    const history = createExchanges(sim);
+    const events = [line(1, 'mira', 'ben', 'greet'), line(2, 'mira', 'ben', 'gossip', claimId),
+      line(3, 'ben', 'mira', 'doubt', claimId), line(4, 'mira', 'ben', 'news', 'unrelated'),
+      line(5, 'ben', 'mira', 'agree'), line(6, 'mira', 'ben', 'gossip', claimId)];
+    history.push(events);
+    const exchange = history.all[0]!;
+    expect(exchange.lines).toHaveLength(6);
+    expect(focusedScript(exchange, claimId, sim.claims).map(l => l.tick)).toEqual([1, 2, 3, 6]);
+    expect(exchange.lines[1]).toMatchObject({ claimId, act: 'gossip', listeners: ['ben'] });
+    const playback = createBeatPlayback(e => focusedScript(e, claimId, sim.claims));
+    playback.offer(exchange); playback.next(1); playback.next(1); playback.next(1);
+    expect(playback.line?.tick).toBe(6);
+  });
   it('joins reactions, retains greetings and replies, and closes at farewell or twelve minutes', () => {
     const history = createExchanges(sim);
     history.push(recorded);

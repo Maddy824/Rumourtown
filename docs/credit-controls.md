@@ -2,9 +2,16 @@
 
 The browser simulation, manual whispers, autonomous tour and developer agent examples run locally and consume **$0 of AI credits**. When both public build settings are present, typed whispers call the separate Worker interpreter and require confirmation before entering the village. Unavailable interpretation falls back to manual choices. Only taxonomy claims are kept in stories, links and research exports. The default/local Worker is disabled (`AI_ENABLED = "false"`); production alone enables it. Connecting a developer's own paid LLM loop requires a separate budget integration; the local adapter does not meter third-party model calls.
 
+
+## Conversation and actions
+
+The primary **Talk or act** sheet sends freeform text to `POST /play`, without the local rumor matcher. It sends at most 280 characters, the selected nearby villager's authored voice/mood/activity, place names, and the last three exchanges. The model returns a short reply plus one validated proposal: move, approach, pause, resume, look, or no action. The user must choose the action button before it executes. Unsupported mechanics (including combat/death) are explained rather than fabricated. The local walking shortcuts make no model calls.
+
+`/play` shares Turnstile, edge admission, visitor/global limits, the same global budget object, provider fallback and aggregate phone digests with `/interpret`. The existing $0.019 daily and $7 lifetime paid limits are unchanged. Conversation uses temperature 0.7 and the same 120-token output ceiling. No conversation text, context or generated replies are cached or sent to the ledger. The browser keeps three exchanges in memory while the sheet is open; switching people or reopening clears that history. AI failures are shown explicitly without replacing the user's words with a guessed rumor. The service still has no promise of unlimited AI under heavy traffic.
+
 ## Three interpretation tiers
 
-1. Browser rules: the planned local interpreter will answer clear cast claims for $0 without a network call. That browser work is a separate task; this Worker change does not enable it. Manual choices already cost $0.
+1. Browser rules: the local interpreter answers clear taxonomy claims for $0 without a network call in the separate rumor sheet. Talk or act bypasses that matcher. Manual choices already cost $0.
 2. Workers AI: the first remote attempt uses the `AI` binding and defaults to `@cf/meta/llama-3.1-8b-instruct-fast`. It reserves and settles $0 in the ledger, but counts against the same visitor/global request limits and appears in digests. Set `WORKERS_AI_MODEL` to `@cf/meta/llama-3.3-70b-instruct-fp8-fast` to use the larger alternative. Both local and production Wrangler configurations declare the binding. Local AI remains disabled.
 3. OpenRouter: on a missing binding, any Workers AI error, quota response, six-second timeout or invalid output, the existing free-first OpenRouter model chain runs, followed by the priced Gemini fallback. A valid Workers AI refusal ends interpretation without a paid retry. Both providers use the same compact cast/taxonomy prompt and JSON Schema, temperature 0 and at most 120 output tokens; validation and signed claims remain unchanged.
 

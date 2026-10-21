@@ -5,7 +5,7 @@
  */
 import { headAnchor, headLift } from './anchors.js';
 import { localStartTick } from './local-clock.js';
-import { createExchanges, followsExchange, longestChain, type StoryStats } from './exchanges.js';
+import { createExchanges, followsExchange, focusedScript, longestChain, type StoryStats } from './exchanges.js';
 import { createBeatPlayback, advanceToBeat } from './beat-playback.js';
 import { createDialogue } from './dialogue.js';
 import { clockLook, nightNow } from './night.js';
@@ -51,10 +51,13 @@ import { createStory } from './story.js';
 import { createStubRenderer } from './stub-renderer.js';
 import { createTag } from './tag.js';
 import { createTools } from './tools.js';
+import type { AmbientMusic } from './ambient-music.js';
+import { createPlay } from './play.js';
 import { createTimeControls, type Speed } from './timebar.js';
 import { createWhisperSheet, inReach } from './whisper.js';
 
 export interface AppDeps {
+  music?: AmbientMusic;
   arrival?: Arrival;
   arrivalDone?: Promise<void>;
   /** Builds a fresh run. The timeline calls this again with the same seed and whispers to rewind. */
@@ -221,7 +224,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   runningStory.addEventListener('pointerup', () => measureInsets());
 
   const nearbyNote = h('small', { class: 'nearby-note', 'aria-hidden': 'true' }, 'Meet someone');
-  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Whisper', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper', nearbyNote));
+  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Talk or act', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Talk or act', nearbyNote));
 
   const toast = h('p', { class: 'toast', role: 'status', hidden: true });
   const rewindText = h('span', { class: 'rewind-text' });
@@ -239,12 +242,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let acc = 0;
   let maxTick = sim.tick;
   let threadsOn = false;
-  let watchBeats = true;
+  let watchBeats = false;
+  let trailVisible = false;
   let scrubFar = false;
   let rewinding = false;
   let rewindToken = 0;
   let cursor = { tick: 0, seen: 0 };
-  let follow: { id: VillagerId; whisper: boolean } | null = null;
+  let follow: { id: VillagerId; whisper: boolean; rumor?: boolean } | null = null;
   const heldKeys = new Map<string, Vec2>();
   let keyTarget: { tile: Vec2; at: number } | null = null;
   let destination: { pos: Vec2; label: string } | null = null;
@@ -256,7 +260,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let lastTimeKey = '';
   let beats: StoryBeat[] = [];
   let exchanges = createExchanges(sim);
-  const playback = createBeatPlayback();
+  const playback = createBeatPlayback(exchange => focusedScript(exchange, story.selectedClaim(), sim.claims));
   let searchingBeat = false;
   const storyStats = (): StoryStats => ({ beats: exchanges.all.filter(e => followsExchange(e, '', exchanges.introduced)).length, longestChain: longestChain(trailHistory.links) });
   const focus = createRumorFocus();
@@ -335,6 +339,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (!phone) return;
     if (except !== 'tag') tag.close();
     if (except !== 'whisper') whisper.close();
+    if (except !== 'play') play.close();
     if (except !== 'story') story.close();
     if (except !== 'time') time.closeDrawer();
   };
@@ -346,7 +351,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     reducedMotion,
     layers,
     whisper: (listener, claimId) => doWhisper(listener, claimId),
-    walkTo: (id) => walkToVillager(id),
+    walkTo: (id) => walkToVillager(id, true),
     onOpenChange: (open) => {
       if (open) {
         whisper.warm();
@@ -354,6 +359,19 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
         hideToast();
       } else release('whisper');
       syncScrim();
+    },
+  });
+
+  const play = createPlay({ sim: () => sim, snapshot: () => cur, map, layers,
+    onOpenChange: open => { heldKeys.clear(); if (open) { hold('play'); hideToast(); } else release('play'); syncScrim(); },
+    rumors: () => whisper.open({ opener: postbox }),
+    act: reply => {
+      if (rewinding || sim.tick >= runTicks) { say('Start a new visit to act in the village.'); return; }
+      if (reply.action === 'move') { const place = map.places.find(p => p.id === reply.target); if (place) walkTo(place.door); }
+      else if (reply.action === 'approach' && sim.cast.has(reply.target)) walkToVillager(reply.target);
+      else if (reply.action === 'pause') setSpeed(0);
+      else if (reply.action === 'resume') setSpeed(lastPlaying);
+      else if (reply.action === 'look') guide.show('explore', postbox);
     },
   });
 
@@ -449,7 +467,26 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       syncScrim();
     },
   });
-  const tools = createTools({ layers, actions: [researchBtn, shareBtn], onAgent: startAgent,
+  const musicButton = h('button', { class: 'button button-quiet', type: 'button' });
+  deps.music?.subscribe(() => {
+    musicButton.textContent = deps.music!.enabled ? 'Quiet music: on' : 'Quiet music: off';
+    musicButton.setAttribute('aria-pressed', String(deps.music!.enabled));
+    musicButton.setAttribute('aria-label', 'Quiet music');
+  });
+  musicButton.addEventListener('click', () => deps.music?.setEnabled(!deps.music.enabled));
+  const rumorButton = h('button', { class: 'button button-quiet', type: 'button', onclick: () => { tools.close(); whisper.open({ opener: moreBtn }); } }, 'Spread a rumor');
+  const trailButton = h('button', { class: 'button button-quiet', type: 'button', 'aria-pressed': 'false', onclick: () => {
+    trailVisible = !trailVisible; trailButton.setAttribute('aria-pressed', String(trailVisible));
+    trailButton.textContent = trailVisible ? 'Rumor lines: on' : 'Rumor lines: off';
+    root.dataset.rumorLines = String(trailVisible);
+  } }, 'Rumor lines: off');
+  const readButton = h('button', { class: 'button button-quiet', type: 'button', 'aria-pressed': 'false', onclick: () => {
+    watchBeats = !watchBeats; readButton.setAttribute('aria-pressed', String(watchBeats));
+    readButton.textContent = watchBeats ? 'Read conversations: on' : 'Read conversations: off';
+    playback.reset();
+    if (watchBeats) { showTrail(true); playback.ignore(exchanges.all); }
+  } }, 'Read conversations: off');
+  const tools = createTools({ layers, actions: [rumorButton, trailButton, readButton, researchBtn, shareBtn, ...(deps.music?.available ? [musicButton] : [])], onAgent: startAgent,
     onReplayArrival: () => { void replayArrival(); }, onOpenChange: open => {
     heldKeys.clear();
     if (open) { hold('tools'); hideToast(); } else release('tools');
@@ -466,7 +503,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   });
   async function replayArrival(): Promise<void> {
     if (!deps.arrival) { opening.show(true); return; }
-    opening.close(); story.close(); whisper.close(); tag.close(); time.closeDrawer();
+    opening.close(); story.close(); whisper.close(); play.close(); tag.close(); time.closeDrawer();
     hold('arrival'); awaitingArrival = true;
     await deps.arrival.start();
     if (destroyed) return;
@@ -474,20 +511,21 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   }
   const dialogue = createDialogue(() => sim, () => playback.next(speed), () => { playback.skip(speed); acc = 0; });
   const bottom = h('div', { class: 'rt-bottom' }, postbox, time.bar, time.tab);
-  root.append(canvas, opening.el, dialogue.el, labelLayer, nowBar, districtBanner, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, scrim, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, stitching, live, actionLive);
+  root.append(canvas, opening.el, dialogue.el, labelLayer, nowBar, districtBanner, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, play.el, scrim, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, stitching, live, actionLive);
   story.endingSlot.append(dayEnd.el);
   story.setHandle(nowBar, root);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
-    scrim.hidden = !(whisper.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen());
-    scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
+    scrim.hidden = !(whisper.isOpen() || play.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen());
+    scrim.dataset.strong = dayEnd.isOpen() || play.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
   }
   scrim.addEventListener('click', () => {
     if (tools.isOpen()) tools.close();
     else if (guide.isOpen()) guide.close();
     else if (share.isOpen()) share.close();
     else if (whisper.isOpen()) whisper.close();
+    else if (play.isOpen()) play.close();
   });
 
   /* ---------------- Actions ---------------- */
@@ -595,7 +633,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     resumeForWalk();
   }
 
-  function walkToVillager(id: VillagerId): void {
+  function walkToVillager(id: VillagerId, rumor = false): void {
     focus.move(); playback.reset(); spotlight = null; hint.dismiss();
     stopAgent();
 
@@ -603,7 +641,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (!v || rewinding) return;
     heldKeys.clear();
     destination = null;
-    follow = { id, whisper: true };
+    follow = { id, whisper: true, rumor };
     movementHint.textContent = `Walking to ${v.name}.`;
     keyTarget = null;
     sim.movePlayer(tileOf(v.pos));
@@ -624,7 +662,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       sim.movePlayer(tileOf(p));
       if (done.whisper && !whisper.isOpen() && !layers.anyModal()) {
         closeSheetsForPhone('whisper');
-        whisper.open({ listener: done.id, opener: postbox });
+        if (done.rumor) whisper.open({ listener: done.id, opener: postbox });
+        else play.open(postbox, done.id);
       }
       return;
     }
@@ -688,7 +727,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   /* ---------------- Events ---------------- */
 
   function showTrail(open: boolean): void {
-    threadsOn = open; watchBeats = open; focus.toggle(open);
+    threadsOn = open; focus.toggle(open);
     root.dataset.tracing = String(open);
     threadsBtn.setAttribute('aria-pressed', String(open));
     followedClaim = ''; followedCount = 0;
@@ -722,7 +761,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const touched = exchanges.push(out);
     exchanges.expire(sim.tick);
     for (const exchange of touched) if (followsExchange(exchange, newWhisper?.claimId ?? story.selectedClaim(), exchanges.introduced)) {
-      if (searchingBeat || (watchBeats && !focus.paused)) {
+      if (searchingBeat || (threadsOn && watchBeats && !focus.paused)) {
         if (!playback.offer(exchange)) continue;
         acc = 0;
         if (searchingBeat) { searchingBeat = false; showTrail(true); actionLive.textContent = exchange.beat.text; }
@@ -888,8 +927,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   postbox.addEventListener('click', () => {
     if (rewinding) return;
     stopAgent();
-    closeSheetsForPhone('whisper');
-    whisper.open({ opener: postbox });
+    closeSheetsForPhone('play');
+    play.open(postbox);
   });
   time.tab.addEventListener('click', () => {
     if (time.isDrawerOpen()) closeSheetsForPhone('time');
@@ -1014,7 +1053,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function renderWorld(alpha: number): void {
     try {
       const options: PresentationOptions = {
-        threads: threadsOn, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion(), phone,
+        threads: trailVisible, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion(), phone,
         spotlight: playback.active?.people ?? (spotlight && performance.now() < spotlight.until ? spotlight.ids : undefined),
         spotlightDim: playback.active ? .5 : undefined,
         arriving: awaitingArrival && !reducedMotion(),
@@ -1132,7 +1171,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     bubbles.update({
       cur,
       muted: layers.anyModal() || !!playback.active,
-      rumorSpeech: threadsOn ? new Map([...rumorSpeech].filter(([id, speech]) => speech.claimId === story.selectedClaim() || (!speech.claimId && chainPeople.has(id))).map(([id, speech]) => [id, speech.text])) : undefined,
+      rumorSpeech: threadsOn ? new Map([...rumorSpeech].filter(([, speech]) => speech.claimId === story.selectedClaim()).map(([id, speech]) => [id, speech.text])) : undefined,
       spotlight: beatPeople ?? (spotlight && now < spotlight.until ? spotlight.ids : undefined),
       positions,
       player,
@@ -1174,7 +1213,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     }
     if (!tied) stringPath.setAttribute('d', '');
     const pair = beatPeople?.map(id => id === 'stranger' ? player : positions.get(id));
-    if (pair?.[0] && pair[1]) {
+    if (trailVisible && pair?.[0] && pair[1]) {
       const a = headAnchor(pair[0], project, .5), b = headAnchor(pair[1], project, .5);
       beatThread.setAttribute('d', `M${a.x} ${a.y} Q${(a.x + b.x) / 2} ${Math.max(a.y, b.y) + 20} ${b.x} ${b.y}`);
     } else beatThread.setAttribute('d', '');
@@ -1218,7 +1257,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   story.reset(resyncEvents());
   if (exchanges.introduced.size) {
     showTrail(true);
-    for (const exchange of exchanges.all) if (exchange.beat.tick === sim.tick && followsExchange(exchange, story.selectedClaim(), exchanges.introduced)) playback.offer(exchange);
+    for (const exchange of exchanges.all) if (watchBeats && exchange.beat.tick === sim.tick && followsExchange(exchange, story.selectedClaim(), exchanges.introduced)) playback.offer(exchange);
   }
   updateClock();
   deps.arrival?.connect(() => renderer.project(cur.player.pos, rig.camera), layers, () => cur.minuteOfDay);
@@ -1240,11 +1279,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     destroy() {
       destroyed = true;
       deps.arrival?.destroy();
+      deps.music?.destroy();
       geometryObserver?.disconnect();
       opening.close();
       tools.close();
       guide.destroy();
       whisper.destroy();
+      play.destroy();
       window.cancelAnimationFrame(rafId);
       root.removeEventListener('pointerdown', dismissHint);
       document.removeEventListener('keydown', onKey);

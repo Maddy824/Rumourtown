@@ -3,7 +3,7 @@ import type { Speed } from './timebar.js';
 
 export const PLAY_RATES: Record<Speed, number> = { 0: 0, .5: 1, 1: 2, 2: 4, 8: 16 };
 /** Real-time presentation only. A pause also freezes the line-reading clock. */
-export function createBeatPlayback() {
+export function createBeatPlayback(script: (exchange: Exchange) => ScriptLine[] = exchange => exchange.lines) {
   let active: Exchange | null = null, index = 0, shownAt = 0, endedAt: number | null = null;
   let releaseAt = -Infinity, releaseRate = 0, released = '';
   const queue: Exchange[] = [];
@@ -17,7 +17,7 @@ export function createBeatPlayback() {
   function finish(speed: Speed): void { release(speed); active = null; }
   return {
     get active() { return active; },
-    get line(): ScriptLine | undefined { return active?.lines[index]; },
+    get line(): ScriptLine | undefined { return active ? script(active)[index] : undefined; },
     get pending() { return queue.length; },
     ignore(exchanges: readonly Exchange[]) { for (const exchange of exchanges) seen.add(exchange.id); },
     offer(exchange: Exchange): boolean { if (seen.has(exchange.id)) return false; seen.add(exchange.id); if (!active) begin(exchange); else queue.push(exchange); return true; },
@@ -26,15 +26,16 @@ export function createBeatPlayback() {
       clock += Math.max(0, milliseconds);
       if (!active && queue.length) begin(queue.shift()!);
       if (!active) return;
-      if (index < active.lines.length - 1 && clock - shownAt >= 3500) { index++; shownAt = clock; }
-      if (active.closed && index === active.lines.length - 1 && clock - shownAt >= 3500) {
+      const lines = script(active);
+      if (index < lines.length - 1 && clock - shownAt >= 3500) { index++; shownAt = clock; }
+      if (active.closed && index >= lines.length - 1 && clock - shownAt >= 3500) {
         endedAt ??= clock;
         if (clock - endedAt >= 2000) finish(speed);
       }
     },
     next(speed: Speed) {
       if (!active) return;
-      if (index < active.lines.length - 1) { index++; shownAt = clock; endedAt = null; }
+      if (index < script(active).length - 1) { index++; shownAt = clock; endedAt = null; }
       else if (active.closed) finish(speed);
     },
     skip(speed: Speed) { if (active) finish(speed); },

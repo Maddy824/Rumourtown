@@ -23,7 +23,8 @@ export function createRegisteredClaim(fields: ClaimFields, cast: ReadonlyMap<Vil
   if (!subject || (fields.target !== undefined && (!cast.has(fields.target) || fields.target === fields.about))) {
     throw new Error('A claim must be about the village cast.');
   }
-  const object = fields.object;
+  const object = fields.object && ['loaf', 'sack', 'letter', 'ring', 'wheel', 'boat', 'candle', 'book', 'cart', 'key'].includes(fields.object)
+    ? `a ${fields.object}` : fields.object;
   const target = fields.target ? cast.get(fields.target)!.name : undefined;
   const detail: Record<GameClaim['kind'], string> = {
     theft: `stole ${object ?? 'something'}${target ? ` from ${target}` : ''}`,

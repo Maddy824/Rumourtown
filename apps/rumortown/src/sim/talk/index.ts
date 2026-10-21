@@ -161,6 +161,13 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
     // Time ran backwards: a new run is using this instance. Start its memory afresh.
     if (c.tick < latestTick) said.clear();
     latestTick = c.tick;
+    // Free prose may contain first-person accounts or arbitrary grammar. Quote it;
+    // never turn the stranger's account into the current speaker's eyewitness claim.
+    if (c.claim?.id.startsWith('written_') && (CLAIM_ACTS.includes(c.act) || c.act === 'news')) {
+      const lead = c.act === 'deny' ? 'I dispute this story' : c.act === 'doubt' ? 'I doubt this story' :
+        c.act === 'defend' ? 'Be fair about this story' : c.act === 'reactToWhisper' ? 'You are telling me' : 'The stranger said';
+      return { lineId: `written-quote/${c.act}`, text: `${lead}: “${c.claim.text}”` };
+    }
 
     let memory = said.get(c.speaker.id);
     if (!memory) {

@@ -1,0 +1,34 @@
+[
+  {
+    "width": 1280,
+    "muted": {
+      "state": "suspended",
+      "stored": "true"
+    },
+    "signal": {
+      "state": "running",
+      "contexts": 1,
+      "rms": 0.001383501724598519,
+      "peak": 0.007924206554889679,
+      "audibleWindows": 180,
+      "overflow": false
+    },
+    "errors": []
+  },
+  {
+    "width": 360,
+    "muted": {
+      "state": "suspended",
+      "stored": "true"
+    },
+    "signal": {
+      "state": "running",
+      "contexts": 1,
+      "rms": 0.001350318626782722,
+      "peak": 0.007446646690368652,
+      "audibleWindows": 180,
+      "overflow": false
+    },
+    "errors": []
+  }
+]

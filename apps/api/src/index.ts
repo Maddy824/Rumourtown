@@ -7,6 +7,7 @@ import { publicKey, sign, verify } from './sign';
 import { record, type Env, type FailureReason, type Fetcher, type Refusal, type SignedPayload } from './types';
 import { schema, validate } from './validate';
 import { workersAi } from './workers-ai';
+import { playPrompt, playSchema, readPlayContext, validatePlay, type PlayReply } from './play';
 export { BudgetLedger } from './ledger';
 
 interface Dependencies { fetch?: Fetcher; now?: () => number; cache?: EdgeCache }
@@ -94,6 +95,17 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   }
 
   const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: JSON.stringify({ whisper: text }) }];
+  const claim = await infer(request, env, fetcher, now, usage, defer, messages, schema, validate);
+  if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
+  const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
+  await finish(env, 'cachePut', { hash: key, payload: signed });
+  await edge.put(signed);
+  return signed;
+}
+
+/** Both typed routes share the same exact admission, reservation and settlement boundary. */
+async function infer<T>(request: Request, env: Env, fetcher: Fetcher, now: () => number, usage: Usage, defer: Defer,
+  messages: { role: string; content: string }[], outputSchema: unknown, validateOutput: (value: unknown) => T | null, temperature = 0): Promise<T> {
   // Gate both tiers through the exact ledger limits; a free attempt holds $0.
   let models: string[] = [];
   let body: Record<string, unknown> = {};
@@ -102,8 +114,8 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     try { models = modelList(env.MODELS); } catch { throw new Failure('model'); }
     body = {
       models, messages,
-      response_format: { type: 'json_schema', json_schema: { name: 'whisper', strict: true, schema } },
-      provider: { require_parameters: true, max_price: providerPriceCap(models) }, temperature: 0, max_tokens: MAX_TOKENS,
+      response_format: { type: 'json_schema', json_schema: { name: 'village_reply', strict: true, schema: outputSchema } },
+      provider: { require_parameters: true, max_price: providerPriceCap(models) }, temperature, max_tokens: MAX_TOKENS,
     };
     worstCaseUsd = reservationCost(models, estimatePromptTokens(body));
   }
@@ -127,15 +139,11 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     if (env.AI) {
       usage.dispatched = true;
       usage.workersAi = true;
-      const claim = await workersAi(env, messages);
+      const claim = await workersAi(env, messages, { schema: outputSchema, validate: validateOutput, temperature });
       if (claim) {
         settled = true;
         await defer(finish(env, 'settle', { reservationId, actualUsd: 0 }));
-        if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
-        const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
-        await finish(env, 'cachePut', { hash: key, payload: signed });
-        await edge.put(signed);
-        return signed;
+        return claim;
       }
       usage.workersAiFailed = true;
       openRouterBody();
@@ -161,13 +169,9 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
     if (!record(choice) || !record(choice.message) || typeof choice.message.content !== 'string') throw new Failure('invalid');
     let output: unknown;
     try { output = JSON.parse(choice.message.content); } catch { throw new Failure('invalid'); }
-    const claim = validate(output);
+    const claim = validateOutput(output);
     if (!claim) throw new Failure('invalid');
-    if ('unsupported' in claim) return { unsupported: claim.unsupported, castVersion: input.castVersion, issuedAt: now() };
-    const signed = await sign({ claim, castVersion: input.castVersion, issuedAt: now() }, env.SIGNING_KEY_JWK);
-    await finish(env, 'cachePut', { hash: key, payload: signed });
-    await edge.put(signed);
-    return signed;
+    return claim;
   } catch (error) {
     if (!settled) {
       // Aborts, lost responses and unknown usage are charged at the reserved bound.
@@ -198,13 +202,30 @@ export function createWorker(deps: Dependencies = {}) {
         if (ctx) usage.pending.push(task.catch(() => undefined));
         else await task;
       };
-      const isInterpret = request.method === 'POST' && new URL(request.url).pathname === '/interpret';
+      const isInterpret = request.method === 'POST' && ['/interpret', '/play'].includes(new URL(request.url).pathname);
       const requestTime = (deps.now ?? Date.now)();
       try {
         const path = new URL(request.url).pathname;
-        if (request.method === 'OPTIONS' && ['/interpret', '/pubkey', '/health'].includes(path)) return new Response(null, { status: 204, headers });
+        if (request.method === 'OPTIONS' && ['/interpret', '/play', '/pubkey', '/health'].includes(path)) return new Response(null, { status: 204, headers });
         if (request.method === 'GET' && path === '/health') return json({ ok: true });
         if (request.method === 'GET' && path === '/pubkey') return json(publicKey(env.SIGNING_KEY_JWK));
+        if (request.method === 'POST' && path === '/play') {
+          await admit(request, env);
+          const input = await readInput(request);
+          if (!record(input) || Object.keys(input).some(key => !['text', 'context', 'turnstileToken'].includes(key)) ||
+              typeof input.text !== 'string' || !input.text.trim() || input.text.length > 280 || /[\u0000-\u001f\u007f]/u.test(input.text) ||
+              typeof input.turnstileToken !== 'string' || !input.turnstileToken.trim() || input.turnstileToken.length > 2048) throw new Failure('invalid', 400);
+          const context = readPlayContext(input.context);
+          if (!context) throw new Failure('invalid', 400);
+          await turnstile(request, input.turnstileToken, env, deps.fetch ?? fetch);
+          usage.track = true;
+          if (blockedReason(normalise(input.text))) return json({ reply: 'Let’s keep this conversation about life in the village.', action: 'none', target: '' } satisfies PlayReply);
+          // No prose, context or generated reply enters either cache or the ledger.
+          const result = await infer(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer,
+            [{ role: 'system', content: playPrompt }, { role: 'user', content: JSON.stringify({ text: input.text, context }) }],
+            playSchema, value => validatePlay(value, context), .7);
+          return json(result);
+        }
         if (request.method === 'POST' && path === '/interpret') {
           const cache = deps.cache ?? (typeof caches === 'undefined' ? undefined : caches.default);
           const result = await interpret(request, env, deps.fetch ?? fetch, deps.now ?? Date.now, usage, defer, cache);

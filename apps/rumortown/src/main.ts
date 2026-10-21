@@ -8,6 +8,7 @@ import { createMover, createWorld } from './sim/world/index.js';
 import type { Renderer, VillageMap } from './sim/types.js';
 import { mountApp, type AppDeps } from './ui/app.js';
 import { createArrival } from './ui/arrival.js';
+import { createAmbientMusic } from './ui/ambient-music.js';
 import { createStubRenderer } from './ui/stub-renderer.js';
 
 type CreateRenderer = (canvas: HTMLCanvasElement, map: VillageMap) => Renderer;
@@ -53,7 +54,9 @@ export async function loadRenderer(): Promise<CreateRenderer> {
 async function start(): Promise<void> {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) return;
-  const arrival = createArrival(root);
+  const music = createAmbientMusic();
+  deps.music = music;
+  const arrival = createArrival(root, () => { void music.start(); });
   deps.arrival = arrival;
   deps.arrivalDone = arrival.start();
   deps.createRenderer = await loadRenderer();

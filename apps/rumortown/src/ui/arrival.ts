@@ -4,7 +4,7 @@ import { paperStars } from '../render/night.js';
 import { SpriteCache } from '../render/sprites.js';
 import { h } from './dom.js';
 import type { Layers } from './layers.js';
-export function createArrival(root: HTMLElement) {
+export function createArrival(root: HTMLElement, onEnter?: () => void) {
   let finish: (() => void) | undefined, timer = 0, positionFrame = 0, playing = false;
   let destination: (() => { x: number; y: number } | null) | undefined;
   let layers: Layers | undefined;
@@ -15,13 +15,16 @@ export function createArrival(root: HTMLElement) {
   figure.style.width = `${sprite.w}px`; figure.style.height = `${sprite.h}px`;
   figure.style.translate = `${-sprite.ax}px ${-sprite.ay}px`;
   const skip = h('button', { class: 'button arrival-skip', type: 'button' }, 'Enter village');
-  const hint = h('p', { class: 'arrival-hint' }, 'Click anywhere or press any key to enter.');
+  const hint = h('p', { class: 'arrival-hint' }, 'A little world. A thousand whispers.');
+  skip.setAttribute('aria-description', 'Click or press Enter to enter the village.');
   const el = h('section', { class: 'arrival', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Welcome to Rumourtown', hidden: true },
     h('div', { class: 'arrival-sky' }),
+    h('div', { class: 'arrival-halo', 'aria-hidden': 'true' }),
+    h('div', { class: 'arrival-dust', 'aria-hidden': 'true' }, ...Array.from({ length: 18 }, (_, i) => h('i', { style: `--i:${i};left:${(i * 47 + 13) % 100}%;top:${(i * 31 + 9) % 100}%` }))),
     h('div', { class: 'arrival-stars', 'aria-hidden': 'true' }, ...paperStars.map(s => h('span', { style: `left:${s.x * 100}%;top:${s.y * 300}%;width:${s.size * 2}px;height:${s.size * 2}px` }))),
     ...[0, 1, 2, 3].map(i => h('div', { class: `felt-cloud cloud-${i}`, 'aria-hidden': 'true' })),
-    h('div', { class: 'arrival-title' }, h('h1', null, 'Rumourtown'),
-      h('p', null, 'Thirty-six villagers who think for themselves. You’re the stranger who came down from the sky.'),
+    h('div', { class: 'arrival-title' }, h('span', { class: 'arrival-eyebrow' }, 'Somewhere between a dream and a secret'), h('h1', null, 'Rumourtown'),
+      h('p', null, 'You drift in from the sky. Below, a village is keeping its secrets.'),
       h('small', null, 'Made by ', h('a', { href: 'https://github.com/Maddy824', target: '_blank', rel: 'noopener noreferrer' }, 'Madhav'), ', who likes to hear gossip.')),
     figure, h('div', { class: 'arrival-puff', 'aria-hidden': 'true' }), skip, hint);
   document.body.append(el);
@@ -35,6 +38,7 @@ export function createArrival(root: HTMLElement) {
   function enter(): void {
     if (el.hidden) return;
     if (playing) { end(); return; }
+    onEnter?.();
     playing = true; root.dataset.arrivalPlaying = 'true';
     el.classList.add('arrival-playing'); skip.textContent = 'Skip intro'; hint.hidden = true;
     timer = window.setTimeout(end, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 350 : 2800);

@@ -1,0 +1,140 @@
+[
+  {
+    "width": 1280,
+    "height": 800,
+    "waiting": {
+      "tick": 60,
+      "hidden": false,
+      "hint": "A little world. A thousand whispers.",
+      "overflow": false
+    },
+    "before": {
+      "tick": 60,
+      "pos": {
+        "x": 17.5,
+        "y": 15.5
+      },
+      "overflow": false,
+      "rect": {
+        "x": 380,
+        "y": 20,
+        "width": 520,
+        "height": 760,
+        "top": 20,
+        "right": 900,
+        "bottom": 780,
+        "left": 380
+      }
+    },
+    "requests": [
+      {
+        "text": "kill",
+        "speaker": null,
+        "history": 0
+      },
+      {
+        "text": "Walk to the square",
+        "speaker": null,
+        "history": 1
+      },
+      {
+        "text": "budget",
+        "speaker": null,
+        "history": 0
+      }
+    ],
+    "errors": []
+  },
+  {
+    "width": 360,
+    "height": 800,
+    "waiting": {
+      "tick": 60,
+      "hidden": false,
+      "hint": "A little world. A thousand whispers.",
+      "overflow": false
+    },
+    "before": {
+      "tick": 60,
+      "pos": {
+        "x": 17.5,
+        "y": 15.5
+      },
+      "overflow": false,
+      "rect": {
+        "x": 12,
+        "y": 28,
+        "width": 336,
+        "height": 760,
+        "top": 28,
+        "right": 348,
+        "bottom": 788,
+        "left": 12
+      }
+    },
+    "requests": [
+      {
+        "text": "kill",
+        "speaker": null,
+        "history": 0
+      },
+      {
+        "text": "Walk to the square",
+        "speaker": null,
+        "history": 1
+      },
+      {
+        "text": "budget",
+        "speaker": null,
+        "history": 0
+      }
+    ],
+    "errors": []
+  },
+  {
+    "width": 360,
+    "height": 640,
+    "waiting": {
+      "tick": 60,
+      "hidden": false,
+      "hint": "A little world. A thousand whispers.",
+      "overflow": false
+    },
+    "before": {
+      "tick": 60,
+      "pos": {
+        "x": 17.5,
+        "y": 15.5
+      },
+      "overflow": false,
+      "rect": {
+        "x": 12,
+        "y": 28,
+        "width": 336,
+        "height": 600,
+        "top": 28,
+        "right": 348,
+        "bottom": 628,
+        "left": 12
+      }
+    },
+    "requests": [
+      {
+        "text": "kill",
+        "speaker": null,
+        "history": 0
+      },
+      {
+        "text": "Walk to the square",
+        "speaker": null,
+        "history": 1
+      },
+      {
+        "text": "budget",
+        "speaker": null,
+        "history": 0
+      }
+    ],
+    "errors": []
+  }
+]

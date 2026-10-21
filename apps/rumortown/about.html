@@ -37,10 +37,10 @@
       {"@type":"Question","name":"Is Rumourtown free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It runs in your browser with no account and no payment. Typed whispers use a small AI service behind a fixed budget; when that budget is spent, ready-made rumors keep working."}},
       {"@type":"Question","name":"Does it need an account?","acceptedAnswer":{"@type":"Answer","text":"No. A share link carries everything needed to replay your three days exactly."}},
       {"@type":"Question","name":"What makes it an agentic game?","acceptedAnswer":{"@type":"Answer","text":"Every villager is an autonomous agent with its own goals, routine, memory, beliefs that remember who told them, relationships and moods with causes. Nothing they do is scripted, and AI agents can play the game through a published agent protocol."}},
-      {"@type":"Question","name":"Does the AI write what villagers say?","acceptedAnswer":{"@type":"Answer","text":"No. One small AI call reads your typed whisper and turns it into a village rumor: who it is about and what kind. The villagers' lines are authored, and what they believe and do is decided by the simulation."}},
+      {"@type":"Question","name":"Does the AI write what villagers say?","acceptedAnswer":{"@type":"Answer","text":"Talk or act uses AI to improvise a short reply in a nearby villager's voice and suggest supported actions. The player chooses whether to act. Background gossip remains authored and beliefs are decided by the local simulation."}},
       {"@type":"Question","name":"Where do the rules come from?","acceptedAnswer":{"@type":"Answer","text":"From published behavioural research on rumor transmission, belief updating, corrections, side-taking and forgiveness. The README lists every rule with its source and says which numbers are measured and which are tuned."}},
       {"@type":"Question","name":"Can an AI agent play it?","acceptedAnswer":{"@type":"Answer","text":"Yes. The repository publishes an agent environment with observe, move, approach, wait and whisper tools, a JSON-lines bridge and exact replay, so any agent can take the stranger's role."}},
-      {"@type":"Question","name":"Does it work on phones?","acceptedAnswer":{"@type":"Answer","text":"Yes. The layout is phone first: tap to walk, a large whisper button, and a story sheet you can pull up."}},
+      {"@type":"Question","name":"Does it work on phones?","acceptedAnswer":{"@type":"Answer","text":"Yes. The layout is phone first: tap to walk, a large Talk or act button, and a story sheet you can pull up."}},
       {"@type":"Question","name":"Can I use the library?","acceptedAnswer":{"@type":"Answer","text":"Yes. The rumormind package gives any JavaScript game beliefs with provenance, trust and affinity, gossip decisions, side-taking and repair, with zero dependencies and deterministic results."}}
     ]}
     </script>
@@ -66,7 +66,7 @@
       <p>A link carries the seed and your whispers, so a friend replays the exact same three days on any device. Your typed words never travel; only the rumor the village understood does.</p>
 
       <h2>Your typed whisper and the budget</h2>
-      <p>One small AI call reads your words and turns them into a village rumor: who it is about, what kind, how bad. It never writes what the villagers say and never decides what they believe. The service runs behind a fixed budget: prepaid credit, a capped key, and a ledger that reserves the cost before every call. When the day's allowance is spent, typed whispers rest and the ready-made ones keep working.</p>
+      <p>Talk or act uses a small AI call to improvise a reply using the nearby villager’s voice, mood and your recent conversation. It may suggest walking, visiting someone, pausing or looking around; you choose whether to act. Spread a rumor interprets a claim separately. Both share the same capped budget. Background gossip and beliefs run locally, and ordinary play continues when the AI allowance rests. Conversations are not saved in links or research exports.</p>
 
       <h2>Agents can play too</h2>
       <p>The published <a href="https://github.com/Maddy824/Rumourtown/blob/build/village/apps/rumortown/src/agent/environment.ts">agent/environment.ts protocol</a> lets an AI agent observe, walk and whisper. Run <code>npm run agent:demo</code> from a checkout to try it. More’s developer guide explains how to connect an agent.</p>
@@ -81,7 +81,7 @@
       <details><summary>Does the AI write what villagers say?</summary><p>No. The AI only reads your whisper. The villagers' lines are authored, and the simulation decides what they believe and do.</p></details>
       <details><summary>Where do the rules come from?</summary><p>From published behavioural research, listed rule by rule in the README with sources.</p></details>
       <details><summary>Can an AI agent play it?</summary><p>Yes. The repository publishes an agent environment with observe, move, approach, wait and whisper tools, a JSON-lines bridge and exact replay.</p></details>
-      <details><summary>Does it work on phones?</summary><p>Yes. Tap to walk, a large whisper button, and a story sheet you can pull up.</p></details>
+      <details><summary>Does it work on phones?</summary><p>Yes. Tap to walk, a large Talk or act button, and a story sheet you can pull up.</p></details>
       <details><summary>Can I use the library?</summary><p>Yes. The <a href="https://github.com/Maddy824/Rumourtown/tree/main/packages/rumormind">rumormind</a> package gives any JavaScript game beliefs with provenance, trust, gossip decisions, side-taking and repair, with zero dependencies.</p></details>
 
       <p><a href="/">Back to the village</a>. <a href="https://github.com/Maddy824/Rumourtown">Source code</a></p>

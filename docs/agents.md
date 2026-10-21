@@ -70,3 +70,9 @@ Normal observations show only people within six tiles and line of sight, their p
 Observations are snapshots, not a complete hearing history: a controller that waits a long time can miss conversations. Whisper proximity follows the game's two-tile rule. Time changes only through bounded `wait`/`approach` calls. Returned data is detached from internal state.
 
 Replay pins are regression checks, not evidence of psychological validity. Compare several seeds and declare the information available to each controller. See [research assumptions](research-model.md) and [credit controls and phone alerts](credit-controls.md).
+
+## In-game conversation controller
+
+The game's **Talk or act** sheet now uses the existing budgeted Worker at `POST /play` for creative replies and short action proposals. It sends the nearby speaker's voice, mood and activity, up to three previous exchanges and the available places. The response is `{reply, action, target}`; allowed actions are `none`, `move`, `approach`, `pause`, `resume` and `look`. The browser validates every proposal and performs it only when the player clicks its action button. There are no combat or death tools.
+
+This path is separate from the deterministic developer adapter above: conversation text is not inserted into the simulation, research exports or shared links. It has no continuous model loop. Each Send uses one bounded inference attempt, with the existing provider fallback and shared visitor/spending caps. See [credit controls](credit-controls.md#conversation-and-actions). Local walking shortcuts and the autonomous tour still cost no AI credits.

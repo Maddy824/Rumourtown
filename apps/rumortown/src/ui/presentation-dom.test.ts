@@ -123,14 +123,14 @@ it('also waits for a key under reduced motion and waits again on replay', async 
   root.querySelector('.arrival')!.dispatchEvent(new Event('click'));
   await Promise.resolve(); expect(skipped).toHaveBeenCalledOnce(); arrival.destroy();
 });
-it('the guide advances through three cards and Show me starts the Mira walkthrough', () => {
-  paperDocument(); const showMe = vi.fn();
-  const guide = createOpening(stack(), showMe, vi.fn(), vi.fn());
+it('the short welcome offers immediate exploration or a walk to Mira', () => {
+  paperDocument(); const showMe = vi.fn(), changed = vi.fn();
+  const guide = createOpening(stack(), showMe, vi.fn(), changed);
   guide.show(true); const root = guide.el as unknown as PaperElement;
-  const next = root.querySelector('.button-primary')!;
-  expect(root.querySelector('h1')!.textContent).toBe('What you do');
-  next.dispatchEvent(new Event('click')); expect(root.querySelector('h1')!.textContent).toBe('How villagers think');
-  next.dispatchEvent(new Event('click')); expect(root.querySelector('h1')!.textContent).toBe('Sharing and your typed whisper');
-  root.querySelectorAll('button').find(button => button.textContent === 'Show me')!.dispatchEvent(new Event('click'));
+  expect(root.querySelector('h1')!.textContent).toBe('Make yourself at home');
+  root.querySelector('.button-primary')!.dispatchEvent(new Event('click'));
+  expect(guide.el.hidden).toBe(true); expect(changed).toHaveBeenLastCalledWith(false);
+  guide.show(true);
+  root.querySelectorAll('button').find(button => button.textContent === 'Meet Mira')!.dispatchEvent(new Event('click'));
   expect(showMe).toHaveBeenCalledOnce(); expect(guide.el.hidden).toBe(true);
 });

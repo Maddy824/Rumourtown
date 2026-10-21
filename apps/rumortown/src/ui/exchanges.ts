@@ -2,7 +2,8 @@
 import type { SimEvent, Simulation, ThreadLink } from '../sim/types.js';
 import { eventKey, storyBeat, type StoryBeat } from './story-beats.js';
 
-export interface ScriptLine { tick: number; speaker: string; text: string }
+export interface ScriptLine { tick: number; speaker: string; text: string; claimId?: string; act?: string; listeners?: string[] }
+const scriptLine = (line: Extract<SimEvent, { kind: 'line' }>): ScriptLine => ({ tick: line.tick, speaker: line.speaker, text: line.text, claimId: line.claimId, act: line.act, listeners: line.listeners });
 export interface Exchange {
   id: string; beat: StoryBeat; people: [string, string]; claims: Set<string>;
   participants: Set<string>;
@@ -54,7 +55,7 @@ export function createExchanges(sim: Pick<Simulation, 'cast' | 'claims'>) {
         if (!exchange && beat) {
           const before = leadEntry?.[1] ?? [];
           exchange = { id: eventKey(e), beat, people, claims: new Set(), introducedClaims: new Set(), participants: new Set([...audience, ...before.flatMap(l => [l.speaker, ...l.listeners])]),
-            lines: before.map(l => ({ tick: l.tick, speaker: l.speaker, text: l.text })),
+            lines: before.map(scriptLine),
             end: (before[0]?.tick ?? e.tick) + 12, closed: false };
           lead.delete(leadKey); all.push(exchange); active.set(key, exchange);
         }
@@ -68,8 +69,8 @@ export function createExchanges(sim: Pick<Simulation, 'cast' | 'claims'>) {
         }
         for (const id of witnessed) { exchange.claims.add(id); exchange.introducedClaims.add(id); }
         if (e.kind === 'relationship' && e.to === 'stranger') for (const id of introduced) { exchange.claims.add(id); exchange.introducedClaims.add(id); }
-        if (e.kind === 'line') exchange.lines.push({ tick: e.tick, speaker: e.speaker, text: e.text });
-        else if (e.kind === 'whisper') exchange.lines.push({ tick: e.tick, speaker: 'stranger', text: sim.claims.get(e.claimId)?.text ?? 'A village rumor.' });
+        if (e.kind === 'line') exchange.lines.push(scriptLine(e));
+        else if (e.kind === 'whisper') exchange.lines.push({ tick: e.tick, speaker: 'stranger', text: sim.claims.get(e.claimId)?.text ?? 'A village rumor.', claimId: e.claimId, listeners: [e.listener] });
         else if (beat) exchange.lines.push({ tick: e.tick, speaker: people[0], text: beat.text });
         if (e.kind === 'line' && e.act === 'farewell') {
           exchange.closed = true; exchange.end = e.tick;
@@ -83,6 +84,18 @@ export function createExchanges(sim: Pick<Simulation, 'cast' | 'claims'>) {
 
 export function followsExchange(exchange: Exchange, selected: string, introduced: ReadonlySet<string>): boolean {
   return selected ? exchange.claims.has(selected) : [...exchange.introducedClaims].some(id => introduced.has(id));
+}
+
+/** Follow one rumor and its corrections; keep the complete conversation in history. */
+export function focusedScript(exchange: Exchange, selected: string, claims: Simulation['claims']): ScriptLine[] {
+  if (!selected || !exchange.lines.some(line => line.claimId)) return exchange.lines;
+  const relevant = (id: string) => id === selected || Boolean(claims.get(selected)?.contradicts?.includes(id)) || Boolean(claims.get(id)?.contradicts?.includes(selected));
+  let topic = '';
+  return exchange.lines.filter(line => {
+    if (line.claimId) { topic = line.claimId; return relevant(topic); }
+    if (!topic) return line.act === 'greet';
+    return relevant(topic);
+  });
 }
 
 /** Longest chronological chain from the stranger. Repeated recipients cannot inflate it. */
