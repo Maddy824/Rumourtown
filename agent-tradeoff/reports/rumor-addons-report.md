@@ -33,3 +33,11 @@ No real model request was made during this change. The previous production brows
 Final checks passed. Independent review is recorded in `rumor-addons-review.md`: no remaining Critical/Important findings. The minor waiting-state observation is deferred. Commit/deployment results are recorded below after publication.
 
 Unrelated pre-existing build-info changes, `reports/19b-report.md` and `apps/rumortown/src/seo.test.ts` remain unstaged.
+
+### Published release
+
+- Code commit: `2cf7ee544b9e76ab0cdd1ef29820e7126b60a66e`, author Madhav Sunil.
+- API version: `1eff3c06-a8ee-4a52-919d-2606d7f0cbc0`. Deployed bindings confirm the 3B/2.6B configuration and unchanged limits.
+- Site version: `19777188-3f2a-441f-b685-b48f5f56955c`. Main asset `/assets/main-dMiWWgWy.js`; CSS `/assets/app-CacYPv4B.css`.
+- Live API health returned `{ "ok": true }`; home, About and sitemap returned 200.
+- Live Chrome checks at all three sizes passed the library flow, keyboard selection, developer guide link, no overflow, exact replay text and zero inference calls. See `rumor-addons-live-browser-results.json` and the three live screenshots. No real AI or phone notification was triggered.

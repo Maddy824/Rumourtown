@@ -2,6 +2,7 @@
 import { writeFileSync } from 'node:fs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const base = process.env.BASE_URL ?? 'http://127.0.0.1:5194';
+const prefix = process.env.EVIDENCE_PREFIX ?? 'rumor-addons';
 const state = Buffer.from(JSON.stringify({ v: 1, seed: 731, cast: 'v4',
   interventions: [{ tick: 0, listener: 'mira', claimId: 'tom-stole-bread' }] })).toString('base64url');
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -40,7 +41,7 @@ try {
       button: document.querySelector('.whisper-actions button[type=submit]').getBoundingClientRect().toJSON() }));
     assert(!layout.overflow && layout.sheet.x >= 0 && layout.sheet.right <= width, 'Sheet overflows');
     assert(layout.button.y >= 0 && layout.button.bottom <= height, 'Whisper button outside viewport');
-    await page.screenshot({ path: `agent-tradeoff/reports/rumor-addons-${width}x${height}.png` });
+    await page.screenshot({ path: `agent-tradeoff/reports/${prefix}-${width}x${height}.png` });
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelector('.whisper').hidden);
     const shared = JSON.parse(Buffer.from(new URL(page.url()).hash.slice(1), 'base64url').toString());
@@ -55,9 +56,9 @@ try {
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Developer guide overflows');
     assert(inference.length === 0, 'Library made a model request');
     assert(errors.length === 0, JSON.stringify(errors));
-    results.push({ width, height, sentence, layout, inference, errors, replayPreserved: true });
+    results.push({ base, width, height, sentence, layout, inference, errors, replayPreserved: true });
     await page.close();
   }
-  writeFileSync('agent-tradeoff/reports/rumor-addons-browser-results.json', JSON.stringify(results, null, 2));
+  writeFileSync(`agent-tradeoff/reports/${prefix}-browser-results.json`, JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, null, 2));
 } finally { await browser.close(); }
