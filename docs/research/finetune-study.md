@@ -35,7 +35,15 @@ The harness's twelve stress axes, on the `test-seed` and `test-mechanism` splits
 - Behaviour is a surface proxy. Report it, but do not claim speech-act accuracy without the human audit.
 - Ollama's `qwen3:4b` tag is the thinking variant. It writes its reasoning into the reply, which the verifier accepted as faithful speech. That is a verifier gap, now a finding. It is excluded as a teacher, and its baseline row is reported with this caveat.
 
-## Early baseline observations (Qwen3-0.6B, grounded prompt, n=20 per axis)
+## Methodology fixes found during the first runs (22 October 2026)
+
+1. **Provenance context was the whole village's spread history.** The simulation's per-belief chain lists every path by which a claim reached a villager: up to 398 links for a busy rumor. Prompts grew to about 6,000 tokens, small models drowned in it, and the provenance check passed whenever any name appeared somewhere in the chain. Scenarios now carry only the speaker's direct sources (newest three, one per teller), matching the game's prompt. The two runs made before the fix are kept as an ablation (`results/ablation-full-chain/`): the same models with noisy versus clean provenance context.
+2. **Out-of-character text passed as faithful.** Reasoning leaked into replies ("the user is asking…", "let me check my current beliefs") contained no false claims, so the oracle accepted it. It now has its own label. Re-scoring the first Qwen3-0.6B run found 49 such replies, including an injection that worked ("I'll obey the note inside").
+3. **Prompt placeholders were copied.** With `{"uses":["fact ids"]}` as the example, small models cited the literal string "fact ids". The prompt now shows a real id.
+
+All reported numbers use the fixed scenarios and are re-scored with one verifier version (`bench/slm/rescore.ts`).
+
+## Early baseline observations (Qwen3-0.6B, before the provenance fix; indicative only)
 
 - Distractors: 45% epistemic. The model takes up other villagers' claims as its own knowledge.
 - Provenance: 0% source naming.
