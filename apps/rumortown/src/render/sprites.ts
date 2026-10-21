@@ -4,9 +4,9 @@
  * own offscreen canvas, so a frame only blits.
  */
 import type { Facing, Look } from '../sim/types.js';
-import { BERRY, DENIM, FELT, INK, PAPER, darken, mix, rgba } from './palette.js';
+import { BERRY, DENIM, FELT, INK, OAT, PAPER, darken, luma, mix, rgba } from './palette.js';
 import { makeCanvas } from './grain.js';
-import { METRICS, bottomPath, ellipsePath, moodBucket, piece, rrectPath, topPath, type Metrics, type MoodBucket, type Pen } from './figure.js';
+import { METRICS, bottomPath, ellipsePath, moodBucket, piece, topPath, type Metrics, type MoodBucket, type Pen } from './figure.js';
 import { hairBehind, hairFront, hatBehind, hatFront, prop, type View } from './wardrobe.js';
 
 export interface SpriteImage {
@@ -22,7 +22,7 @@ export interface SpriteImage {
 /** Core villagers are drawn a little larger. */
 export const CORE_SCALE = 1.1;
 /** The drawn body relative to the feet, in tiles, for hit-testing. */
-export const BODY = { left: -0.36, right: 0.36, top: -1.12, bottom: 0.04 } as const;
+export const BODY = { left: -0.4, right: 0.4, top: -1.14, bottom: 0.05 } as const;
 
 const BOX_W = 1.2;
 const BOX_H = 1.6;
@@ -55,7 +55,7 @@ function finish(ctx: CanvasRenderingContext2D, S: number, s: number, dpr: number
   ctx.shadowBlur = Math.max(1, 2.2 * (s / 32)) * dpr;
   ctx.fillStyle = rgba(INK, 0.38);
   ctx.beginPath();
-  ctx.ellipse(0.03, -0.005, 0.27, 0.075, 0, 0, Math.PI * 2);
+  ctx.ellipse(0.03, -0.005, 0.32, 0.085, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
   ctx.globalCompositeOperation = 'source-over';
@@ -64,55 +64,90 @@ function finish(ctx: CanvasRenderingContext2D, S: number, s: number, dpr: number
 function feet(p: Pen, view: View, frame: Frame, colour: string): void {
   if (view === 'e') {
     const [back, front] = frame ? [-0.085, 0.1] : [-0.025, 0.04];
-    piece(p, ellipsePath(back, frame ? -0.05 : -0.035, 0.062, 0.035), darken(colour, 0.15));
-    piece(p, ellipsePath(front + 0.015, -0.035, 0.068, 0.036), colour);
+    piece(p, ellipsePath(back, frame ? -0.055 : -0.038, 0.07, 0.038), darken(colour, 0.15));
+    piece(p, ellipsePath(front + 0.015, -0.038, 0.076, 0.04), colour);
     return;
   }
-  piece(p, ellipsePath(-0.072, frame ? -0.062 : -0.035, 0.06, frame ? 0.03 : 0.036), colour);
-  piece(p, ellipsePath(0.072, -0.035, 0.06, 0.036), colour);
+  piece(p, ellipsePath(-0.085, frame ? -0.066 : -0.038, 0.07, frame ? 0.033 : 0.04), colour);
+  piece(p, ellipsePath(0.085, -0.038, 0.07, 0.04), colour);
 }
 
 function apron(p: Pen, look: Look, m: Metrics, view: View): void {
   if (!look.apron) return;
-  const c = look.apron;
+  // Very pale aprons read as paper glare at this size; take them toward oat felt.
+  const c = luma(look.apron) > 0.85 ? mix(look.apron, OAT, 0.35) : look.apron;
   if (view === 'n') {
-    const y = m.hipY - 0.05;
+    const y = m.hipY - 0.04;
     const tie = new Path2D();
     tie.moveTo(0, y);
-    tie.lineTo(-0.065, y - 0.035);
-    tie.lineTo(-0.06, y + 0.03);
+    tie.lineTo(-0.075, y - 0.04);
+    tie.lineTo(-0.07, y + 0.035);
     tie.closePath();
     tie.moveTo(0, y);
-    tie.lineTo(0.065, y - 0.035);
-    tie.lineTo(0.06, y + 0.03);
+    tie.lineTo(0.075, y - 0.04);
+    tie.lineTo(0.07, y + 0.035);
     tie.closePath();
     piece(p, tie, c);
+    p.ctx.fillStyle = darken(c, 0.18);
+    p.ctx.fillRect(-m.hemHw * 0.92, y - 0.012, m.hemHw * 1.84, 0.024);
     return;
   }
-  const top = m.shoulderY + 0.085;
-  const bottom = -0.11;
+  const waist = m.hipY - 0.035;
+  const bottom = -0.1;
   if (view === 's') {
-    const hw = m.hemHw * 0.66;
-    const bib = Math.min(hw, m.topHw * 0.75);
+    const bib = m.topHw * 0.52;
+    const bibTop = m.shoulderY + 0.15;
+    const skirtTop = m.hemHw * 0.62;
+    const skirtBottom = m.hemHw * 0.74;
     const a = new Path2D();
-    a.moveTo(-bib, top);
-    a.lineTo(bib, top);
-    a.lineTo(bib, m.hipY - 0.06);
-    a.lineTo(hw, m.hipY - 0.03);
-    a.lineTo(hw, bottom - 0.03);
-    a.quadraticCurveTo(hw, bottom, hw - 0.04, bottom);
-    a.lineTo(-hw + 0.04, bottom);
-    a.quadraticCurveTo(-hw, bottom, -hw, bottom - 0.03);
-    a.lineTo(-hw, m.hipY - 0.03);
-    a.lineTo(-bib, m.hipY - 0.06);
+    a.moveTo(-bib, bibTop);
+    a.lineTo(bib, bibTop);
+    a.lineTo(bib, waist);
+    a.lineTo(skirtTop, waist);
+    a.lineTo(skirtBottom, bottom - 0.03);
+    a.quadraticCurveTo(skirtBottom, bottom, skirtBottom - 0.04, bottom);
+    a.lineTo(-skirtBottom + 0.04, bottom);
+    a.quadraticCurveTo(-skirtBottom, bottom, -skirtBottom, bottom - 0.03);
+    a.lineTo(-skirtTop, waist);
+    a.lineTo(-bib, waist);
     a.closePath();
-    piece(p, a, c, rrectPath(-hw + 0.03, m.hipY - 0.01, hw * 2 - 0.06, bottom - m.hipY - 0.02, 0.03));
-    p.ctx.fillStyle = darken(c, 0.2);
-    p.ctx.fillRect(-m.hemHw * 0.95, m.hipY - 0.055, m.hemHw * 1.9, 0.024);
+    const hem = new Path2D();
+    hem.moveTo(-skirtBottom + 0.035, bottom - 0.03);
+    hem.lineTo(skirtBottom - 0.035, bottom - 0.03);
+    piece(p, a, c, hem);
+    const { ctx } = p;
+    // Straps up to the neck, the waist tie, and a stitched pocket.
+    ctx.strokeStyle = darken(c, 0.15);
+    ctx.lineWidth = 0.028;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-bib + 0.015, bibTop);
+    ctx.lineTo(-m.topHw * 0.42, m.shoulderY + 0.02);
+    ctx.moveTo(bib - 0.015, bibTop);
+    ctx.lineTo(m.topHw * 0.42, m.shoulderY + 0.02);
+    ctx.stroke();
+    ctx.fillStyle = darken(c, 0.2);
+    ctx.fillRect(-m.hemHw * 0.95, waist - 0.012, m.hemHw * 1.9, 0.026);
+    if (p.detail) {
+      ctx.save();
+      ctx.setLineDash([1.3 * p.px, 1.1 * p.px]);
+      ctx.lineWidth = 0.65 * p.px;
+      ctx.strokeStyle = darken(c, 0.35);
+      ctx.strokeRect(-0.07, waist + 0.04, 0.14, Math.max(0.03, bottom - waist - 0.09));
+      ctx.restore();
+    }
   } else {
-    const x0 = m.topHw * 0.25;
-    const x1 = m.hemHw * 0.86 + 0.02;
-    piece(p, rrectPath(x0, top, x1 - x0, bottom - top, 0.03), c);
+    const x0 = m.topHw * 0.3;
+    const x1 = m.hemHw * 0.86 + 0.025;
+    const a = new Path2D();
+    a.moveTo(x0, m.shoulderY + 0.15);
+    a.lineTo(x0 + 0.06, m.shoulderY + 0.15);
+    a.lineTo(x0 + 0.06, waist);
+    a.lineTo(x1, waist);
+    a.lineTo(x1 + 0.02, bottom);
+    a.lineTo(x0, bottom);
+    a.closePath();
+    piece(p, a, c);
   }
 }
 
@@ -124,24 +159,24 @@ function arms(p: Pen, look: Look, m: Metrics, view: View, frame: Frame): void {
     const phi = frame ? -0.38 : 0.14;
     const sx = Math.sin(phi);
     const cy = Math.cos(phi);
-    const hx = px + sx * 0.24;
-    const hy = py + cy * 0.24;
+    const hx = px + sx * 0.27;
+    const hy = py + cy * 0.27;
     if (look.prop === 'broom' || look.prop === 'bucket' || look.prop === 'basket' || look.prop === 'sack') prop(p, look.prop, hx + 0.02, hy, false);
-    piece(p, ellipsePath(px + sx * 0.12, py + cy * 0.12, 0.056, 0.13, -phi), sleeve);
-    piece(p, ellipsePath(hx, hy, 0.048, 0.048), look.skin);
+    piece(p, ellipsePath(px + sx * 0.135, py + cy * 0.135, 0.064, 0.148, -phi), sleeve);
+    piece(p, ellipsePath(hx, hy, 0.056, 0.056), look.skin);
     if (!(look.prop === 'broom' || look.prop === 'bucket' || look.prop === 'basket' || look.prop === 'sack')) prop(p, look.prop, hx + 0.03, hy, false);
     return;
   }
-  const ax = m.topHw + 0.022;
-  const ay = m.shoulderY + 0.13;
+  const ax = m.topHw + 0.03;
+  const ay = m.shoulderY + 0.14;
   const holdSide = view === 's' ? 1 : -1;
   for (const side of [-1, 1]) {
-    const swing = frame ? side * 0.018 : 0;
-    const hx = side * (ax + 0.034);
-    const hy = ay + 0.125 + swing;
-    piece(p, ellipsePath(side * ax, ay + swing * 0.5, 0.055, 0.13, -side * 0.26), sleeve);
+    const swing = frame ? side * 0.02 : 0;
+    const hx = side * (ax + 0.04);
+    const hy = ay + 0.14 + swing;
+    piece(p, ellipsePath(side * ax, ay + swing * 0.5, 0.064, 0.148, -side * 0.26), sleeve);
     if (side === holdSide && (look.prop === 'basket' || look.prop === 'bucket' || look.prop === 'sack')) prop(p, look.prop, hx, hy, side < 0);
-    piece(p, ellipsePath(hx, hy, 0.048, 0.048), look.skin);
+    piece(p, ellipsePath(hx, hy, 0.056, 0.056), look.skin);
     if (side === holdSide && !(look.prop === 'basket' || look.prop === 'bucket' || look.prop === 'sack')) prop(p, look.prop, hx, hy, side < 0);
   }
 }
@@ -151,39 +186,40 @@ function face(p: Pen, look: Look, m: Metrics, view: View, mood: MoodBucket): voi
   const { ctx } = p;
   const R = m.headR;
   const cy = m.headY;
-  const eyes = view === 's' ? [-0.075, 0.075] : [R * 0.45];
+  const eyes = view === 's' ? [-0.34 * R, 0.34 * R] : [0.47 * R];
   ctx.fillStyle = INK;
   for (const x of eyes) {
     ctx.beginPath();
-    ctx.ellipse(x, cy + 0.008, 0.026, 0.029, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, cy + 0.05 * R, 0.105 * R, 0.125 * R, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   if (p.detail) {
-    ctx.fillStyle = rgba(PAPER, 0.85);
+    ctx.fillStyle = rgba(PAPER, 0.9);
     for (const x of eyes) {
       ctx.beginPath();
-      ctx.arc(x - 0.008, cy - 0.002, 0.008, 0, Math.PI * 2);
+      ctx.arc(x - 0.035 * R, cy + 0.005 * R, 0.035 * R, 0, Math.PI * 2);
       ctx.fill();
     }
   }
-  ctx.fillStyle = rgba(BERRY, 0.3);
-  for (const x of view === 's' ? [-0.128, 0.128] : [R * 0.18]) {
+  ctx.fillStyle = rgba(BERRY, 0.32);
+  for (const x of view === 's' ? [-0.56 * R, 0.56 * R] : [0.16 * R]) {
     ctx.beginPath();
-    ctx.arc(x, cy + 0.072, 0.042, 0, Math.PI * 2);
+    ctx.ellipse(x, cy + 0.33 * R, 0.17 * R, 0.14 * R, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   // The mouth: a short stitched curve whose bend and thread colour follow the mood.
-  const bend = mood === 1 ? 0.042 : mood === -1 ? -0.036 : 0.004;
+  const bend = mood === 1 ? 0.19 * R : mood === -1 ? -0.15 * R : 0.02 * R;
   const colour = mood === 1 ? mix(BERRY, INK, 0.15) : mood === -1 ? mix(DENIM, INK, 0.25) : mix(INK, look.skin, 0.2);
-  const [x0, x1, y] = view === 's' ? [-0.045, 0.045, cy + 0.108] : [R * 0.5, R * 0.86, cy + 0.11];
+  const [x0, x1, y] = view === 's' ? [-0.2 * R, 0.2 * R, cy + 0.47 * R] : [0.52 * R, 0.86 * R, cy + 0.5 * R];
+  const ends = mood === -1 ? -0.05 * R : mood === 1 ? -0.03 * R : 0;
   ctx.save();
   ctx.strokeStyle = colour;
-  ctx.lineWidth = Math.max(0.9 * p.px, 0.026);
+  ctx.lineWidth = Math.max(0.9 * p.px, 0.028);
   ctx.lineCap = 'round';
-  if (p.detail) ctx.setLineDash([1.6 * p.px, 0.7 * p.px]);
+  if (p.detail) ctx.setLineDash([1.7 * p.px, 0.8 * p.px]);
   ctx.beginPath();
-  ctx.moveTo(x0, y - (mood === -1 ? 0.012 : 0));
-  ctx.quadraticCurveTo((x0 + x1) / 2, y + bend, x1, y - (mood === -1 ? 0.012 : mood === 1 ? 0.006 : 0));
+  ctx.moveTo(x0, y + ends);
+  ctx.quadraticCurveTo((x0 + x1) / 2, y + bend, x1, y + ends);
   ctx.stroke();
   ctx.restore();
 }
@@ -233,45 +269,46 @@ function stranger(p: Pen, view: View, frame: Frame): void {
   ctx.translate(0, frame ? -0.035 : 0);
   const f = view === 'e' ? 0.86 : 1;
   const cloak = new Path2D();
-  cloak.moveTo(0, -1.08);
-  cloak.bezierCurveTo(0.2 * f, -1.08, 0.26 * f, -0.88, 0.205 * f, -0.7);
-  cloak.bezierCurveTo(0.25 * f, -0.5, 0.31 * f, -0.22, 0.3 * f, -0.07);
-  cloak.quadraticCurveTo(0, -0.02, -0.3 * f, -0.07);
-  cloak.bezierCurveTo(-0.31 * f, -0.22, -0.25 * f, -0.5, -0.205 * f, -0.7);
-  cloak.bezierCurveTo(-0.26 * f, -0.88, -0.2 * f, -1.08, 0, -1.08);
+  cloak.moveTo(0, -1.09);
+  cloak.bezierCurveTo(0.23 * f, -1.09, 0.29 * f, -0.88, 0.23 * f, -0.69);
+  cloak.bezierCurveTo(0.28 * f, -0.5, 0.35 * f, -0.22, 0.34 * f, -0.07);
+  cloak.quadraticCurveTo(0, -0.015, -0.34 * f, -0.07);
+  cloak.bezierCurveTo(-0.35 * f, -0.22, -0.28 * f, -0.5, -0.23 * f, -0.69);
+  cloak.bezierCurveTo(-0.29 * f, -0.88, -0.23 * f, -1.09, 0, -1.09);
   cloak.closePath();
   const inner = new Path2D();
-  inner.moveTo(0, -1.04);
-  inner.bezierCurveTo(0.17 * f, -1.04, 0.22 * f, -0.87, 0.17 * f, -0.7);
-  inner.bezierCurveTo(0.21 * f, -0.5, 0.27 * f, -0.23, 0.26 * f, -0.1);
-  inner.quadraticCurveTo(0, -0.06, -0.26 * f, -0.1);
-  inner.bezierCurveTo(-0.27 * f, -0.23, -0.21 * f, -0.5, -0.17 * f, -0.7);
-  inner.bezierCurveTo(-0.22 * f, -0.87, -0.17 * f, -1.04, 0, -1.04);
-  piece(p, cloak, INK, inner, mix(INK, PAPER, 0.42));
+  inner.moveTo(0, -1.05);
+  inner.bezierCurveTo(0.2 * f, -1.05, 0.25 * f, -0.87, 0.19 * f, -0.69);
+  inner.bezierCurveTo(0.24 * f, -0.5, 0.31 * f, -0.23, 0.3 * f, -0.1);
+  inner.quadraticCurveTo(0, -0.055, -0.3 * f, -0.1);
+  inner.bezierCurveTo(-0.31 * f, -0.23, -0.24 * f, -0.5, -0.19 * f, -0.69);
+  inner.bezierCurveTo(-0.25 * f, -0.87, -0.2 * f, -1.05, 0, -1.05);
+  // Ink with a whisper of denim, so the empty hood opening can be pure ink without near-black.
+  piece(p, cloak, mix(INK, DENIM, 0.1), inner, mix(INK, PAPER, 0.42));
   // The hood's fold line and the empty opening where a face would be.
   ctx.strokeStyle = rgba(mix(INK, PAPER, 0.3), 0.9);
   ctx.lineWidth = 0.8 * p.px;
   ctx.beginPath();
-  ctx.moveTo(-0.19 * f, -0.68);
-  ctx.quadraticCurveTo(0, -0.6, 0.19 * f, -0.68);
+  ctx.moveTo(-0.22 * f, -0.67);
+  ctx.quadraticCurveTo(0, -0.59, 0.22 * f, -0.67);
   ctx.stroke();
   if (view !== 'n') {
-    const ox = view === 'e' ? 0.095 : 0;
-    const opening = ellipsePath(ox, -0.83, view === 'e' ? 0.085 : 0.128, 0.138);
-    ctx.fillStyle = mix(INK, DENIM, 0.06);
+    const ox = view === 'e' ? 0.11 : 0;
+    const opening = ellipsePath(ox, -0.83, view === 'e' ? 0.095 : 0.145, 0.155);
+    ctx.fillStyle = INK;
     ctx.fill(opening);
     ctx.save();
     ctx.clip(opening);
-    ctx.fillStyle = rgba('#141210', 0.55);
+    ctx.fillStyle = rgba(INK, 0.85);
     ctx.beginPath();
-    ctx.ellipse(ox + 0.02, -0.86, 0.13, 0.13, 0, 0, Math.PI * 2);
+    ctx.ellipse(ox + 0.025, -0.865, 0.145, 0.145, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
     ctx.save();
     if (p.detail) ctx.setLineDash([1.4 * p.px, 1.1 * p.px]);
     ctx.strokeStyle = mix(INK, PAPER, 0.5);
     ctx.lineWidth = 0.75 * p.px;
-    ctx.stroke(ellipsePath(ox, -0.83, (view === 'e' ? 0.085 : 0.128) + 0.03, 0.168));
+    ctx.stroke(ellipsePath(ox, -0.83, (view === 'e' ? 0.095 : 0.145) + 0.032, 0.188));
     ctx.restore();
   } else {
     ctx.save();

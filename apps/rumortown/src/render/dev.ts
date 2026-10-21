@@ -3,7 +3,10 @@
  * createFakeSimulation() by default, or on the real village map with a small wandering crowd.
  *
  * URL options: map=fake|real, zoom=close|far, threads=0|1, reduced=0|1, select=<id>,
- * ticks=<n> to run ahead, paused=1, speed=1|2|8, at=x,y to put the stranger somewhere, note=0.
+ * ticks=<n> to run ahead, paused=1, speed=1|2|8, at=x,y to put the stranger somewhere, note=0,
+ * px=<n> to magnify the close zoom, centre=x,y to point the camera somewhere fixed,
+ * lineup=s|n|e|w|mixed to stand everyone in a grid (origin=x,y) for checking looks,
+ * dpr=<n> to force the backing-store density.
  */
 import { createFakeCast, createFakeMap, createFakeSimulation } from '../sim/fake.js';
 import { DAY_START_MINUTE, MINUTES_PER_DAY, type Camera, type Renderer, type ThreadLink, type Vec2, type VillageMap, type VillagerView, type WorldSnapshot } from '../sim/types.js';
@@ -194,6 +197,12 @@ const statsEl = document.getElementById('stats') as HTMLParagraphElement;
 const note = document.getElementById('note') as HTMLDivElement;
 if (!flag('note', true)) note.hidden = true;
 
+/** dpr=<n> forces the backing-store density, to measure retina cost on any screen. */
+const ratio = () => Number(params.get('dpr')) || window.devicePixelRatio || 1;
+/** px=<n> magnifies the close zoom for inspecting sprites; the app always uses 32. */
+const closeZoom = Number(params.get('px') ?? CLOSE_ZOOM) || CLOSE_ZOOM;
+let centre = params.get('centre')?.split(',').map(Number);
+
 const state = {
   mapName: params.get('map') === 'real' ? 'real' : 'fake',
   far: params.get('zoom') === 'far',
@@ -221,8 +230,9 @@ function camera(): Camera {
   const a = state.paused ? 1 : Math.min(1, accumulator * (2.5 * state.speed));
   const p = current.player.pos;
   const q = previous?.player.pos ?? p;
-  const center = state.far ? { x: map.width / 2, y: map.height / 2 } : { x: q.x + (p.x - q.x) * a, y: q.y + (p.y - q.y) * a - 0.5 };
-  return { center, zoom: state.far ? fitZoom(map, w, h) : CLOSE_ZOOM, width: w, height: h };
+  const follow = centre && centre.length === 2 ? { x: centre[0] as number, y: centre[1] as number } : { x: q.x + (p.x - q.x) * a, y: q.y + (p.y - q.y) * a - 0.5 };
+  const center = state.far ? { x: map.width / 2, y: map.height / 2 } : follow;
+  return { center, zoom: state.far ? fitZoom(map, w, h) : closeZoom, width: w, height: h };
 }
 
 async function mount(name: string): Promise<void> {
@@ -230,11 +240,28 @@ async function mount(name: string): Promise<void> {
   map = loaded.map;
   driver = loaded.driver;
   renderer = createRenderer(canvas, map);
-  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  renderer.resize(window.innerWidth, window.innerHeight, ratio());
   const ahead = Number(params.get('ticks') ?? 0) || 0;
   for (let i = 0; i < ahead; i++) driver.step();
   previous = null;
   current = driver.snapshot();
+  const lineup = params.get('lineup');
+  if (lineup) {
+    // Every villager in a grid, all facing one way, for checking looks: lineup=s|n|e|w|mixed.
+    const [ox, oy] = (params.get('origin') ?? '17.5,14.2').split(',').map(Number) as [number, number];
+    const facings = ['s', 'e', 'n', 'w'] as const;
+    current = {
+      ...current,
+      threads: [],
+      villagers: current.villagers.map((v, i) => ({
+        ...v,
+        pos: { x: ox + (i % 8) * 1.3, y: oy + Math.floor(i / 8) * 1.55 },
+        facing: lineup === 'mixed' ? facings[i % 4] ?? 's' : (lineup as 's' | 'n' | 'e' | 'w'),
+        moving: false,
+        mood: i % 3 === 0 ? 0.8 : i % 3 === 1 ? 0 : -0.8,
+      })),
+    };
+  }
 }
 
 function frame(now: number): void {
@@ -283,7 +310,7 @@ function nearestVillager(): string | null {
   return best;
 }
 
-window.addEventListener('resize', () => renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1));
+window.addEventListener('resize', () => renderer.resize(window.innerWidth, window.innerHeight, ratio()));
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === 'z') state.far = !state.far;
@@ -309,15 +336,58 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 
 const devApi = {
+  snapshot() {
+    return current;
+  },
   get stats() {
     return (window as unknown as { __renderStats?: unknown }).__renderStats;
   },
   set(opts: Partial<typeof state>) {
     Object.assign(state, opts);
   },
+  look(x: number, y: number) {
+    centre = [x, y];
+  },
   whisper(id?: string) {
     const who = id ?? nearestVillager();
-    return who ? driver.whisper(who, 'stole') : false;
+    const ok = who ? driver.whisper(who, 'stole') : false;
+    if (ok) current = driver.snapshot();
+    return ok;
+  },
+  /**
+   * Renders `n` frames, then reads one pixel back so every queued raster command finishes, and
+   * returns the average per frame including that GPU work.
+   */
+  benchFlushed(n = 300) {
+    const ctx = canvas.getContext('2d');
+    ctx?.getImageData(0, 0, 1, 1);
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) renderer.render(previous, current, camera(), { threads: state.threads, selected: state.selected, alpha: (i % 10) / 10, reducedMotion: true });
+    ctx?.getImageData(0, 0, 1, 1);
+    return (performance.now() - t0) / n;
+  },
+  /** Hit-tests every villager at its body centre; returns the misses and what empty ground gives. */
+  hitCheck() {
+    const cam = camera();
+    const misses: string[] = [];
+    let hits = 0;
+    for (const v of current.villagers) {
+      const s = renderer.project({ x: v.pos.x, y: v.pos.y - 0.5 * (v.tier === 'core' ? 1.1 : 1) }, cam);
+      if (s.x < 0 || s.y < 0 || s.x > cam.width || s.y > cam.height) continue;
+      const got = renderer.villagerAt(s.x, s.y, current, cam);
+      if (got === v.id) hits++;
+      else misses.push(`${v.id} got ${got}`);
+    }
+    const corner = renderer.unproject(2, 2, cam);
+    return { hits, misses, emptyGround: renderer.villagerAt(-500, -500, current, cam), corner };
+  },
+  /** Times painting a ground layer from scratch at the current zoom (a fresh renderer). */
+  layerCost() {
+    const fresh = createRenderer(document.createElement('canvas'), map);
+    fresh.resize(window.innerWidth, window.innerHeight, ratio());
+    const t0 = performance.now();
+    fresh.render(null, current, camera(), { threads: false, alpha: 1, reducedMotion: true });
+    return performance.now() - t0;
   },
   /** Renders `n` frames back to back and returns the timings, for a quick benchmark. */
   bench(n = 300) {

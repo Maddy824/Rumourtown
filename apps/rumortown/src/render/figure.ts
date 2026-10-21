@@ -32,10 +32,10 @@ export interface Metrics {
 }
 
 export const METRICS: Record<Body, Metrics> = {
-  round: { headR: 0.225, headY: -0.835, shoulderY: -0.635, hipY: -0.27, topHw: 0.16, hemHw: 0.27, legTop: -0.33, legHw: 0.165, belly: 0.07 },
-  stout: { headR: 0.215, headY: -0.8, shoulderY: -0.6, hipY: -0.255, topHw: 0.225, hemHw: 0.275, legTop: -0.3, legHw: 0.195, belly: 0.025 },
-  tall: { headR: 0.2, headY: -0.895, shoulderY: -0.7, hipY: -0.3, topHw: 0.15, hemHw: 0.19, legTop: -0.35, legHw: 0.13, belly: 0 },
-  slight: { headR: 0.195, headY: -0.84, shoulderY: -0.65, hipY: -0.285, topHw: 0.12, hemHw: 0.17, legTop: -0.33, legHw: 0.11, belly: 0 },
+  round: { headR: 0.25, headY: -0.83, shoulderY: -0.6, hipY: -0.25, topHw: 0.2, hemHw: 0.315, legTop: -0.31, legHw: 0.2, belly: 0.06 },
+  stout: { headR: 0.24, headY: -0.79, shoulderY: -0.57, hipY: -0.24, topHw: 0.27, hemHw: 0.32, legTop: -0.29, legHw: 0.235, belly: 0.025 },
+  tall: { headR: 0.225, headY: -0.875, shoulderY: -0.66, hipY: -0.29, topHw: 0.18, hemHw: 0.23, legTop: -0.34, legHw: 0.16, belly: 0 },
+  slight: { headR: 0.22, headY: -0.83, shoulderY: -0.615, hipY: -0.27, topHw: 0.15, hemHw: 0.21, legTop: -0.32, legHw: 0.135, belly: 0 },
 };
 
 /** A thread colour that shows on this felt: lighter on dark felt, darker on pale felt. */

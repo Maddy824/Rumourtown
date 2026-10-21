@@ -97,14 +97,14 @@ export const FELT = {
 
   /** Paper of walls and roofs. */
   wallTop: PAPER,
-  wallEdge: mix(OAT, MUSTARD, 0.28),
+  wallEdge: mix(mix(OAT, MUSTARD, 0.3), INK, 0.2),
   wallLine: mix(PAPER, INK, 0.55),
   door: mix(BERRY, INK, 0.55),
 
   /** The craft table the village sheet lies on, seen only at the far zoom. */
-  cork: mix(mix(MUSTARD, BERRY, 0.18), INK, 0.3),
-  corkLight: mix(mix(MUSTARD, BERRY, 0.12), PAPER, 0.08),
-  corkDark: mix(mix(MUSTARD, BERRY, 0.2), INK, 0.52),
+  cork: mix(mix(MUSTARD, OAT, 0.35), INK, 0.52),
+  corkLight: mix(mix(MUSTARD, OAT, 0.45), INK, 0.36),
+  corkDark: mix(mix(MUSTARD, OAT, 0.3), INK, 0.66),
 
   thread: BERRY,
   threadLight: mix(BERRY, PAPER, 0.45),

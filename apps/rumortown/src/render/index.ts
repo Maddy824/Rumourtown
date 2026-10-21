@@ -5,8 +5,12 @@
  */
 import { TILE, type Camera, type Renderer, type RenderOptions, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
 import { computeView, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
-import { buildRoofs, findBuildings, paintWalls } from './buildings.js';
-import { LAYER_MARGIN, buildTrees, paintGround, type Standing } from './tiles.js';
+import { findBuildings, paintWalls } from './buildings.js';
+import { paintRooms } from './rooms.js';
+import { buildRoofs } from './roofs.js';
+import { LAYER_MARGIN, paintGround } from './tiles.js';
+import { buildTrees } from './landmarks.js';
+import type { Standing } from './felt.js';
 import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
 import { hashString, makeCanvas, makeCork, makeGrain } from './grain.js';
@@ -26,8 +30,8 @@ interface Layer {
   standing: Standing[];
 }
 
-/** Largest ground layer in backing pixels; beyond this it is rendered at a lower scale. */
-const MAX_LAYER_PIXELS = 16e6;
+/** Largest ground layer in backing pixels (iOS Safari caps a canvas near 16.7M); beyond this it paints at a lower scale. */
+const MAX_LAYER_PIXELS = 12e6;
 /** A zoom must hold this many frames before a new layer is painted for it. */
 const SETTLE_FRAMES = 2;
 const GRAIN_ALPHA = 0.06;
@@ -70,6 +74,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   let prevRef: WorldSnapshot | null = null;
   let curRef: WorldSnapshot | null = null;
   const phases = new Map<VillagerId, number>();
+  const ringDash = [0, 0];
 
   function ensureCapacity(n: number): void {
     if (n <= capacity) return;
@@ -87,6 +92,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     if (corkDpr !== dpr) cork = null;
+    // Layers painted for another pixel density are useless now; free them.
+    for (let i = layers.length - 1; i >= 0; i--) if ((layers[i] as Layer).dpr !== dpr) layers.splice(i, 1);
   }
 
   function buildLayer(zoom: number): Layer {
@@ -96,7 +103,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (cssW * cssH * scale * scale > MAX_LAYER_PIXELS) scale = Math.sqrt(MAX_LAYER_PIXELS / (cssW * cssH));
     const { canvas: lc, ctx: g } = makeCanvas(cssW * scale, cssH * scale);
     g.setTransform(scale, 0, 0, scale, LAYER_MARGIN * zoom * scale, LAYER_MARGIN * zoom * scale);
-    paintGround(g, map, zoom, scale);
+    paintGround(g, map, zoom, scale, () => paintRooms(g, map, buildings, zoom, scale));
     paintWalls(g, map, zoom, scale);
     const standing = buildTrees(map, zoom, dpr).concat(buildRoofs(buildings, zoom, dpr));
     standing.sort((a, b) => a.sortY - b.sortY);
@@ -106,13 +113,17 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     return layer;
   }
 
-  /** The layer to draw with, and how much to stretch it. Paints a new one once the zoom settles. */
-  function layerFor(zoom: number): { layer: Layer; stretch: number } {
+  /** How much the chosen layer is stretched this frame: 1 unless the zoom is still moving. */
+  let stretch = 1;
+
+  /** The layer to draw with; sets `stretch`. Paints a new one once the zoom settles. */
+  function layerFor(zoom: number): Layer {
     let nearest: Layer | null = null;
     let nearestGap = Infinity;
+    stretch = 1;
     for (const l of layers) {
       if (l.dpr !== dpr) continue;
-      if (Math.abs(l.zoom - zoom) < 1e-3) return { layer: l, stretch: 1 };
+      if (Math.abs(l.zoom - zoom) < 1e-3) return l;
       const gap = Math.abs(Math.log(l.zoom / zoom));
       if (gap < nearestGap) {
         nearestGap = gap;
@@ -124,8 +135,9 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       pendingZoom = zoom;
       pendingFrames = 0;
     }
-    if (!nearest || pendingFrames >= SETTLE_FRAMES) return { layer: buildLayer(zoom), stretch: 1 };
-    return { layer: nearest, stretch: zoom / nearest.zoom };
+    if (!nearest || pendingFrames >= SETTLE_FRAMES) return buildLayer(zoom);
+    stretch = zoom / nearest.zoom;
+    return nearest;
   }
 
   function phaseOf(id: VillagerId): number {
@@ -239,34 +251,35 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const sc = (v.tier === 'core' ? CORE_SCALE : 1) * zoom;
     const x = view.ox + (fx[i] as number) * zoom;
     const y = view.oy + (fy[i] as number) * zoom;
-    const rx = 0.46 * sc;
-    const ry = 0.19 * sc;
-    const band = Math.max(2, 0.11 * sc);
+    const rx = 0.5 * sc;
+    const ry = 0.21 * sc;
+    const band = Math.max(2.5, 0.15 * sc);
     const ring = new Path2D();
     ring.ellipse(x, y, rx + band / 2, ry + band / 2, 0, 0, Math.PI * 2);
     ring.ellipse(x, y, rx - band / 2, Math.max(1, ry - band / 2), 0, 0, Math.PI * 2);
+    // A cut paper ring lying on the board: hard little shadow, crisp edge, a mustard running stitch.
     ctx.save();
-    ctx.shadowColor = rgba(INK, 0.45);
-    ctx.shadowBlur = Math.max(1, 0.1 * sc) * dpr;
+    ctx.shadowColor = rgba(INK, 0.55);
+    ctx.shadowBlur = Math.max(1, 0.08 * sc) * dpr;
     ctx.shadowOffsetX = 0.03 * sc * dpr;
-    ctx.shadowOffsetY = 0.06 * sc * dpr;
+    ctx.shadowOffsetY = 0.07 * sc * dpr;
     ctx.fillStyle = PAPER;
     ctx.fill(ring, 'evenodd');
     ctx.restore();
-    ctx.lineWidth = Math.max(0.6, 0.025 * sc);
-    ctx.strokeStyle = rgba(INK, 0.4);
+    ctx.lineWidth = Math.max(0.8, 0.03 * sc);
+    ctx.strokeStyle = rgba(INK, 0.55);
     ctx.stroke(ring);
-    if (sc >= 18) {
-      ctx.save();
-      ctx.setLineDash([0.09 * sc, 0.07 * sc]);
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 0.035 * sc;
-      ctx.strokeStyle = MUSTARD;
-      ctx.beginPath();
-      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    ctx.save();
+    ringDash[0] = Math.max(1.5, 0.1 * sc);
+    ringDash[1] = Math.max(1.2, 0.07 * sc);
+    ctx.setLineDash(ringDash);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1, 0.05 * sc);
+    ctx.strokeStyle = mix(MUSTARD, INK, 0.12);
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawStanding(s: Standing, stretch: number, camera: Camera): void {
@@ -336,7 +349,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     current = cur;
     computeView(map, camera, view);
     const zoom = view.zoom;
-    const { layer, stretch } = layerFor(zoom);
+    const layer = layerFor(zoom);
     interpolate(previous, cur, options.alpha);
     lastCurrent = cur;
 
@@ -367,6 +380,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       }
     }
 
+    threads.track(cur.threads, now);
     if (options.threads && cur.threads.length) threads.draw(ctx, cur.threads, resolveEnd, zoom, options.reducedMotion, now);
     drawGrain(camera);
   }

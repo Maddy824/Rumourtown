@@ -22,17 +22,15 @@ export class ThreadPainter {
   private primed = false;
   private readonly a = { x: 0, y: 0 };
   private readonly b = { x: 0, y: 0 };
-  private readonly twist = [0, 0];
   private readonly solid: number[] = [];
   private readonly sagCache = new Map<string, number>();
 
-  /** Forget animation state, e.g. after the timeline jumps. */
-  reset(): void {
-    this.primed = false;
-  }
-
-  /** Draws all threads; returns true while the newest thread is still being stitched. */
-  draw(ctx: CanvasRenderingContext2D, threads: readonly ThreadLink[], resolve: ResolveEnd, zoom: number, reducedMotion: boolean, now: number): boolean {
+  /**
+   * Notes when a new thread appears. Called every frame, even while threads are hidden, so that
+   * showing them later does not replay an old stitch. Threads already present on the first frame,
+   * or after the timeline jumps back, never animate.
+   */
+  track(threads: readonly ThreadLink[], now: number): void {
     let maxTick = -Infinity;
     let atMax = 0;
     for (const t of threads) {
@@ -51,12 +49,15 @@ export class ThreadPainter {
       this.newestCount = atMax;
       this.animStart = now;
     }
+  }
+
+  /** Draws all threads; returns true while the newest thread is still being stitched. */
+  draw(ctx: CanvasRenderingContext2D, threads: readonly ThreadLink[], resolve: ResolveEnd, zoom: number, reducedMotion: boolean, now: number): boolean {
+    const maxTick = this.newestTick;
     const progress = reducedMotion ? 1 : Math.min(1, Math.max(0, (now - this.animStart) / DRAW_MS));
     const u = Math.max(0.35, Math.min(1.1, zoom / 32));
-    const width = Math.max(1.3, 2.3 * u);
-    const pinR = Math.max(2.2, 3.4 * u);
-    this.twist[0] = width * 1.1;
-    this.twist[1] = width * 1.5;
+    const width = Math.max(1.4, 2.8 * u);
+    const pinR = Math.max(2.4, 3.9 * u);
 
     ctx.save();
     ctx.lineCap = 'round';
@@ -115,14 +116,43 @@ export class ThreadPainter {
     ctx.moveTo(ax, ay);
     ctx.quadraticCurveTo(qcx, qcy, ex, ey);
     ctx.stroke();
-    ctx.setLineDash(this.twist);
-    ctx.lineWidth = width * 0.42;
-    ctx.strokeStyle = rgba(FELT.threadLight, 0.75 * alpha);
-    ctx.stroke();
-    ctx.setLineDash(this.solid);
+    this.twistMarks(ctx, ax, ay, qcx, qcy, ex, ey, width, alpha, u);
 
     if (p >= 1) this.pin(ctx, bx, by, pinR, alpha, false);
     else this.needle(ctx, ex, ey, 2 * (1 - p) * (cx - ax) + 2 * p * (bx - cx), 2 * (1 - p) * (cy - ay) + 2 * p * (by - cy), u);
+  }
+
+  /**
+   * Floss is twisted strands: short pale diagonals across the thread at a steady pitch. At the
+   * far zoom the thread is too thin for them and stays plain.
+   */
+  private twistMarks(ctx: CanvasRenderingContext2D, ax: number, ay: number, cx: number, cy: number, bx: number, by: number, width: number, alpha: number, u: number): void {
+    if (u < 0.5) return;
+    const length = Math.hypot(cx - ax, cy - ay) + Math.hypot(bx - cx, by - cy);
+    const pitch = width * 1.35;
+    const n = Math.floor(length / pitch);
+    if (n < 2) return;
+    const half = width * 0.5;
+    ctx.beginPath();
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const mt = 1 - t;
+      const x = mt * mt * ax + 2 * mt * t * cx + t * t * bx;
+      const y = mt * mt * ay + 2 * mt * t * cy + t * t * by;
+      let tx = 2 * mt * (cx - ax) + 2 * t * (bx - cx);
+      let ty = 2 * mt * (cy - ay) + 2 * t * (by - cy);
+      const tl = Math.hypot(tx, ty) || 1;
+      tx /= tl;
+      ty /= tl;
+      // A strand crosses the thread at about 60 degrees.
+      const dx = tx * 0.55 - ty * 0.85;
+      const dy = ty * 0.55 + tx * 0.85;
+      ctx.moveTo(x - dx * half, y - dy * half);
+      ctx.lineTo(x + dx * half, y + dy * half);
+    }
+    ctx.lineWidth = Math.max(0.6, width * 0.32);
+    ctx.strokeStyle = rgba(FELT.threadLight, 0.7 * alpha);
+    ctx.stroke();
   }
 
   /** A glass-headed pin: mustard for villagers, pale for the stranger so it shows on the ink cloak. */
@@ -150,11 +180,13 @@ export class ThreadPainter {
   /** The needle leading the thread while it stitches itself. */
   private needle(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number, dy: number, u: number): void {
     const a = Math.atan2(dy, dx);
-    const len = 15 * u;
-    const w = 1.5 * u;
+    const len = 23 * u;
+    const w = 2.1 * u;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(a);
+    // The thread runs through the eye, so the eye sits on the thread's end.
+    ctx.translate(len * 0.22, 0);
     ctx.fillStyle = rgba(INK, 0.3);
     ctx.beginPath();
     ctx.ellipse(len * 0.25 + 0.8 * u, 2 * u, len * 0.62, w, 0, 0, Math.PI * 2);
@@ -177,8 +209,8 @@ export class ThreadPainter {
     ctx.beginPath();
     ctx.ellipse(-len * 0.22, 0, 1.6 * u, 0.55 * u, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = rgba(PAPER, 0.8);
-    ctx.lineWidth = 0.5 * u;
+    ctx.strokeStyle = rgba(PAPER, 0.95);
+    ctx.lineWidth = 0.7 * u;
     ctx.beginPath();
     ctx.moveTo(-len * 0.1, -w * 0.45);
     ctx.lineTo(len * 0.5, -w * 0.25);

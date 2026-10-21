@@ -144,7 +144,7 @@ export function makeCork(size: number, seed = 5): HTMLCanvasElement {
     for (let i = 0; i < n; i++) {
       const x = rnd() * size;
       const y = rnd() * size;
-      const r = (t === 3 ? 0.5 + rnd() * 0.9 : 0.4 + rnd() * 1.6) * unit;
+      const r = (t === 3 ? 0.4 + rnd() * 0.7 : 0.35 + rnd() * 1.1) * unit;
       for (const dx of [-size, 0, size]) {
         for (const dy of [-size, 0, size]) {
           const cx = x + dx;
@@ -155,7 +155,7 @@ export function makeCork(size: number, seed = 5): HTMLCanvasElement {
         }
       }
     }
-    ctx.globalAlpha = t === 1 ? 0.5 : 0.42;
+    ctx.globalAlpha = t === 1 ? 0.32 : 0.3;
     ctx.fillStyle = tones[t] as string;
     ctx.fill(p);
   }

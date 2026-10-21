@@ -67,20 +67,19 @@ function capPath(m: Metrics, view: View, style: Look['hair']['style'], k: number
   return p;
 }
 
-function curls(m: Metrics, view: View): Path2D {
+/** Centres of the felt pom-poms that make curly hair, edge first, then the crown from behind. */
+function curlCentres(m: Metrics, view: View): [number, number][] {
   const R = m.headR;
   const cy = m.headY;
-  const p = new Path2D();
   const [a0, a1] = view === 's' ? [0.92, 2.08] : view === 'n' ? [0.75, 2.25] : [0.6, 1.95];
   const n = view === 'n' ? 9 : 7;
+  const out: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     const a = Math.PI * (a0 + ((a1 - a0) * i) / (n - 1));
-    const x = Math.cos(a) * R * 0.95;
-    const y = cy + Math.sin(a) * R * 0.95;
-    p.moveTo(x + 0.078, y);
-    p.arc(x, y, 0.078, 0, Math.PI * 2);
+    out.push([Math.cos(a) * R * 0.95, cy + Math.sin(a) * R * 0.95]);
   }
-  return p;
+  if (view === 'e') for (const [x, y] of [[-0.45, -0.1], [-0.2, -0.5]]) out.push([(x as number) * R, cy + (y as number) * R]);
+  return out;
 }
 
 /** Hair that hangs behind the head and body: long hair in front and profile views. */
@@ -108,15 +107,20 @@ export function hairFront(p: Pen, look: Look, m: Metrics, view: View): void {
     return;
   }
   if (style === 'long' && view === 'n' && look.hat !== 'hood') {
-    piece(p, rrectPath(-R - 0.03, cy - 0.02, (R + 0.03) * 2, R + 0.29, 0.09), c, rrectPath(-R + 0.0, cy + 0.02, R * 2, R + 0.21, 0.07));
+    // Long hair down the back: a parting and a few stitched strands so it reads as hair.
+    const strands = new Path2D();
+    for (const dx of [-0.55, -0.2, 0.2, 0.55]) {
+      strands.moveTo(dx * R, cy + 0.02);
+      strands.quadraticCurveTo(dx * R * 1.15, cy + R * 0.7, dx * R * 1.05, cy + R + 0.2);
+    }
+    piece(p, rrectPath(-R - 0.03, cy - 0.02, (R + 0.03) * 2, R + 0.29, 0.09), c, strands);
   }
   const cap = capPath(m, view, style, 0);
   if (cap) {
     if (style === 'curly') {
-      const all = new Path2D();
-      all.addPath(cap);
-      all.addPath(curls(m, view));
-      piece(p, all, c);
+      p.ctx.fillStyle = c;
+      p.ctx.fill(cap);
+      for (const [x, y] of curlCentres(m, view)) piece(p, ellipsePath(x, y, 0.074, 0.074), c);
     } else {
       piece(p, cap, c, capPath(m, view, style, 0.035) ?? undefined);
     }
@@ -166,20 +170,20 @@ export function hatFront(p: Pen, look: Look, m: Metrics, view: View): void {
     case 'straw':
     case 'wide': {
       const wide = hat === 'wide';
-      const brimRx = wide ? 0.37 : 0.33;
-      const brimRy = view === 'e' ? 0.055 : wide ? 0.085 : 0.08;
-      const by = top + (wide ? 0.085 : 0.075);
-      piece(p, ellipsePath(side, by, brimRx, brimRy), c, ellipsePath(side, by, brimRx - 0.045, brimRy - 0.03));
+      const brimRx = (wide ? 1.66 : 1.5) * R;
+      const brimRy = view === 'e' ? 0.25 * R : (wide ? 0.38 : 0.36) * R;
+      const by = top + (wide ? 0.38 : 0.34) * R;
+      piece(p, ellipsePath(side, by, brimRx, brimRy), c, ellipsePath(side, by, brimRx - 0.045, Math.max(0.01, brimRy - 0.03)));
       let crown: Path2D;
       if (wide) {
-        crown = rrectPath(-0.155 + side * 0.5, top - 0.135, 0.31, 0.225, 0.065);
+        crown = rrectPath(-0.7 * R + side * 0.5, top - 0.6 * R, 1.4 * R, 1.0 * R, 0.3 * R);
       } else {
         crown = new Path2D();
-        crown.ellipse(side * 0.5, by - 0.005, 0.165, 0.16, 0, Math.PI, Math.PI * 2);
+        crown.ellipse(side * 0.5, by - 0.02 * R, 0.74 * R, 0.72 * R, 0, Math.PI, Math.PI * 2);
         crown.closePath();
       }
       piece(p, crown, c);
-      const band = wide ? rrectPath(-0.155 + side * 0.5, by - 0.06, 0.31, 0.045, 0.02) : rrectPath(-0.163 + side * 0.5, by - 0.055, 0.326, 0.045, 0.02);
+      const band = wide ? rrectPath(-0.7 * R + side * 0.5, by - 0.27 * R, 1.4 * R, 0.2 * R, 0.08 * R) : rrectPath(-0.73 * R + side * 0.5, by - 0.25 * R, 1.46 * R, 0.2 * R, 0.08 * R);
       p.ctx.fillStyle = wide ? MUSTARD : BERRY;
       p.ctx.fill(band);
       return;
