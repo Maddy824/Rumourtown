@@ -31,14 +31,19 @@ function nameRules(c: LineContext, prefix: string, castById: ReadonlyMap<Village
     if (c.person === 'self') form = FIRST;
     else if (c.person === 'listener') form = SECOND;
     else if (mentions(prefix, c.subjectName)) form = { kind: 'third', pronouns: c.subject.pronouns };
-    rules.push({ name: c.subjectName, form });
+    rules.push({ name: c.subjectName, form, pronouns: c.subject.pronouns });
   }
-  if (c.person !== 'self') rules.push({ name: c.speakerName, form: FIRST });
-  if (!c.toStranger && c.listener.id !== c.speaker.id && c.person !== 'listener') rules.push({ name: c.listenerName, form: SECOND });
+  if (c.person !== 'self') rules.push({ name: c.speakerName, form: FIRST, pronouns: c.speaker.pronouns });
+  if (!c.toStranger && c.listener.id !== c.speaker.id && c.person !== 'listener') rules.push({ name: c.listenerName, form: SECOND, pronouns: c.listener.pronouns });
   const target = c.claim?.target ? castById.get(c.claim.target) : undefined;
   if (target) {
     const name = capitaliseName(target.name);
-    if (!rules.some((r) => r.name === name)) rules.push({ name, form: AS_NAME });
+    if (!rules.some((r) => r.name === name)) rules.push({ name, form: AS_NAME, pronouns: target.pronouns });
+  }
+  // Names elsewhere in a claim must also be capitalised, including recipients outside `target`.
+  for (const d of castById.values()) {
+    const name = capitaliseName(d.name);
+    if (!rules.some((r) => r.name === name)) rules.push({ name, form: AS_NAME, pronouns: d.pronouns });
   }
   return rules;
 }
@@ -59,11 +64,10 @@ function placePhrase(c: LineContext, castById: ReadonlyMap<VillagerId, Dossier>)
 }
 
 function resolve(name: string, c: LineContext, prefix: string, castById: ReadonlyMap<VillagerId, Dossier>): string {
-  const atSentenceStart = /(^|[.?!]["”’)]?\s+)$/.test(prefix) || prefix.trim() === '';
   switch (name) {
     case 'subject':
       if (c.person === 'listener') return 'you';
-      if (c.person === 'self') return atSentenceStart ? 'I' : 'me';
+      if (c.person === 'self') return 'I';
       return c.subjectName ?? 'someone';
     case 'subjectObj':
       if (c.person === 'listener') return 'you';

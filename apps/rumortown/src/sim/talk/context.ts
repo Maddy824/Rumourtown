@@ -136,7 +136,7 @@ export function deriveContext(
     person,
     toSubject,
     valence,
-    hedged: claim !== undefined && typeof key.confidence === 'number' && key.confidence < HEDGE_BELOW,
+    hedged: typeof key.confidence === 'number' && key.confidence < HEDGE_BELOW,
     relation: toStranger ? 'any' : relationOf(speaker, listener),
     voice: voiceOf(speaker),
     stance: toStranger ? stanceOf(trust) : undefined,

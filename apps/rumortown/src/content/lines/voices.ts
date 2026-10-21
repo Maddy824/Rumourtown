@@ -1,16 +1,4 @@
-/**
- * Which voice archetype each villager speaks in when they have no line of their own for the moment.
- * Core villagers have their own banks and fall back to these; regulars and background villagers speak
- * only through them. Chosen from role and age:
- *
- * - sharp: quick, exact, a little cutting. Mira (baker), Pim (shopkeeper), Mab (seamstress), Tess (barmaid).
- * - gentle: soft, kind, slow to judge. Tom (carpenter), Nell (herbalist and midwife), Fen (young shepherd).
- * - blunt: few words, no softening. Ben (fisher), Sol (farmer), Ivo (blacksmith), Yan (tinker).
- * - dreamy: wandering, notices small things. Elin (teacher), Wren (apprentice), Cass (beekeeper).
- * - pious: chapel words and mercy. Otto (chaplain), Rook (gravedigger), Ada (old weaver, chapel circle).
- * - jolly: warm, laughing, loves a story. Rosa (innkeeper), Greta (farmer), Hal (carter), Lio (fiddler).
- * - weary: sighs, aches, has seen it all. Jonah (miller), Dag (old bridge keeper), Una (laundress).
- */
+/** Voice families chosen from the current dossiers; core villagers keep their own authored banks. */
 import type { Dossier, VillagerId } from '../../sim/types.js';
 import type { VoiceArchetype } from './types.js';
 
@@ -18,27 +6,27 @@ export const VOICES: Readonly<Record<VillagerId, VoiceArchetype>> = {
   mira: 'sharp',
   tom: 'gentle',
   ben: 'blunt',
-  ada: 'pious',
+  ada: 'sharp',
   rosa: 'jolly',
-  jonah: 'weary',
-  elin: 'dreamy',
+  jonah: 'blunt',
+  elin: 'sharp',
   pim: 'sharp',
   sol: 'blunt',
-  greta: 'jolly',
+  greta: 'sharp',
   ivo: 'blunt',
   nell: 'gentle',
   otto: 'pious',
   wren: 'dreamy',
   hal: 'jolly',
   dag: 'weary',
-  una: 'weary',
+  una: 'sharp',
   cass: 'dreamy',
-  fen: 'gentle',
+  fen: 'blunt',
   lio: 'jolly',
   mab: 'sharp',
-  rook: 'pious',
+  rook: 'weary',
   tess: 'sharp',
-  yan: 'blunt',
+  yan: 'jolly',
 };
 
 /** The archetype for a villager: from the map above, or guessed from traits for anyone not in it. */

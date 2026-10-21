@@ -4,19 +4,18 @@
  * Selection: the sets for the act are filtered to those that may be used (speaker, voice, valence,
  * hedging, listener relation, who the claim is about, topic, whisper stance, mood, first-hand), then the
  * most specific wins: speaker > voice > valence > hedged > listener relation > the finer fields. Within
- * the winning group a line is picked with rng among those this speaker has not said in the last day;
- * when the whole group has been used, the next most specific group is tried, and when everything has
- * been used the least recently said line of the winning group comes back.
+ * a winning set a line is picked with rng among those this speaker has not said in the last 900 ticks.
+ * If that set is exhausted, rng picks from all its lines. Tied sets are chosen uniformly first.
  *
  * Every `say` and `pickTopic` call draws exactly one rng value, so editing the line bank never shifts
  * the simulation's random stream.
  */
 import { lineBank } from '../../content/lines/index.js';
 import { EVENING_STARTS, MIDDAY_STARTS, ROLE_TOPICS, TOPICS_BY_BAND, type TopicBand } from '../../content/lines/topics.js';
-import type { LineSet, VoiceArchetype } from '../../content/lines/types.js';
+import { CLAIM_ACTS, type LineSet, type VoiceArchetype } from '../../content/lines/types.js';
 import { VOICES, voiceOf } from '../../content/lines/voices.js';
 import { DAY_START_MINUTE, MINUTES_PER_DAY, type Dossier, type SpeechAct, type SpokenLine, type TalkApi, type VillagerId } from '../types.js';
-import { compileBank, type CompiledLine, type CompiledSet } from './compile.js';
+import { compileBank, NEEDS, type CompiledLine, type CompiledSet } from './compile.js';
 import { deriveContext, type LineContext, type TalkKey } from './context.js';
 import { canFill, fillLine } from './fill.js';
 import { capitaliseName } from './grammar.js';
@@ -26,7 +25,7 @@ export type { TalkKey, LineContext } from './context.js';
 /** A line said by a speaker rests for one game day before they say it again. */
 export const LINE_COOLDOWN_TICKS = MINUTES_PER_DAY;
 /** Bubbles hold at most this many characters. */
-export const MAX_LINE_LENGTH = 140;
+export const MAX_LINE_LENGTH = 139;
 
 export interface TalkOptions {
   /** Replace the authored bank, for tests and tools. */
@@ -82,6 +81,8 @@ export function eligible(set: LineSet, c: LineContext): boolean {
   if (set.mood !== undefined && set.mood !== c.moodBand) return false;
   if (set.daypart !== undefined && set.daypart !== c.daypart) return false;
   if (set.firsthand !== undefined && set.firsthand !== c.firsthand) return false;
+  // Greetings, small talk, news and goodbyes never speak about the subject, so who it is does not matter.
+  if (!CLAIM_ACTS.includes(set.act)) return true;
   if (set.anySubject) return true;
   if (set.toSubject) return c.person === 'listener';
   if (set.selfSubject) return c.person === 'self';
@@ -127,9 +128,13 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
 
   function groupsFor(c: LineContext): Candidate[][] {
     const found: Candidate[] = [];
+    const knownNews = c.act === 'news' && c.claim !== undefined
+      && c.listener.knows?.some((known) => known.claimId === c.claim?.id);
     for (const cs of byAct.get(c.act) ?? []) {
       if (!eligible(cs.set, c)) continue;
-      const lines = cs.lines.filter((l) => canFill(l.needs, c) && !namesSomeoneHere(l, c));
+      const lines = cs.lines.filter((l) => canFill(l.needs, c) && !namesSomeoneHere(l, c)
+        && !(knownNews && l.needs & NEEDS.claim)
+        && fillLine(l.template, c, castById).length <= MAX_LINE_LENGTH);
       if (lines.length > 0) found.push({ set: cs, score: specificity(cs.set), lines });
     }
     found.sort((a, b) => b.score - a.score);
@@ -142,18 +147,10 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
     return groups;
   }
 
-  /** Starts at the rng's choice and walks on until a line fits a bubble; the shortest if none does. */
+  /** Candidate lines have already been rendered and checked against the bubble limit. */
   function pickFitting(pool: CompiledLine[], r: number, c: LineContext): { line: CompiledLine; text: string } {
-    const n = pool.length;
-    const start = Math.min(n - 1, Math.floor(r * n));
-    let best: { line: CompiledLine; text: string } | undefined;
-    for (let j = 0; j < n; j++) {
-      const line = pool[(start + j) % n] as CompiledLine;
-      const text = fillLine(line.template, c, castById);
-      if (text.length <= MAX_LINE_LENGTH) return { line, text };
-      if (!best || text.length < best.text.length) best = { line, text };
-    }
-    return best as { line: CompiledLine; text: string };
+    const line = pool[Math.min(pool.length - 1, Math.floor(r * pool.length))] as CompiledLine;
+    return { line, text: fillLine(line.template, c, castById) };
   }
 
   function say(key: TalkKey, rng: () => number): SpokenLine {
@@ -174,21 +171,14 @@ export function createTalkEngine(cast: Dossier[], options: TalkOptions = {}): Ta
       return t === undefined || c.tick - t >= LINE_COOLDOWN_TICKS;
     };
 
-    const groups = groupsFor(c);
-    for (const group of groups) {
-      const pool = group.flatMap((g) => g.lines).filter(isFresh);
-      if (pool.length > 0) {
-        const pick = pickFitting(pool, r, c);
-        lastSaid.set(pick.line.id, c.tick);
-        return { lineId: pick.line.id, text: pick.text };
-      }
-    }
-    const top = groups[0];
+    const top = groupsFor(c)[0];
     if (top) {
-      const pool = top.flatMap((g) => g.lines);
-      const when = (l: CompiledLine): number => lastSaid.get(l.id) ?? Number.NEGATIVE_INFINITY;
-      const oldest = Math.min(...pool.map(when));
-      const pick = pickFitting(pool.filter((l) => when(l) === oldest), r, c);
+      // One draw chooses a tied set uniformly; its fractional remainder chooses a line.
+      const scaled = r * top.length;
+      const winner = top[Math.min(top.length - 1, Math.floor(scaled))] as Candidate;
+      const fresh = winner.lines.filter(isFresh);
+      const pool = fresh.length > 0 ? fresh : winner.lines;
+      const pick = pickFitting(pool, scaled - Math.floor(scaled), c);
       lastSaid.set(pick.line.id, c.tick);
       return { lineId: pick.line.id, text: pick.text };
     }

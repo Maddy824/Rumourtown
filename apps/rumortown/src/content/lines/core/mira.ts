@@ -208,10 +208,10 @@ export const miraSets = defineSets({ speaker: 'mira' }, {
     "{source} says {claim}. Nice, if so.",
   ],
   "gossip neutral": [
-    "Here's a thing. {claim}.",
+    "Now here's something. {claim}.",
     "Did you know {claim}? I didn't.",
     "{claim}. Not that it's my business.",
-    "I had it from {source}: {claim}.",
+    "{source} let slip that {claim}.",
   ],
   "gossip harm to-subject": [
     "You'll hear it soon enough. They're saying {claim}.",
@@ -332,7 +332,7 @@ export const miraSets = defineSets({ speaker: 'mira' }, {
     "It's no one's business, but {claim}.",
   ],
   "explain neutral self": [
-    "It's nothing like that. {claim}.",
+    "Nothing like that. {claim}. Honestly.",
     "There's a plain answer, if anyone had asked. {claim}.",
     "You've built a castle out of nothing. {claim}.",
     "{claim}. That's the whole of it.",
@@ -382,7 +382,7 @@ export const miraSets = defineSets({ speaker: 'mira' }, {
   ],
 
   "doubt harm": [
-    "That doesn't sound like {subject}.",
+    "That's not like {subject}. Not at all.",
     "Says who? Name them.",
     "Proof. Show me proof.",
     "I've heard better stories from Rosa after a jug of cider.",
@@ -425,7 +425,7 @@ export const miraSets = defineSets({ speaker: 'mira' }, {
   "apologize harm to-subject": [
     "I was wrong about you. I don't say that often, so remember it.",
     "I believed {claim}. I shouldn't have. I'm sorry.",
-    "I judged too fast. It's a fault of mine. I'm sorry.",
+    "I judged you too fast. It's a fault of mine. I'm sorry.",
     "I owe you an apology, and a loaf. Take both.",
     "I listened to talk. I should have asked you. Sorry.",
     "There. I'm sorry. Don't you make me say it twice.",

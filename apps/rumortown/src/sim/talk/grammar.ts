@@ -23,6 +23,8 @@ export type NameForm = { kind: 'name' } | { kind: 'first' } | { kind: 'second' }
 export interface NameRule {
   name: string;
   form: NameForm;
+  /** Lets later pronouns follow their named antecedent when speaking as I or to you. */
+  pronouns?: Pronouns;
 }
 
 export interface AdaptOptions {
@@ -59,7 +61,9 @@ const PARTICIPLES = new Set([
 ]);
 
 /** Words after a contracted "is" ("Tom's hoarding", "Tom's not"). */
-const IS_FOLLOWERS = new Set(['not', 'a', 'an', 'the', 'up', 'out', 'off', 'in', 'on', 'at', 'so', 'too', 'very', 'always', 'still', 'back', 'away']);
+const IS_FOLLOWERS = new Set(['not', 'a', 'an', 'the', 'up', 'out', 'off', 'in', 'on', 'at', 'so', 'too', 'very', 'always', 'still', 'back', 'away', 'ill', 'kind', 'tired', 'late', 'right', 'wrong']);
+
+const COORDINATED_VERBS = new Set(['has', 'is', 'does', 'leaves', 'keeps', 'takes', 'gives', 'puts', 'pays', 'owes', 'asks', 'says', 'tells', 'meets', 'brags']);
 
 /** Words ending in s that are never a third-person verb. */
 const NOT_S_VERBS = new Set(['always', 'sometimes', 'this', 'his', 'its', 'us', 'yes', 'less', 'unless', 'across', 'perhaps', 'besides', 'towards', 'afterwards', 'was', 'is', 'has', 'does', 'as']);
@@ -181,22 +185,55 @@ export function adaptClause(text: string, rules: readonly NameRule[], options: A
     if (isWord(t)) wordIdx.push(i);
   });
   const lowerRules = rules.map((r) => ({ ...r, lower: r.name.toLowerCase() }));
+  const antecedents: NameRule[] = [];
+  let leadingForm: NameForm | undefined;
 
   for (let w = 0; w < wordIdx.length; w++) {
     const i = wordIdx[w] as number;
     const token = tokens[i] as string;
     const possessive = /'s$/i.test(token);
     const bare = possessive ? token.slice(0, -2) : token;
-    const rule = lowerRules.find((r) => r.lower === bare.toLowerCase());
-    if (!rule) continue;
+    let rule: NameRule | undefined = lowerRules.find((r) => r.lower === bare.toLowerCase());
+    let pronounRole: Role | undefined;
+    if (rule) {
+      const repeated = antecedents.some((r) => r.name === rule?.name);
+      // A possessive name does not usually take over a same-gender antecedent:
+      // "Hal lied about Ivo's iron to avoid paying for his wheel" still means Hal's wheel.
+      if (!possessive || !antecedents.some((r) => r.pronouns?.subject === rule?.pronouns?.subject)) antecedents.push(rule);
+      if (repeated && rule.form.kind === 'name' && rule.pronouns) {
+        rule = { ...rule, form: { kind: 'third', pronouns: rule.pronouns } };
+      }
+    }
+    else {
+      const lower = token.toLowerCase();
+      // The nearest named antecedent of the right gender handles the fixed bank's clauses:
+      // "Mira paid Pim every penny she owed him", "Tom took bread to Ada because she is ill".
+      const reflexives: Readonly<Record<string, string>> = { he: 'himself', she: 'herself', they: 'themselves' };
+      rule = [...antecedents].reverse().find((r) => r.pronouns
+        && (Object.values(r.pronouns).includes(lower) || reflexives[r.pronouns.subject] === lower));
+      if (!rule || rule.form.kind === 'name' || rule.form.kind === 'third') continue;
+      const p = rule.pronouns as Pronouns;
+      if (reflexives[p.subject] === lower) {
+        tokens[i] = rule.form.kind === 'first' ? 'myself' : 'yourself';
+        continue;
+      }
+      const next = w + 1 < wordIdx.length ? tokens[wordIdx[w + 1] as number]?.toLowerCase() : undefined;
+      if (lower === p.subject) pronounRole = 'subject';
+      else if (lower === p.possessive && (lower !== p.object || (next && !isFiniteVerb(next)
+        && !/^[,.;!?]/.test(tokens[i + 1] ?? '')))) pronounRole = 'possessive';
+      else pronounRole = 'object';
+    }
 
     const nextWord = w + 1 < wordIdx.length ? (tokens[wordIdx[w + 1] as number] as string) : undefined;
     const prevWord = w > 0 ? (tokens[wordIdx[w - 1] as number] as string) : undefined;
     let role: Role;
-    if (possessive) {
+    if (pronounRole) role = pronounRole;
+    else if (possessive) {
       const n = nextWord?.toLowerCase();
+      const afterNext = w + 2 < wordIdx.length ? tokens[wordIdx[w + 2] as number]?.toLowerCase() : undefined;
       if (!n) role = 'standalone';
       else if (PARTICIPLES.has(n) || (n.length > 4 && n.endsWith('ed') && !n.endsWith('eed'))) role = 'has';
+      else if (afterNext === 'is' || afterNext === 'was') role = 'possessive';
       else if (n.endsWith('ing') || IS_FOLLOWERS.has(n)) role = 'is';
       else role = 'possessive';
     } else {
@@ -210,6 +247,7 @@ export function adaptClause(text: string, rules: readonly NameRule[], options: A
 
     const name = rule.form.kind === 'name' ? rule.name : bare;
     tokens[i] = render(rule.form, role, name);
+    if (w === 0 && role === 'subject' && nextWord?.toLowerCase() !== 'and') leadingForm = rule.form;
 
     const compound = nextWord?.toLowerCase() === 'and' || prevWord?.toLowerCase() === 'and';
     const agreement = needsAgreement(rule.form);
@@ -224,6 +262,12 @@ export function adaptClause(text: string, rules: readonly NameRule[], options: A
   }
 
   let out = tokens.join('');
+  const leadingAgreement = leadingForm ? needsAgreement(leadingForm) : null;
+  if (leadingAgreement) {
+    out = out.replace(/\band (\p{L}+)\b/gu, (match, word: string) =>
+      COORDINATED_VERBS.has(word.toLowerCase()) ? `and ${conjugate(word, leadingAgreement)}` : match,
+    );
+  }
   // Courtesy order: "Rosa and I", "you and I", "with Rosa and me".
   out = out.replace(/\bI and (you|\p{Lu}\p{L}*)\b/gu, '$1 and I').replace(/\bme and (you|\p{Lu}\p{L}*)\b/gu, '$1 and me');
   const firstWord = out.match(/^\p{L}+/u)?.[0];
