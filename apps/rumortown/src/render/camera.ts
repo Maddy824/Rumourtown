@@ -6,6 +6,10 @@
  */
 import { TILE, type Camera, type Vec2, type VillageMap } from '../sim/types.js';
 
+/** The app's legacy 32 px close request is resolved here, without changing TILE or the UI. */
+export const CLOSE_ZOOM = 40;
+export const cameraZoom = (zoom: number): number => !Number.isFinite(zoom) || zoom <= 0 || zoom === TILE ? CLOSE_ZOOM : zoom;
+
 /** Where tile (0, 0) lands on screen, in CSS pixels, and the pixels per tile. */
 export interface View {
   ox: number;
@@ -14,7 +18,7 @@ export interface View {
 }
 
 export function makeView(): View {
-  return { ox: 0, oy: 0, zoom: TILE };
+  return { ox: 0, oy: 0, zoom: CLOSE_ZOOM };
 }
 
 function clampAxis(center: number, tiles: number, viewport: number, zoom: number): number {
@@ -26,7 +30,7 @@ function clampAxis(center: number, tiles: number, viewport: number, zoom: number
 
 /** Fills `out` with the clamped view for this camera. Allocation-free. */
 export function computeView(map: VillageMap, camera: Camera, out: View): View {
-  const zoom = camera.zoom > 0 && Number.isFinite(camera.zoom) ? camera.zoom : TILE;
+  const zoom = cameraZoom(camera.zoom);
   const cx = clampAxis(Number.isFinite(camera.center.x) ? camera.center.x : map.width / 2, map.width, camera.width, zoom);
   const cy = clampAxis(Number.isFinite(camera.center.y) ? camera.center.y : map.height / 2, map.height, camera.height, zoom);
   out.ox = camera.width / 2 - cx * zoom + (camera.offset?.x ?? 0);
@@ -49,9 +53,9 @@ export function unproject(map: VillageMap, px: number, py: number, camera: Camer
 
 /**
  * The far zoom: pixels per tile that fit the whole map in the viewport, leaving `margin`
- * CSS pixels on each side so the stitched edge of the village sheet shows.
+ * CSS pixels on each side for 24 px of torn paper and 12 px of table.
  */
-export function fitZoom(map: VillageMap, width: number, height: number, margin = 12): number {
+export function fitZoom(map: VillageMap, width: number, height: number, margin = 36): number {
   const w = Math.max(1, width - margin * 2);
   const h = Math.max(1, height - margin * 2);
   return Math.max(1, Math.min(w / map.width, h / map.height));

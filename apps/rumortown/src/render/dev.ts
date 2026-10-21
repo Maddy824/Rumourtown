@@ -8,9 +8,10 @@
  * lineup=s|n|e|w|mixed to stand everyone in a grid (origin=x,y) for checking looks,
  * dpr=<n> to force the backing-store density.
  */
-import { createFakeCast, createFakeMap, createFakeSimulation } from '../sim/fake.js';
+import { createFakeMap, createFakeSimulation } from '../sim/fake.js';
 import { DAY_START_MINUTE, MINUTES_PER_DAY, type Camera, type Renderer, type ThreadLink, type Vec2, type VillageMap, type VillagerView, type WorldSnapshot } from '../sim/types.js';
 import { CLOSE_ZOOM, createRenderer, fitZoom } from './index.js';
+import { cast } from '../content/cast/index.js';
 import { seeded } from './grain.js';
 
 interface Driver {
@@ -77,7 +78,7 @@ function wanderDriver(map: VillageMap, seed: number, start: Vec2): Driver {
     path: Vec2[];
     wait: number;
   }
-  const walkers: Walker[] = createFakeCast(seed).map((d) => {
+  const walkers: Walker[] = cast.map((d) => {
     const t = target();
     return {
       view: { id: d.id, name: d.name, tier: d.tier, pos: { x: t.x + 0.5, y: t.y + 0.5 }, facing: 's', moving: false, activity: 'idle', look: d.look, mood: rnd() * 2 - 1 },
@@ -199,7 +200,7 @@ if (!flag('note', true)) note.hidden = true;
 
 /** dpr=<n> forces the backing-store density, to measure retina cost on any screen. */
 const ratio = () => Number(params.get('dpr')) || window.devicePixelRatio || 1;
-/** px=<n> magnifies the close zoom for inspecting sprites; the app always uses 32. */
+/** px=<n> magnifies the close zoom for inspecting sprites; the close renderer uses 40. */
 const closeZoom = Number(params.get('px') ?? CLOSE_ZOOM) || CLOSE_ZOOM;
 let centre = params.get('centre')?.split(',').map(Number);
 
@@ -358,13 +359,18 @@ const devApi = {
    * Renders `n` frames, then reads one pixel back so every queued raster command finishes, and
    * returns the average per frame including that GPU work.
    */
-  benchFlushed(n = 300) {
+  benchFlushed(n = 300, reduced = state.reduced) {
     const ctx = canvas.getContext('2d');
     ctx?.getImageData(0, 0, 1, 1);
     const t0 = performance.now();
-    for (let i = 0; i < n; i++) renderer.render(previous, current, camera(), { threads: state.threads, selected: state.selected, alpha: (i % 10) / 10, reducedMotion: true });
+    for (let i = 0; i < n; i++) renderer.render(previous, current, camera(), { threads: state.threads, selected: state.selected, alpha: (i % 10) / 10, reducedMotion: reduced });
     ctx?.getImageData(0, 0, 1, 1);
     return (performance.now() - t0) / n;
+  },
+  /** Freeze any clock light without advancing the driver or touching simulation state. */
+  minute(value: number) {
+    current = { ...current, minuteOfDay: Math.max(420, Math.min(1320, value)) };
+    previous = current;
   },
   /** Hit-tests every villager at its body centre; returns the misses and what empty ground gives. */
   hitCheck() {
@@ -390,11 +396,11 @@ const devApi = {
     return performance.now() - t0;
   },
   /** Renders `n` frames back to back and returns the timings, for a quick benchmark. */
-  bench(n = 300) {
+  bench(n = 300, reduced = state.reduced) {
     const times: number[] = [];
     for (let i = 0; i < n; i++) {
       const t0 = performance.now();
-      renderer.render(previous, current, camera(), { threads: state.threads, selected: state.selected, alpha: (i % 10) / 10, reducedMotion: true });
+      renderer.render(previous, current, camera(), { threads: state.threads, selected: state.selected, alpha: (i % 10) / 10, reducedMotion: reduced });
       times.push(performance.now() - t0);
     }
     times.sort((a, b) => a - b);

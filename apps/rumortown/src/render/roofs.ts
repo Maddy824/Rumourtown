@@ -3,10 +3,11 @@
  * so a house reads as a house from outside while its floor stays open. Shape and ornaments
  * follow the kind of building.
  */
-import { BERRY, DENIM, INK, MUSTARD, PAPER, darken, lighten, mix, rgba } from './palette.js';
-import { hash, makeCanvas } from './grain.js';
+import { BERRY, DENIM, INK, MUSTARD, PAPER, MOSS, OAT, darken, lighten, mix, rgba } from './palette.js';
+import { addFibres, hash, makeCanvas, seeded } from './grain.js';
 import type { Standing } from './felt.js';
 import type { Building } from './buildings.js';
+import { districtAt } from '../content/map/wayfinding.js';
 import { BODY } from './sprites.js';
 import { awning, chimney, doorway, dormer, gableSteps, shinglesSteps, sign, tower, wheel, type RoofStyle } from './ornaments.js';
 
@@ -23,8 +24,11 @@ function roofStyle(b: Building): RoofStyle {
       return { paper: mix(BERRY, MUSTARD, 0.18), shingle: 'scallop' };
     case 'inn':
       return { paper: darken(BERRY, 0.12), shingle: 'scallop' };
-    default:
-      return { paper: v < 0.35 ? darken(BERRY, 0.1) : v < 0.7 ? BERRY : lighten(BERRY, 0.1), shingle: v > 0.88 && b.kind === 'home' ? 'thatch' : 'scallop' };
+    default: {
+      const district = districtAt(b);
+      const paper = district === 'commons' ? MUSTARD : district === 'woodland' ? mix(MOSS, OAT, .28) : district === 'eastbank' ? DENIM : BERRY;
+      return { paper, shingle: district === 'commons' ? 'thatch' : district === 'eastbank' ? 'slate' : v < .5 ? 'scallop' : 'slate' };
+    }
   }
 }
 
@@ -93,6 +97,10 @@ function* paintFacadeSteps(ctx: CanvasRenderingContext2D, b: Building, z: number
   ctx.save();
   ctx.clip(shape);
   yield* shinglesSteps(ctx, style, x0, x1, band, z, seed);
+  const nap = new Path2D();
+  addFibres(nap, x0, -band, x1 - x0, band, Math.round(b.w * 14), seeded(seed + 990), .8 * u, 2.4 * u);
+  ctx.lineWidth = .65 * u; ctx.strokeStyle = rgba(lighten(style.paper, .45), .28); ctx.stroke(nap);
+  yield;
   // Light from the upper left falls across the paper.
   const g = ctx.createLinearGradient(x0, -band, x1, 0);
   g.addColorStop(0, rgba(PAPER, 0.16));
@@ -126,14 +134,14 @@ function* paintFacadeSteps(ctx: CanvasRenderingContext2D, b: Building, z: number
   if (b.kind === 'bakery') sign(ctx, x1 - 0.2 * z, -band * 0.45, 'loaf', z, s);
   if (b.kind === 'inn') sign(ctx, x0 + 0.25 * z, -band * 0.45, 'mug', z, s);
   if (b.kind === 'smithy') sign(ctx, x0 + 0.25 * z, -band * 0.45, 'anvil', z, s);
-  if (b.kind === 'bakery' || b.kind === 'smithy') {
-    ctx.save(); ctx.strokeStyle = mix(PAPER, INK, .25); ctx.lineWidth = 1.3 * u; ctx.setLineDash([2 * u, 2 * u]);
-    const cx = chimneyLeft ? x0 + inset + .65 * z : x1 - inset - .65 * z;
-    ctx.beginPath(); ctx.moveTo(cx, -1.5 * z); ctx.bezierCurveTo(cx - .4 * z, -1.7 * z, cx + .4 * z, -1.8 * z, cx, -2 * z); ctx.stroke(); ctx.restore();
-  }
   if (b.kind === 'inn') {
     ctx.strokeStyle = INK; ctx.lineWidth = 1.5 * u; ctx.strokeRect(w - .5 * z, -.3 * z, .28 * z, .42 * z);
     ctx.fillStyle = MUSTARD; ctx.fillRect(w - .46 * z, -.26 * z, .2 * z, .32 * z);
+  }
+  if (b.kind === 'home') {
+    ctx.fillStyle = mix(MOSS, OAT, .25); ctx.fillRect(w * .5 - .5 * z, -.08 * z, z, .18 * z);
+    ctx.strokeStyle = rgba(INK, .6); ctx.lineWidth = .8 * u; ctx.setLineDash([2 * u, 2 * u]); ctx.strokeRect(w * .5 - .5 * z, -.08 * z, z, .18 * z); ctx.setLineDash([]);
+    for (let i = -1; i <= 1; i++) { ctx.fillStyle = i % 2 ? MUSTARD : mix(BERRY, PAPER, .3); ctx.beginPath(); ctx.arc(w * .5 + i * .27 * z, -.14 * z, .085 * z, 0, Math.PI * 2); ctx.fill(); }
   }
   if (b.kind === 'shop') {
     ctx.fillStyle = mix(MUSTARD, INK, .25); ctx.fillRect(w - .9 * z, -.12 * z, .45 * z, .35 * z);

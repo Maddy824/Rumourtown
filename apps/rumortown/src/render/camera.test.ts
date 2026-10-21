@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE, type Camera, type VillageMap } from '../sim/types.js';
-import { computeView, fitZoom, makeView, project, unproject } from './camera.js';
+import { CLOSE_ZOOM, computeView, fitZoom, makeView, project, unproject } from './camera.js';
 
 const map: VillageMap = { width: 48, height: 32, tiles: new Array(48 * 32).fill('grass'), places: [] };
 const cam = (x: number, y: number, zoom = TILE, width = 360, height = 640): Camera => ({ center: { x, y }, zoom, width, height });
@@ -13,6 +13,11 @@ describe('camera', () => {
     const p = project(map, pos, cam);
     expect(p).toEqual({ x: 535, y: 245 });
     expect(unproject(map, p.x, p.y, cam)).toEqual(pos);
+  });
+  it('resolves the legacy close request to 40 CSS pixels while preserving far zoom', () => {
+    expect(computeView(map, cam(20, 15), makeView()).zoom).toBe(40);
+    expect(project(map, { x: 21, y: 15 }, cam(20, 15)).x).toBe(220);
+    expect(computeView(map, cam(20, 15, 8), makeView()).zoom).toBe(8);
   });
   it('puts the centre tile in the middle of the viewport', () => {
     const p = project(map, { x: 20, y: 15 }, cam(20, 15));
@@ -51,6 +56,6 @@ describe('camera', () => {
   });
 
   it('falls back to the close zoom for a bad zoom value', () => {
-    expect(computeView(map, cam(20, 15, Number.NaN), makeView()).zoom).toBe(TILE);
+    expect(computeView(map, cam(20, 15, Number.NaN), makeView()).zoom).toBe(CLOSE_ZOOM);
   });
 });

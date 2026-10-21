@@ -4,7 +4,7 @@
  * own offscreen canvas, so a frame only blits.
  */
 import type { Facing, Look } from '../sim/types.js';
-import { BERRY, DENIM, FELT, INK, OAT, PAPER, darken, luma, mix, rgba } from './palette.js';
+import { BERRY, DENIM, FELT, INK, OAT, PAPER, MUSTARD, darken, luma, mix, rgba } from './palette.js';
 import { makeCanvas } from './grain.js';
 import { METRICS, bottomPath, ellipsePath, moodBucket, piece, topPath, type Metrics, type MoodBucket, type Pen } from './figure.js';
 import { hairBehind, hairFront, hatBehind, hatFront, prop, type View } from './wardrobe.js';
@@ -22,15 +22,15 @@ export interface SpriteImage {
 /** Core villagers are drawn a little larger. */
 export const CORE_SCALE = 1.1;
 /** The drawn body relative to the feet, in tiles, for hit-testing. */
-export const BODY = { left: -0.4, right: 0.4, top: -1.14, bottom: 0.05 } as const;
+export const BODY = { left: -0.4, right: 0.4, top: -1.48, bottom: 0.05 } as const;
 
 const BOX_W = 1.2;
-const BOX_H = 1.6;
+const BOX_H = 1.9;
 const FEET_X = 0.6;
-const FEET_Y = 1.4;
+const FEET_Y = 1.7;
 const SHOE = darken(FELT.wood, 0.45);
 
-type Frame = 0 | 1;
+type Frame = 0 | 1 | 2;
 
 function surfaceFor(s: number, dpr: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; S: number } {
   const S = s * dpr;
@@ -38,7 +38,7 @@ function surfaceFor(s: number, dpr: number): { canvas: HTMLCanvasElement; ctx: C
   return { canvas, ctx, S };
 }
 
-function finish(ctx: CanvasRenderingContext2D, S: number, s: number, dpr: number): void {
+function finish(ctx: CanvasRenderingContext2D, S: number, _s: number, _dpr: number): void {
   ctx.setTransform(S, 0, 0, S, FEET_X * S, FEET_Y * S);
   // One light for the whole figure, from the upper left.
   ctx.globalCompositeOperation = 'source-atop';
@@ -48,28 +48,18 @@ function finish(ctx: CanvasRenderingContext2D, S: number, s: number, dpr: number
   g.addColorStop(1, rgba(INK, 0.2));
   ctx.fillStyle = g;
   ctx.fillRect(-0.6, -1.4, 1.2, 1.6);
-  // Contact shadow under the feet, drawn behind everything.
-  ctx.globalCompositeOperation = 'destination-over';
-  ctx.save();
-  ctx.shadowColor = rgba(INK, 0.55);
-  ctx.shadowBlur = Math.max(1, 2.2 * (s / 32)) * dpr;
-  ctx.fillStyle = rgba(INK, 0.38);
-  ctx.beginPath();
-  ctx.ellipse(0.03, -0.005, 0.32, 0.085, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
   ctx.globalCompositeOperation = 'source-over';
 }
 
 function feet(p: Pen, view: View, frame: Frame, colour: string): void {
   if (view === 'e') {
-    const [back, front] = frame ? [-0.085, 0.1] : [-0.025, 0.04];
+    const [back, front] = frame === 1 ? [-0.085, 0.1] : frame === 2 ? [.065, -.07] : [-0.025, 0.04];
     piece(p, ellipsePath(back, frame ? -0.055 : -0.038, 0.07, 0.038), darken(colour, 0.15));
     piece(p, ellipsePath(front + 0.015, -0.038, 0.076, 0.04), colour);
     return;
   }
-  piece(p, ellipsePath(-0.085, frame ? -0.066 : -0.038, 0.07, frame ? 0.033 : 0.04), colour);
-  piece(p, ellipsePath(0.085, -0.038, 0.07, 0.04), colour);
+  piece(p, ellipsePath(-0.085, frame === 1 ? -.066 : -.038, .07, frame === 1 ? .033 : .04), colour);
+  piece(p, ellipsePath(.085, frame === 2 ? -.066 : -.038, .07, frame === 2 ? .033 : .04), colour);
 }
 
 function apron(p: Pen, look: Look, m: Metrics, view: View): void {
@@ -156,7 +146,7 @@ function arms(p: Pen, look: Look, m: Metrics, view: View, frame: Frame): void {
   if (view === 'e') {
     const px = 0.02;
     const py = m.shoulderY + 0.05;
-    const phi = frame ? -0.38 : 0.14;
+    const phi = frame === 1 ? -.38 : frame === 2 ? .38 : .14;
     const sx = Math.sin(phi);
     const cy = Math.cos(phi);
     const hx = px + sx * 0.27;
@@ -171,7 +161,7 @@ function arms(p: Pen, look: Look, m: Metrics, view: View, frame: Frame): void {
   const ay = m.shoulderY + 0.14;
   const holdSide = view === 's' ? 1 : -1;
   for (const side of [-1, 1]) {
-    const swing = frame ? side * 0.02 : 0;
+    const swing = frame === 1 ? side * .025 : frame === 2 ? -side * .025 : 0;
     const hx = side * (ax + 0.04);
     const hy = ay + 0.14 + swing;
     piece(p, ellipsePath(side * ax, ay + swing * 0.5, 0.064, 0.148, -side * 0.26), sleeve);
@@ -227,7 +217,7 @@ function face(p: Pen, look: Look, m: Metrics, view: View, mood: MoodBucket): voi
 function figure(p: Pen, look: Look, view: View, frame: Frame, mood: MoodBucket): void {
   const m = METRICS[look.body] ?? METRICS.round;
   const { ctx } = p;
-  const lift = frame ? -0.035 : 0;
+  const lift = frame === 1 ? -0.04 : frame === 2 ? -0.018 : 0;
   const f = view === 'e' ? 0.84 : 1;
   feet(p, view, frame, SHOE);
   ctx.save();
@@ -266,7 +256,7 @@ function stranger(p: Pen, view: View, frame: Frame): void {
   const { ctx } = p;
   feet(p, view, frame, mix(INK, BERRY, 0.18));
   ctx.save();
-  ctx.translate(0, frame ? -0.035 : 0);
+  ctx.translate(0, frame === 1 ? -.04 : frame === 2 ? -.018 : 0);
   const f = view === 'e' ? 0.86 : 1;
   const cloak = new Path2D();
   cloak.moveTo(0, -1.09);
@@ -285,6 +275,9 @@ function stranger(p: Pen, view: View, frame: Frame): void {
   inner.bezierCurveTo(-0.25 * f, -0.87, -0.2 * f, -1.05, 0, -1.05);
   // Ink with a whisper of denim, so the empty hood opening can be pure ink without near-black.
   piece(p, cloak, mix(INK, DENIM, 0.1), inner, mix(INK, PAPER, 0.42));
+  ctx.strokeStyle = rgba(MUSTARD, .42);
+  ctx.lineWidth = .035;
+  ctx.beginPath(); ctx.moveTo(-.27 * f, -.12); ctx.quadraticCurveTo(0, -.065, .27 * f, -.12); ctx.stroke();
   // The hood's fold line and the empty opening where a face would be.
   ctx.strokeStyle = rgba(mix(INK, PAPER, 0.3), 0.9);
   ctx.lineWidth = 0.8 * p.px;
@@ -329,6 +322,7 @@ function compose(look: Look | null, facing: Facing, frame: Frame, mood: MoodBuck
   ctx.setTransform(S, 0, 0, S, FEET_X * S, FEET_Y * S);
   if (facing === 'w') ctx.scale(-1, 1);
   const view: View = facing === 'w' ? 'e' : facing;
+  ctx.scale(1, 1.26);
   const pen: Pen = { ctx, px: 1 / s, dpr, u: s / 32, detail: s >= 17 };
   if (look) figure(pen, look, view, frame, mood);
   else stranger(pen, view, frame);
@@ -378,7 +372,7 @@ export class SpriteCache {
   *prepare(look: Look, core: boolean, zoom: number, dpr: number): Generator<void> {
     if (this.ready(look, core, zoom, dpr)) return;
     for (const facing of ['s', 'n', 'e', 'w'] as const) {
-      for (const frame of [0, 1] as const) {
+      for (const frame of [0, 1, 2] as const) {
         for (const mood of facing === 'n' ? [0] : [-1, 0, 1]) {
           this.villager(look, facing, frame, mood, core, zoom, dpr);
           yield;

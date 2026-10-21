@@ -6,7 +6,10 @@ import { makeCanvas } from './grain.js';
 import { buildTreesSteps } from './landmarks.js';
 import { buildRoofsSteps } from './roofs.js';
 import { paintRoomsSteps } from './rooms.js';
-import { LAYER_MARGIN, paintGroundSteps } from './tiles.js';
+import { prepareBoard } from './board.js';
+import { CLOSE_ZOOM } from './camera.js';
+import { captureRoom, type RoomPatch } from './room-cache.js';
+import { LAYER_MARGIN, paintGroundSteps, buildCropsSteps } from './tiles.js';
 
 export interface Layer {
   zoom: number;
@@ -14,7 +17,11 @@ export interface Layer {
   /** Backing pixels per CSS pixel; capped for large canvases on phones. */
   scale: number;
   canvas: HTMLCanvasElement;
+  board?: HTMLCanvasElement;
   standing: Standing[];
+  rooms: RoomPatch[];
+  crops: Standing[];
+  roomsPending: boolean;
 }
 
 const MAX_LAYER_PIXELS = 12e6;
@@ -26,16 +33,19 @@ function* paintLayer(map: VillageMap, buildings: readonly Building[], zoom: numb
   const { canvas, ctx } = makeCanvas(cssW * scale, cssH * scale);
   ctx.setTransform(scale, 0, 0, scale, LAYER_MARGIN * zoom * scale, LAYER_MARGIN * zoom * scale);
   yield;
-  yield* paintGroundSteps(ctx, map, zoom, scale, () => paintRoomsSteps(ctx, map, buildings, zoom, scale));
+  const rooms: RoomPatch[] = [];
+  yield* paintGroundSteps(ctx, map, zoom, scale, () => paintRoomsSteps(ctx, map, buildings, zoom, scale, b => { rooms.push(captureRoom(canvas, b, zoom, scale, LAYER_MARGIN)); }));
   yield;
   yield* paintWallsSteps(ctx, map, zoom, scale);
   yield;
+  const crops = yield* buildCropsSteps(map, zoom, scale);
   const standing = yield* buildTreesSteps(map, zoom, dpr);
   const roofs = yield* buildRoofsSteps(buildings, zoom, dpr);
   standing.push(...roofs);
   yield;
   standing.sort((a, b) => a.sortY - b.sortY);
-  return { zoom, dpr, scale, canvas, standing };
+  const board = zoom < CLOSE_ZOOM ? yield* prepareBoard(map, zoom, scale) : undefined;
+  return { zoom, dpr, scale, canvas, board, standing, crops, rooms, roomsPending: false };
 }
 
 /** Check cancellation before every painting step, including within nested texture painters. */

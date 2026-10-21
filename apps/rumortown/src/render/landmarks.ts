@@ -312,7 +312,7 @@ export function* buildTreesSteps(map: VillageMap, z: number, s: number): Generat
         sprites.set(key, img);
       }
       const jx = (hash(x, y, 112) - 0.5) * 0.12;
-      out.push({ img, x: (x + 0.5 + jx - left) * z, y: (y + 0.5 - top) * z, w: wT * z, h: hT * z, sortY: y + 0.8 });
+      out.push({ img, x: (x + 0.5 + jx - left) * z, y: (y + 0.5 - top) * z, w: wT * z, h: hT * z, sortY: y + 0.8, wind: x * 71 + y });
     }
   }
   return out;

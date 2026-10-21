@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Camera, Look, RenderOptions, VillageMap, VillagerView, WorldSnapshot } from '../sim/types.js';
 import { CLOSE_ZOOM, createRenderer, fitZoom } from './index.js';
 import { SpriteCache } from './sprites.js';
+import { cast } from '../content/cast/index.js';
+import * as daylightPainter from './daylight.js';
+import * as interiors from './interiors.js';
 import * as tiles from './tiles.js';
 
 interface Blit { image: unknown; alpha: number; args: number[] }
@@ -272,7 +275,7 @@ describe('prepared zoom and sprite caches', () => {
     expect(elapsed).toBeLessThan(4);
     expect(canvases).toHaveLength(prepared);
     expect(paint).not.toHaveBeenCalled();
-    const fallback = canvas.blits[0]?.image;
+    const fallback = canvas.blits.find(b => b.args.length === 8)?.image;
     expect(fallback).toBeDefined();
     expect(callbacks).toHaveLength(1);
     renderer.render(null, cur, cam, options);
@@ -280,7 +283,7 @@ describe('prepared zoom and sprite caches', () => {
     callbacks.shift()?.({ didTimeout: true, timeRemaining: () => 0 });
     canvas.blits.length = 0;
     renderer.render(null, cur, cam, options);
-    expect(canvas.blits[0]?.image).toBe(fallback); // Private layer is not published without sprites.
+    expect(canvas.blits.find(b => b.args.length === 8)?.image).toBe(fallback); // Private layer is not published without sprites.
     drainIdle();
     expect(paint).toHaveBeenCalledTimes(1);
     expect(paint.mock.calls[0]?.[2]).toBe(zoom);
@@ -290,7 +293,7 @@ describe('prepared zoom and sprite caches', () => {
     stranger.mockClear();
     renderer.render(null, cur, cam, options);
     expect(canvases).toHaveLength(complete);
-    const exact = canvas.blits[0]?.image as HTMLCanvasElement;
+    const exact = canvas.blits.find(b => b.args.length === 8)?.image as HTMLCanvasElement;
     expect(exact).not.toBe(fallback);
     expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * zoom));
     expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
@@ -320,7 +323,7 @@ describe('prepared zoom and sprite caches', () => {
     drainIdle();
     canvas.blits.length = 0;
     renderer.render(null, cur, camera(zoom), options);
-    const exact = canvas.blits[0]?.image as HTMLCanvasElement;
+    const exact = canvas.blits.find(b => b.args.length === 8)?.image as HTMLCanvasElement;
     expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * zoom * 2));
     expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
   });
@@ -341,7 +344,7 @@ describe('prepared zoom and sprite caches', () => {
     expect(discarded.blits).toHaveLength(painted);
     canvas.blits.length = 0;
     renderer.render(null, cur, camera(30), options);
-    const exact = canvas.blits[0]?.image as HTMLCanvasElement;
+    const exact = canvas.blits.find(b => b.args.length === 8)?.image as HTMLCanvasElement;
     expect(exact).not.toBe(discarded);
     expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * 30 * (cause === 'resize' ? 2 : 1)));
     expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
@@ -420,4 +423,61 @@ it('redraws both Show me participants over the dimmed village', () => {
   const opts = { ...options, spotlight: ['mira', 'ben'] };
   renderer.render(null, cur, camera(), opts);
   expect(cached).toHaveBeenCalledTimes(4);
+});
+
+
+describe('small cached interiors', () => {
+  it('repaints only room patches after occupancy or a 0.05 glow step changes', () => {
+    const cur = snapshot([villager('mira', 14, 14)]);
+    const { renderer } = setup(cur);
+    const ground = vi.spyOn(tiles, 'paintGroundSteps');
+    const furniture = vi.spyOn(interiors, 'drawInterior');
+    const canvasCount = canvases.length;
+    for (let i = 0; i < 10; i++) renderer.render(null, cur, camera(), options);
+    drainIdle();
+    expect(furniture).not.toHaveBeenCalled();
+    const dusk = { ...cur, minuteOfDay: 1200 };
+    renderer.render(cur, dusk, camera(), options);
+    expect(furniture).not.toHaveBeenCalled();
+    drainIdle();
+    expect(furniture).toHaveBeenCalled();
+    expect(furniture.mock.calls.some(call => call[3].glow === 1 && call[3].occupied)).toBe(true);
+    expect(ground).not.toHaveBeenCalled();
+    expect(canvases).toHaveLength(canvasCount);
+    furniture.mockClear();
+    const empty = { ...dusk, villagers: [] };
+    renderer.render(dusk, empty, camera(), options);
+    drainIdle();
+    expect(furniture.mock.calls.some(call => call[3].glow === 0 && !call[3].occupied)).toBe(true);
+    expect(ground).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('finished world light and the expanded cast', () => {
+  it('applies the controller tint once per frame without rebuilding cached ground', () => {
+    const cur = snapshot();
+    const { renderer } = setup(cur);
+    const tint = vi.spyOn(daylightPainter, 'drawDaylight');
+    const ground = vi.spyOn(tiles, 'paintGroundSteps');
+    const count = canvases.length;
+    for (const minuteOfDay of [420, 720, 1080, 1290]) renderer.render(null, { ...cur, minuteOfDay }, camera(), options);
+    expect(tint).toHaveBeenCalledTimes(4);
+    expect(tint.mock.calls.map(call => call[3].windows)).toEqual([.3, 0, .5, 1]);
+    expect(ground).not.toHaveBeenCalled();
+    expect(canvases).toHaveLength(count);
+  });
+
+  it('draws all 36 prepared appearances across three walk frames without composing canvases', () => {
+    const cur = snapshot(cast.map((d, i) => ({ ...villager(d.id, 9 + i % 9 * 1.6, 8 + Math.floor(i / 9) * 2), look: d.look, tier: d.tier, moving: true })));
+    const cam = camera(CLOSE_ZOOM, 1440, 900);
+    const { renderer } = setup(cur, cam);
+    const cached = vi.spyOn(SpriteCache.prototype, 'cachedVillager');
+    const count = canvases.length;
+    for (let tick = 10; tick < 20; tick++) renderer.render(null, { ...cur, tick }, cam, { ...options, reducedMotion: false });
+    expect(cached).toHaveBeenCalledTimes(360);
+    expect(new Set(cached.mock.calls.map(call => call[2])).size).toBe(3);
+    expect(cached.mock.results.every(result => result.value !== undefined)).toBe(true);
+    expect(canvases).toHaveLength(count);
+  });
 });

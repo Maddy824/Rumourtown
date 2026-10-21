@@ -1,7 +1,7 @@
 /** Quiet sewn district details, painted once into each zoom's ground cache. */
 import type { VillageMap } from '../sim/types.js';
 import { districtAt, districtTiles, districtViews } from '../content/map/wayfinding.js';
-import { INK, MOSS, OAT, PAPER, darken, mix } from './palette.js';
+import { INK, MOSS, OAT, PAPER, DENIM, MUSTARD, darken, mix } from './palette.js';
 
 export function* paintDistricts(ctx: CanvasRenderingContext2D, map: VillageMap, z: number): Generator<void> {
   const metadata = districtTiles(map);
@@ -10,8 +10,10 @@ export function* paintDistricts(ctx: CanvasRenderingContext2D, map: VillageMap, 
     for (let x = 0; x < map.width; x++) {
       const id = metadata[y * map.width + x]!.district;
       if (id === 'old-village') continue;
+      const tile = map.tiles[y * map.width + x];
+      if (tile !== 'grass' && tile !== 'tree') continue;
       ctx.fillStyle = districtViews.find(d => d.id === id)!.ground;
-      ctx.globalAlpha = .82;
+      ctx.globalAlpha = .28;
       ctx.fillRect(x * z, y * z, z + .1, z + .1);
       ctx.globalAlpha = 1;
       if (id === 'woodland' && map.tiles[y * map.width + x] === 'tree') {
@@ -50,6 +52,32 @@ export function* paintWayfinding(ctx: CanvasRenderingContext2D, map: VillageMap,
       ctx.setLineDash([z * .12, z * .06]);
       ctx.strokeRect(x * z, (p.rect.y + .15) * z, z, z * .22);
     }
+    yield;
+  }
+  // Daytime iron lantern frames remain visible when their evening lights are off.
+  ctx.setLineDash([]);
+  for (const square of map.places.filter(p => p.kind === 'square')) {
+    for (const dx of [.5, square.rect.w - .5]) {
+      const x = (square.rect.x + dx) * z, y = (square.rect.y + .5) * z;
+      ctx.fillStyle = mix(INK, OAT, .3); ctx.fillRect(x - .025 * z, y, .05 * z, .5 * z);
+      ctx.fillStyle = OAT; ctx.fillRect(x - .1 * z, y - .13 * z, .2 * z, .26 * z);
+      ctx.strokeStyle = INK; ctx.lineWidth = Math.max(.7, z * .025); ctx.strokeRect(x - .1 * z, y - .13 * z, .2 * z, .26 * z);
+    }
+    yield;
+  }
+  // Laundry hangs above the community garden, clear of its entrance.
+  const garden = map.places.find(p => p.id === 'gardens');
+  if (garden) {
+    const x = (garden.rect.x + 2) * z, y = (garden.rect.y - .45) * z;
+    ctx.setLineDash([z * .10, z * .065]); ctx.strokeStyle = mix(INK, OAT, .4);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 2 * z, y + .35 * z, x + 4 * z, y); ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = [PAPER, DENIM, OAT, MUSTARD][i]!;
+      ctx.fillRect(x + (.4 + i * .9) * z, y + .12 * z, .55 * z, .55 * z);
+      ctx.strokeRect(x + (.4 + i * .9) * z, y + .12 * z, .55 * z, .55 * z);
+    }
+    ctx.setLineDash([]);
+    for (const dx of [0, 4]) { ctx.fillStyle = mix(INK, OAT, .5); ctx.fillRect(x + dx * z, y - .12 * z, .06 * z, .9 * z); }
     yield;
   }
   // Two folded paper boats beside the eastern jetties.

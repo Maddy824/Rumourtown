@@ -125,6 +125,10 @@ export function hairFront(p: Pen, look: Look, m: Metrics, view: View): void {
       piece(p, cap, c, capPath(m, view, style, 0.035) ?? undefined);
     }
   }
+  if (cap && p.detail) {
+    p.ctx.save(); p.ctx.clip(cap); p.ctx.strokeStyle = rgba(lighten(c, .45), .65); p.ctx.lineWidth = 1.2 * p.px;
+    p.ctx.beginPath(); p.ctx.arc(-R * .1, cy, R * .82, Math.PI * 1.1, Math.PI * 1.65); p.ctx.stroke(); p.ctx.restore();
+  }
   if (style === 'bun' && look.hat === 'none') {
     const [bx, by] = view === 's' ? [0, cy - R - 0.035] : view === 'n' ? [0, cy - R * 0.55] : [-R * 0.78, cy - R * 0.62];
     piece(p, ellipsePath(bx, by, 0.088, 0.082), c, ellipsePath(bx, by, 0.05, 0.045));

@@ -5,12 +5,12 @@
  */
 import type { TileKind, VillageMap } from '../sim/types.js';
 import { BERRY, FELT, INK, MUSTARD, PAPER, darken, mix, rgba } from './palette.js';
-import { hash, seeded } from './grain.js';
+import { hash, seeded, makeCanvas } from './grain.js';
 import { components, traceContours, type Inside } from './regions.js';
-import { feltPieceSteps, fibreFieldSteps, groundOf, mottleSteps, placeAt, roundRectPath, sampler, type Ground } from './felt.js';
+import { feltPieceSteps, fibreFieldSteps, groundOf, mottleSteps, placeAt, roundRectPath, sampler, type Ground, type Standing } from './felt.js';
 import { paintRiver } from './water.js';
 import { paintDistricts, paintWayfinding, oldVillagePath } from './wayfinding.js';
-import { bridge, treeShadowsSteps, well } from './landmarks.js';
+import { bridge, well } from './landmarks.js';
 
 /** Tiles of felt sheet beyond the map edge, seen only at the far zoom. */
 export const SHEET_OVERHANG = 0.3;
@@ -19,7 +19,7 @@ export const LAYER_MARGIN = 0.7;
 
 /**
  * Paints the whole ground: the sheet, river, fields, paths, then `rooms` (floors, from the
- * buildings module) at the right depth, then the bridge, well and tree shadows. Origin = tile (0, 0).
+ * buildings module) at the right depth, then the bridge, well and fixed decorations. Origin = tile (0, 0).
  */
 export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap, z: number, s: number, rooms?: () => Generator<void>): Generator<void> {
   const u = z / 32;
@@ -46,9 +46,11 @@ export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap
   const all: Inside = () => true;
   yield* mottleSteps(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 11);
   if (u >= 0.35) yield* fibreFieldSteps(ctx, map, all, z, FELT.grassLight, FELT.grassDark, 26, 12);
-  if (u >= 0.5) yield* grassDetails(ctx, map, g, k, z);
 
   yield* paintDistricts(ctx, map, z);
+  // Two mosses show through district dyes; flowers and stones sit above those dyes.
+  yield* grassMoss(ctx, map, z);
+  if (u >= .5) yield* grassDetails(ctx, map, g, k, z);
 
   const isField: Inside = (x, y) => g(x, y) === 'field';
   const isPath: Inside = (x, y) => g(x, y) === 'path';
@@ -61,10 +63,8 @@ export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap
     const set = new Set(comp.tiles);
     const inComp: Inside = (x, y) => x >= 0 && y >= 0 && x < W && y < H && set.has(y * W + x);
     const contours = traceContours(W, H, inComp, 2);
-    const shape = yield* feltPieceSteps(ctx, contours, inComp, map, z, s, { fill: FELT.soil, light: mix(FELT.soil, MUSTARD, 0.25), dark: darken(FELT.soil, 0.25), thread: FELT.soilThread, radius: 7, lift: 0.8, fibres: 16, stitch: true, fuzz: true, seed: 31 + i });
-    const place = placeAt(map.places, comp.x + Math.floor(comp.w / 2), comp.y + Math.floor(comp.h / 2), (p) => p.kind === 'field');
-    const wheat = place ? !/south/.test(place.id) : i % 2 === 0;
-    yield* cropRows(ctx, shape, comp, z, wheat, 41 + i);
+    yield* feltPieceSteps(ctx, contours, inComp, map, z, s, { fill: FELT.soil, light: mix(FELT.soil, MUSTARD, 0.25), dark: darken(FELT.soil, 0.25), thread: FELT.soilThread, radius: 7, lift: 0.8, fibres: 16, stitch: true, fuzz: true, seed: 31 + i });
+    // Crops are cached separately and blitted on the dynamic layer for wind.
   }
 
   const path = traceContours(W, H, isPath, 2);
@@ -78,10 +78,9 @@ export function* paintGroundSteps(ctx: CanvasRenderingContext2D, map: VillageMap
 
   for (const comp of components(W, H, (x, y) => k(x, y) === 'bridge')) { bridge(ctx, comp, k, z, s); yield; }
   for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) if (k(x, y) === 'well') { well(ctx, x, y, z, s); yield; }
+    for (let x = 0; x < W; x++) if (k(x, y) === 'well') { puddles(ctx, x, y, map, z); well(ctx, x, y, z, s); yield; }
     yield;
   }
-  yield* treeShadowsSteps(ctx, map, k, z, s);
 
   yield* paintWayfinding(ctx, map, z);
   ctx.restore();
@@ -142,6 +141,9 @@ function* grassDetails(ctx: CanvasRenderingContext2D, map: VillageMap, g: (x: nu
           tufts.moveTo(px + i * 1.6 * u, py);
           tufts.lineTo(px + i * 3.2 * u, py - (3.6 - Math.abs(i)) * u);
         }
+      } else if (h > .94) {
+        ctx.fillStyle = rgba(FELT.stone, .65); ctx.beginPath(); ctx.ellipse(px, py, 2.2 * u, 1.4 * u, h * 3, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = rgba(PAPER, .5); ctx.lineWidth = .7 * u; ctx.beginPath(); ctx.moveTo(px - u, py - u); ctx.lineTo(px + u, py - u); ctx.stroke();
       } else if (h < 0.165) {
         const c = flowerColours[Math.floor(hash(x, y, 74) * flowerColours.length)] as string;
         for (let i = 0; i < 3; i++) knots.push({ x: px + Math.cos(i * 2.1 + h * 40) * 2.6 * u, y: py + Math.sin(i * 2.1 + h * 40) * 2.2 * u, c });
@@ -288,7 +290,14 @@ function* pathPebbles(ctx: CanvasRenderingContext2D, map: VillageMap, isPath: In
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       yield;
-      if (!isPath(x, y) || hash(x, y, 91) > 0.09) continue;
+      if (!isPath(x, y)) continue;
+      // Quiet rubbed edges on lanes; the cut felt still carries the running stitch.
+      if (hash(x, y, 2411) < .3) for (const dx of [-1, 1]) {
+        if (isPath(x + dx, y)) continue;
+        ctx.fillStyle = rgba(FELT.pathLight, .65); ctx.beginPath();
+        ctx.ellipse((x + (dx < 0 ? .12 : .88)) * z, (y + .5) * z, .07 * z, .22 * z, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      if (hash(x, y, 91) > .09) continue;
       const cx = (x + 0.25 + hash(x, y, 92) * 0.5) * z;
       const cy = (y + 0.25 + hash(x, y, 93) * 0.5) * z;
       ctx.fillStyle = FELT.pathDark;
@@ -297,4 +306,44 @@ function* pathPebbles(ctx: CanvasRenderingContext2D, map: VillageMap, isPath: In
       ctx.fill();
     }
   }
+}
+
+/** Subtle two-tone moss patches remain in the ground cache. */
+function* grassMoss(ctx: CanvasRenderingContext2D, map: VillageMap, z: number): Generator<void> {
+  ctx.save(); ctx.fillStyle = darken(FELT.grass, .06);
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) if (map.tiles[y * map.width + x] === 'grass' && hash(x, y, 2201) < .35) {
+      ctx.beginPath(); ctx.ellipse((x + .5) * z, (y + .5) * z, .48 * z, .34 * z, hash(x, y, 2202) * 3, 0, Math.PI * 2); ctx.fill();
+    }
+    yield;
+  }
+  ctx.restore();
+}
+
+function puddles(ctx: CanvasRenderingContext2D, x: number, y: number, map: VillageMap, z: number): void {
+  for (const [dx, dy] of [[1, 0], [-1, 1]]) {
+    const tile = map.tiles[(y + dy!) * map.width + x + dx!];
+    if (tile !== 'path' && tile !== 'grass') continue;
+    const px = (x + dx! + .5) * z, py = (y + dy! + .6) * z;
+    ctx.fillStyle = rgba(FELT.waterLight, .4); ctx.beginPath(); ctx.ellipse(px, py, .32 * z, .13 * z, -.15, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgba(PAPER, .6); ctx.lineWidth = Math.max(.7, z * .025); ctx.beginPath(); ctx.ellipse(px, py, .22 * z, .07 * z, -.15, Math.PI, Math.PI * 1.8); ctx.stroke();
+  }
+}
+
+/** Whole field sprites keep every stalk cached; wind only changes the blit transform. */
+export function* buildCropsSteps(map: VillageMap, z: number, scale: number): Generator<void, Standing[]> {
+  const g = groundOf(map);
+  const out: Standing[] = [];
+  const comps = components(map.width, map.height, (x, y) => g(x, y) === 'field');
+  for (let i = 0; i < comps.length; i++) {
+    const comp = comps[i]!;
+    const surf = makeCanvas(comp.w * z * scale, comp.h * z * scale);
+    surf.ctx.setTransform(scale, 0, 0, scale, -comp.x * z * scale, -comp.y * z * scale);
+    const shape = new Path2D();
+    for (const index of comp.tiles) { shape.rect((index % map.width) * z, Math.floor(index / map.width) * z, z, z); yield; }
+    const place = placeAt(map.places, comp.x + Math.floor(comp.w / 2), comp.y + Math.floor(comp.h / 2), p => p.kind === 'field');
+    yield* cropRows(surf.ctx, shape, comp, z, place ? !/south/.test(place.id) : i % 2 === 0, 41 + i);
+    out.push({ img: surf.canvas, x: comp.x * z, y: comp.y * z, w: comp.w * z, h: comp.h * z, sortY: comp.y + comp.h, wind: comp.x * 71 + comp.y });
+  }
+  return out;
 }

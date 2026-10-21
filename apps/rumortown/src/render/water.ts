@@ -17,6 +17,13 @@ export function* paintRiver(ctx: CanvasRenderingContext2D, map: VillageMap, zoom
       gradient.addColorStop(1, wet(x + 1) ? '#337e88' : '#173f47');
       ctx.fillStyle = gradient;
       ctx.fillRect(px, py, zoom + .3, zoom + .5);
+      // A pale inner channel follows the connected river, leaving its banks deep.
+      ctx.fillStyle = 'rgba(194,223,207,.12)';
+      ctx.fillRect(px + (wet(x - 1) ? 0 : zoom * .22), py, zoom * (wet(x - 1) && wet(x + 1) ? 1 : .78), zoom + .3);
+      if (kind === 'water' && hash(x, y, 2210) < .12) {
+        ctx.strokeStyle = 'rgba(246,240,228,.4)'; ctx.lineWidth = Math.max(.7, zoom * .025);
+        ctx.beginPath(); ctx.ellipse(px + zoom * .5, py + zoom * .5, zoom * .2, zoom * .07, 0, Math.PI, Math.PI * 2); ctx.stroke();
+      }
       // Earth lips cast their shadow into the channel. No stitches across the water.
       for (const side of [-1, 1]) {
         if (wet(x + side)) continue;
@@ -52,7 +59,9 @@ export function drawCurrent(ctx: CanvasRenderingContext2D, map: VillageMap, came
   ctx.lineWidth = Math.max(.7, z * .027);
   ctx.lineCap = 'round';
   ctx.beginPath();
-  for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) {
+  const minX = Math.max(0, Math.floor(-ox / z)), maxX = Math.min(map.width, Math.ceil((camera.width - ox) / z));
+  const minY = Math.max(0, Math.floor(-oy / z)), maxY = Math.min(map.height, Math.ceil((camera.height - oy) / z));
+  for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) {
     if (map.tiles[y * map.width + x] !== 'water') continue;
     const px = ox + x * z, py = oy + y * z;
     if (px + z < 0 || px > camera.width || py + z < 0 || py > camera.height) continue;

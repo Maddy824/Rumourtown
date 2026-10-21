@@ -19,6 +19,8 @@ export interface Standing {
   sortY: number;
   /** Only roof façades fade when they overlap an important figure. */
   roof?: true;
+  /** Seed for a cached plant sprite swayed around its ground anchor. */
+  wind?: number;
 }
 
 export type Ground = 'grass' | 'path' | 'water' | 'field' | 'room';

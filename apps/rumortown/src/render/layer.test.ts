@@ -34,7 +34,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('cooperative real-map layer construction', () => {
   it('keeps every close-zoom painting step and idle slice within budget and yields while painting', () => {
-    const work = prepareLayer(villageMap, findBuildings(villageMap), 32, 1);
+    const work = prepareLayer(villageMap, findBuildings(villageMap), 40, 1);
     const steps: number[] = [];
     let layer: Layer | undefined;
     function* measured(): Generator<void> {
@@ -67,7 +67,7 @@ describe('cooperative real-map layer construction', () => {
 
   it('cancels inside a ground texture pass before any more canvas commands run', () => {
     let current = true;
-    const work = prepareLayer(villageMap, findBuildings(villageMap), 32, 1, () => current);
+    const work = prepareLayer(villageMap, findBuildings(villageMap), 40, 1, () => current);
     // Advance beyond surface setup into tile-by-tile ground painting.
     for (let i = 0; i < 20; i++) expect(work.next().done).toBe(false);
     const before = commands;

@@ -157,7 +157,7 @@ export function* paintWallsSteps(ctx: CanvasRenderingContext2D, map: VillageMap,
   ctx.shadowOffsetY = 1.6 * u * s;
   strokeBoth(FELT.wallEdge, thick);
   ctx.restore();
-  strokeBoth(rgba(INK, 0.28), thick + 1.1 * u);
+  strokeBoth(rgba(INK, 0.4), thick + 1);
   strokeBoth(FELT.wallEdge, thick);
   ctx.translate(0, -face);
   // The cut line between the top and the face, then the top of the strip.

@@ -58,7 +58,7 @@ export function luma(c: string): number {
 export const FELT = {
   grass: MOSS,
   grassLight: mix(MOSS, '#C9D68A', 0.22),
-  grassDark: darken(MOSS, 0.24),
+  grassDark: darken(MOSS, 0.06),
   grassThread: darken(MOSS, 0.42),
 
   path: OAT,

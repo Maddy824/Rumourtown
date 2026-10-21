@@ -66,7 +66,7 @@ export class ThreadPainter {
       if (!resolve(t.from, this.a) || !resolve(t.to, this.b)) continue;
       const alpha = 0.22 + 0.78 * Math.pow(0.5, (maxTick - t.tick) / HALF_LIFE_TICKS);
       const p = t.tick === maxTick ? easeOut(progress) : 1;
-      this.thread(ctx, t, alpha, p, width, pinR, u);
+      this.thread(ctx, t, alpha, p, width * (t === threads[threads.length - 1] ? 1.18 : 1), pinR, u);
     }
     ctx.restore();
     return progress < 1;
@@ -105,7 +105,7 @@ export class ThreadPainter {
     ctx.setLineDash(this.solid);
     ctx.lineWidth = width;
     // Shadow on the board below the lifted thread.
-    ctx.strokeStyle = rgba(INK, 0.3 * alpha);
+    ctx.strokeStyle = rgba(INK, 0.18 * alpha);
     ctx.beginPath();
     ctx.moveTo(ax + 0.9 * u, ay + 2.2 * u);
     ctx.quadraticCurveTo(qcx + 0.9 * u, qcy + 2.6 * u, ex + 0.9 * u, ey + 2.2 * u);
@@ -188,6 +188,7 @@ export class ThreadPainter {
     ctx.beginPath();
     ctx.arc(x - r * 0.35, y - r * 0.38, r * 0.32, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = rgba(PAPER, .35); ctx.beginPath(); ctx.arc(x + r * .28, y + r * .3, r * .14, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
   }
 

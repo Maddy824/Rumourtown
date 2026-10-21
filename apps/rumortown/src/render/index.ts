@@ -3,8 +3,8 @@
  * offscreen layer; trees, roof façades and villagers are depth-sorted standing pieces; threads
  * and a paper-grain overlay go on top. A frame is a handful of blits and a few strokes.
  */
-import { TILE, type Camera, type Renderer, type Vec2, type VillageMap, type VillagerId, type WorldSnapshot } from '../sim/types.js';
-import { computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
+import type { Camera, Renderer, Vec2, VillageMap, VillagerId, WorldSnapshot } from '../sim/types.js';
+import { CLOSE_ZOOM, computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
 import { findBuildings } from './buildings.js';
 import { roofOverlaps } from './roofs.js';
 import { LAYER_MARGIN } from './tiles.js';
@@ -18,14 +18,20 @@ import { conversationGroups } from './conversations.js';
 import { drawCurrent } from './water.js';
 import { IdleQueue } from './idle.js';
 import { signVisible, type PresentationOptions } from './presentation.js';
+import { daylight, drawDaylight, drawShadow, type TintContext } from './daylight.js';
+import { drawBuildingLight, drawOccupiedSmoke, occupiedBuildings } from './lighting.js';
+import { paperTag, type PaperTag } from './paper.js';
+import { BOARD_PAD } from './board.js';
+import { windOffset } from './wind.js';
+import { glowStep, refreshRooms } from './room-cache.js';
+import { idleFacing, idlePose, walkFrame } from './poses.js';
 import { buildingIcons, signposts } from '../content/map/wayfinding.js';
 
 export { fitZoom } from './camera.js';
 /** The close camera: CSS pixels per tile. */
-export const CLOSE_ZOOM = TILE;
+export { CLOSE_ZOOM } from './camera.js';
 
 const GRAIN_ALPHA = 0.06;
-const WALK_FRAME_MS = 170;
 const RECENT_SPEECH_MS = 2000;
 const MAX_LAYERS = 3;
 /** Positions further apart than this between snapshots are a jump, not a walk. */
@@ -35,10 +41,15 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   const maybe = canvas.getContext('2d', { alpha: false });
   if (!maybe) throw new Error('Canvas 2D is not available');
   const ctx: CanvasRenderingContext2D = maybe;
+  // Controller painters accept only string/gradient fills; they never read canvas patterns.
+  const lightCtx = ctx as CanvasRenderingContext2D & TintContext;
 
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let sized = false;
   const buildings = findBuildings(map);
+  let light = daylight(720);
+  let occupied = new Set<string>();
+  let lightSnapshot: WorldSnapshot | null = null;
   const layers: Layer[] = [];
   const idle = new IdleQueue();
   const bootstrapZooms = new Set<number>();
@@ -50,6 +61,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   const threads = new ThreadPainter();
   const grainTile = makeGrain(256);
   let grain: CanvasPattern | null = null;
+  const tags = new Map<string, PaperTag>();
   let cork: CanvasPattern | null = null;
   let corkDpr = 0;
   const view = makeView();
@@ -88,7 +100,18 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     canvas.height = Math.max(1, Math.round(height * dpr));
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    if (corkDpr !== dpr) cork = null;
+    if (corkDpr !== dpr) {
+      cork = null;
+      tags.clear();
+      for (const place of map.places) {
+        const name = place.name.replace(' home', '');
+        const icon = buildingIcons[place.kind] ?? '▤';
+        tags.set(`12:${name}`, paperTag(name, 12, dpr, grainTile));
+        tags.set(`10:${icon}`, paperTag(icon, 10, dpr, grainTile));
+      }
+      for (const post of signposts) for (const name of post.arms) tags.set(`post:${name}`, paperTag(name, 12, dpr, grainTile, 80));
+      tags.set('you', paperTag('You', 10, dpr, grainTile));
+    }
     // Layers painted for another pixel density are useless now; free them.
     for (let i = layers.length - 1; i >= 0; i--) if ((layers[i] as Layer).dpr !== dpr) layers.splice(i, 1);
     // Only called during creation/resize, never by the frame's drawing path.
@@ -109,11 +132,12 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
         idle.add((function* () {
           const layer = yield* prepareLayer(map, buildings, zoom, dpr);
           if (current) for (const v of current.villagers) yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
+          if (layer) yield* refreshRooms(layer, () => ({ glow: light.windows, occupied }), LAYER_MARGIN);
           if (layer && !layers.some(l => l.zoom === zoom)) layers.push(layer);
           bootstrapZooms.delete(zoom);
         })());
       }
-      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1] as const) sprites.stranger(facing, frame, zoom, dpr);
+      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1, 2] as const) sprites.stranger(facing, frame, zoom, dpr);
     }
     cork = ctx.createPattern(makeCork(Math.round(256 * dpr)), 'repeat');
     corkDpr = dpr;
@@ -138,7 +162,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
         sprites.retain(layers.map((l) => l.zoom), dpr);
         continue;
       }
-      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1] as const) {
+      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1, 2] as const) {
         if (zoom !== requestedZoom) break;
         sprites.stranger(facing, frame, zoom, dpr);
         yield;
@@ -151,6 +175,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
         }
       }
       if (zoom === requestedZoom) {
+        yield* refreshRooms(layer, () => ({ glow: light.windows, occupied }), LAYER_MARGIN);
         layers.push(layer);
         // Retain close plus the two most recently prepared overview/intermediate zooms.
         if (layers.length > MAX_LAYERS) layers.splice(layers.findIndex((l) => l.zoom !== CLOSE_ZOOM), 1);
@@ -216,7 +241,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   function phaseOf(id: VillagerId): number {
     let p = phases.get(id);
     if (p === undefined) {
-      p = hashString(id) * WALK_FRAME_MS * 2;
+      p = hashString(id) * 3;
       phases.set(id, p);
     }
     return p;
@@ -362,7 +387,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     return 1;
   }
 
-  function drawStanding(s: Standing, stretch: number, camera: Camera, cur: WorldSnapshot, selected: VillagerId | undefined, zoom: number): void {
+  function drawStanding(s: Standing, stretch: number, camera: Camera, cur: WorldSnapshot, selected: VillagerId | undefined, zoom: number, reducedMotion = false, alphaTick = 1): void {
     const x = view.ox + s.x * stretch;
     const y = view.oy + s.y * stretch;
     const w = s.w * stretch;
@@ -370,28 +395,37 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     if (x > camera.width || y > camera.height || x + w < 0 || y + h < 0) return;
     const alpha = ctx.globalAlpha;
     ctx.globalAlpha = alpha * roofAlpha(s, cur, selected, zoom);
+    const offset = s.wind === undefined ? 0 : windOffset(s.wind, cur.tick, alphaTick, reducedMotion) * Math.min(1, view.zoom / CLOSE_ZOOM);
+    if (offset) {
+      const shear = offset / Math.max(1, h);
+      const pivotY = view.oy + s.sortY * view.zoom;
+      ctx.setTransform(dpr, 0, shear * dpr, dpr, -shear * pivotY * dpr, 0);
+    }
     ctx.drawImage(s.img, crisp(x, stretch), crisp(y, stretch), w, h);
+    if (offset) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = alpha;
   }
 
-  function drawVillager(cur: WorldSnapshot, i: number, layerZoom: number, stretch: number, now: number, camera: Camera): void {
+  function drawVillager(cur: WorldSnapshot, i: number, layerZoom: number, stretch: number, _now: number, camera: Camera, reducedMotion = false, alpha = 1): void {
     const v = cur.villagers[i];
     if (!v) return;
     const zoom = view.zoom;
     const x = view.ox + (fx[i] as number) * zoom;
     const y = view.oy + (fy[i] as number) * zoom;
     if (x < -zoom * 2 || y < -zoom || x > camera.width + zoom * 2 || y > camera.height + zoom * 2) return;
-    const frame = v.moving ? (Math.floor((now + phaseOf(v.id)) / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
-    const sp = sprites.cachedVillager(v.look, v.facing, frame, v.mood, v.tier === 'core', layerZoom, dpr);
+    const pose = idlePose(v.id, cur.tick, reducedMotion || v.moving);
+    const frame = v.moving && !reducedMotion ? walkFrame(cur.tick, alpha, phaseOf(v.id)) : 0;
+    const sp = sprites.cachedVillager(v.look, idleFacing(v.facing, pose.turn), frame, v.mood, v.tier === 'core', layerZoom, dpr);
     if (!sp) return;
-    ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
+    drawShadow(lightCtx, x, y, zoom * .3, zoom * .09, zoom, light);
+    ctx.drawImage(sp.img, crisp(x + pose.lean * zoom - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
   }
 
   function drawPlayer(cur: WorldSnapshot, layerZoom: number, stretch: number, now: number, reducedMotion: boolean): void {
     const zoom = view.zoom;
     const x = view.ox + playerX * zoom;
     const y = view.oy + playerY * zoom;
-    const frame = cur.player.moving ? (Math.floor(now / WALK_FRAME_MS) & 1 ? 1 : 0) : 0;
+    const frame = cur.player.moving && !reducedMotion ? walkFrame(cur.tick, 1) : 0;
     const sp = sprites.cachedStranger(cur.player.facing, frame, layerZoom, dpr);
     if (!sp) return;
     // A persistent gold footprint makes the controllable traveller easy to find.
@@ -405,15 +439,8 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     ctx.ellipse(x, y, zoom * .48 * pulse, zoom * .23 * pulse, 0, 0, Math.PI * 2);
     ctx.fill(); ctx.stroke();
     ctx.setLineDash([]);
-    if (zoom > 0) {
-      ctx.font = `700 ${Math.max(10, zoom * .33)}px 'Bricolage Grotesque', sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = PAPER; ctx.fillStyle = INK;
-      ctx.strokeText('You', x, y - sp.ay * stretch - 6);
-      ctx.fillText('You', x, y - sp.ay * stretch - 6);
-    }
     ctx.restore();
+    drawShadow(lightCtx, x, y, zoom * .3, zoom * .09, zoom, light);
     ctx.drawImage(sp.img, crisp(x - sp.ax * stretch, stretch), crisp(y - sp.ay * stretch, stretch), sp.w * stretch, sp.h * stretch);
   }
 
@@ -422,13 +449,13 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const zoom = view.zoom;
     if (id === 'stranger') {
       out.x = view.ox + playerX * zoom;
-      out.y = view.oy + (playerY - 0.52) * zoom;
+      out.y = view.oy + (playerY - 0.72) * zoom;
       return true;
     }
     const i = curIndex.get(id);
     if (i === undefined || i >= count || !current) return false;
     const v = current.villagers[i];
-    const lift = v && v.tier === 'core' ? 0.52 * CORE_SCALE : 0.52;
+    const lift = v && v.tier === 'core' ? 0.72 * CORE_SCALE : 0.72;
     out.x = view.ox + (fx[i] as number) * zoom;
     out.y = view.oy + ((fy[i] as number) - lift) * zoom;
     return true;
@@ -457,20 +484,24 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       const text = zoom < 24 ? buildingIcons[place.kind] ?? '▤' : place.name.replace(' home', '');
       const x = view.ox + (place.door.x + .5) * zoom, y = view.oy + (place.door.y - .5) * zoom;
       if (x < -80 || x > camera.width + 80 || y < 0 || y > camera.height) continue;
-      const w = ctx.measureText(text).width + 12;
-      ctx.fillStyle = PAPER; ctx.fillRect(x - w / 2, y, w, 19);
-      ctx.strokeStyle = rgba(INK, .5); ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(x - w / 2 + 2, y + 2, w - 4, 15);
-      ctx.fillStyle = INK; ctx.fillText(text, x, y + 13);
+      const tag = tags.get(`${zoom < 24 ? 10 : 12}:${text}`);
+      if (tag) ctx.drawImage(tag.img, x - tag.w / 2, y, tag.w, tag.h);
     }
     if (!phone && zoom >= 24) for (const post of signposts) {
       const x = view.ox + post.x * zoom, y = view.oy + (post.y - 1.5) * zoom;
-      post.arms.forEach((name, i) => { ctx.fillStyle = PAPER; ctx.fillRect(x - 40, y + i * 18, 80, 17); ctx.fillStyle = INK; ctx.fillText(name, x, y + i * 18 + 12); });
+      if (x < -100 || x > camera.width + 100 || y < -80 || y > camera.height) continue;
+      post.arms.forEach((name, i) => { const tag = tags.get(`post:${name}`); if (tag) ctx.drawImage(tag.img, x - tag.w / 2, y + i * 23, tag.w, tag.h); });
     }
     ctx.restore();
   }
 
   function render(previous: WorldSnapshot | null, cur: WorldSnapshot, camera: Camera, options: PresentationOptions): void {
     current = cur;
+    if (lightSnapshot !== cur) {
+      light = daylight(cur.minuteOfDay);
+      occupied = occupiedBuildings(buildings, cur);
+      lightSnapshot = cur;
+    }
     const now = performance.now();
     for (const v of cur.villagers) {
       if (v.bubble?.text && v.bubble.untilTick > cur.tick) recentlySpoke.set(v.id, now);
@@ -512,6 +543,13 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     }
     if (!ready) return;
     const layer = layerFor(zoom);
+    for (const cached of layers) if (!cached.roomsPending && cached.rooms.some(room => room.occupied !== occupied.has(room.building.id) || room.glow !== (occupied.has(room.building.id) ? glowStep(light.windows) : 0))) {
+      cached.roomsPending = true;
+      idle.add((function* () {
+        try { yield* refreshRooms(cached, () => ({ glow: light.windows, occupied }), LAYER_MARGIN); }
+        finally { cached.roomsPending = false; }
+      })());
+    }
     interpolate(previous, cur, options.alpha);
     lastCurrent = cur;
 
@@ -521,8 +559,29 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
     const mapRight = view.ox + map.width * zoom;
     const mapBottom = view.oy + map.height * zoom;
     if (view.ox > 0.5 || view.oy > 0.5 || mapRight < camera.width - 0.5 || mapBottom < camera.height - 0.5) drawTable(camera);
+    if (layer.board && zoom < CLOSE_ZOOM) {
+      ctx.drawImage(layer.board, view.ox - BOARD_PAD * stretch, view.oy - BOARD_PAD * stretch, (map.width * layer.zoom + BOARD_PAD * 2) * stretch, (map.height * layer.zoom + BOARD_PAD * 2) * stretch);
+    }
     drawGround(layer, stretch, camera);
-    drawCurrent(ctx, map, camera, view.ox, view.oy, options.reducedMotion ? 0 : now / 1000);
+    for (const crop of layer.crops) drawStanding(crop, stretch, camera, cur, undefined, layer.zoom, options.reducedMotion, options.alpha);
+    // Contact shadows live on the moving frame, so their direction follows the clock.
+    for (const b of buildings) {
+      const x = view.ox + (b.x + b.w / 2) * zoom, y = view.oy + (b.y + b.h - .15) * zoom;
+      if (x + b.w * zoom / 2 < 0 || x - b.w * zoom / 2 > camera.width || y < -zoom || y > camera.height + zoom) continue;
+      drawShadow(lightCtx, x, y, b.w * zoom * .49, zoom * .16, zoom, light);
+    }
+    for (const s of layer.standing) if (!s.roof) {
+      const x = view.ox + (s.x + s.w / 2) * stretch, y = view.oy + s.sortY * zoom;
+      if (x < -zoom || x > camera.width + zoom || y < -zoom || y > camera.height + zoom) continue;
+      drawShadow(lightCtx, x, y, zoom * .5, zoom * .15, zoom, light);
+    }
+    for (const post of signposts) {
+      const x = view.ox + post.x * zoom, y = view.oy + post.y * zoom;
+      if (x < 0 || x > camera.width || y < 0 || y > camera.height) continue;
+      drawShadow(lightCtx, x, y, zoom * .25, zoom * .08, zoom, light);
+      ctx.fillStyle = mix(OAT, INK, .55); ctx.fillRect(x - zoom * .04, y - zoom * 1.6, zoom * .08, zoom * 1.6);
+    }
+    drawCurrent(ctx, map, { ...camera, zoom }, view.ox, view.oy, options.reducedMotion ? 0 : now / 1000);
     const groups = conversationGroups(cur, { x: playerX, y: playerY });
     groups.forEach((g, rank) => {
       ctx.save(); ctx.fillStyle = PAPER; ctx.globalAlpha = rank < 3 ? .25 : .125;
@@ -544,15 +603,23 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       const vY = vi < count ? (fy[order[vi] as number] as number) : Infinity;
       const pY = playerDone ? Infinity : playerY;
       if (sY === Infinity && vY === Infinity && pY === Infinity) break;
-      if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera, cur, options.selected, layer.zoom);
-      else if (vY <= pY) drawVillager(cur, order[vi++] as number, layer.zoom, stretch, now, camera);
+      if (sY <= vY && sY <= pY) drawStanding(standing[si++] as Standing, stretch, camera, cur, options.selected, layer.zoom, options.reducedMotion, options.alpha);
+      else if (vY <= pY) drawVillager(cur, order[vi++] as number, layer.zoom, stretch, now, camera, options.reducedMotion, options.alpha);
       else {
         if (!options.arriving) drawPlayer(cur, layer.zoom, stretch, now, options.reducedMotion);
         playerDone = true;
       }
     }
 
+    drawOccupiedSmoke(ctx, buildings, occupied, view, camera);
+    drawBuildingLight(ctx, buildings, map, occupied, view, light, camera);
+    drawDaylight(lightCtx, camera.width, camera.height, { ...light, vignette: zoom >= CLOSE_ZOOM ? .06 : Math.max(.12, light.vignette) });
     drawSigns(camera, !!options.phone);
+    if (!options.arriving) {
+      const tag = tags.get('you');
+      const x = view.ox + playerX * zoom, y = view.oy + playerY * zoom;
+      if (tag) ctx.drawImage(tag.img, x - tag.w / 2, y + BODY.top * zoom - tag.h - 3, tag.w, tag.h);
+    }
     if (options.spotlight?.length) {
       // Leave the whole scene at 40%, then redraw the people and their paper rings.
       ctx.save(); ctx.globalAlpha = .6; ctx.fillStyle = INK;
@@ -564,7 +631,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
           ctx.strokeStyle = PAPER; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, zoom * .6, zoom * .28, 0, 0, Math.PI * 2); ctx.stroke();
         } else {
           drawSelection(cur, id);
-          const i = curIndex.get(id); if (i !== undefined) drawVillager(cur, i, layer.zoom, stretch, now, camera);
+          const i = curIndex.get(id); if (i !== undefined) drawVillager(cur, i, layer.zoom, stretch, now, camera, true);
         }
       }
     }
