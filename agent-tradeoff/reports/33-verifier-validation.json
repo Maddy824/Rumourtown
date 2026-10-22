@@ -1,0 +1,283 @@
+{
+  "mode": "lexical",
+  "total": 64,
+  "correct": 51,
+  "failed": 13,
+  "misses": [
+    {
+      "case": "paraphrase with role words",
+      "reply": "The baker lost a loaf and Tom was seen near the shelf.",
+      "mismatches": {
+        "epistemic": [
+          false,
+          true
+        ]
+      },
+      "sentences": [
+        {
+          "text": "The baker lost a loaf and Tom was seen near the shelf.",
+          "label": "supported",
+          "factId": "f1",
+          "score": 0.222,
+          "worldTruth": "false",
+          "worldFactId": "f1"
+        }
+      ]
+    },
+    {
+      "case": "slang synonym",
+      "reply": "Tom pinched a loaf from Mira, they say.",
+      "mismatches": {
+        "epistemic": [
+          true,
+          false
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Tom pinched a loaf from Mira, they say.",
+          "label": "unknown-to-speaker",
+          "worldTruth": "unknown"
+        }
+      ]
+    },
+    {
+      "case": "paraphrase: nominal loan",
+      "reply": "Ben took a loan of the tools belonging to Ivo.",
+      "mismatches": {
+        "epistemic": [
+          true,
+          false
+        ],
+        "worldTruth": [
+          [
+            "true"
+          ],
+          [
+            "unknown"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Ben took a loan of the tools belonging to Ivo.",
+          "label": "unknown-to-speaker",
+          "worldTruth": "unknown"
+        }
+      ]
+    },
+    {
+      "case": "paraphrase: organising",
+      "reply": "Jonah and Rosa are organising the fair.",
+      "mismatches": {
+        "calibrated": [
+          false,
+          null
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Jonah and Rosa are organising the fair.",
+          "label": "chatter",
+          "worldTruth": "unknown"
+        }
+      ]
+    },
+    {
+      "case": "compound: mixed world truth",
+      "reply": "Tom stole bread, and Ben borrowed Ivo's tools.",
+      "mismatches": {
+        "epistemic": [
+          true,
+          false
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Tom stole bread, and Ben borrowed Ivo's tools.",
+          "label": "unknown-to-speaker",
+          "worldTruth": "unknown"
+        }
+      ]
+    },
+    {
+      "case": "polarity: inflected negation",
+      "reply": "Tom did not steal bread from the bakery.",
+      "mismatches": {
+        "epistemic": [
+          false,
+          true
+        ],
+        "worldTruth": [
+          [
+            "true"
+          ],
+          [
+            "unknown"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Tom did not steal bread from the bakery.",
+          "label": "chatter",
+          "worldTruth": "unknown"
+        }
+      ]
+    },
+    {
+      "case": "polarity: false that",
+      "reply": "It is false that Ben borrowed Ivo's tools.",
+      "mismatches": {
+        "epistemic": [
+          false,
+          true
+        ],
+        "worldTruth": [
+          [
+            "false"
+          ],
+          [
+            "true"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "text": "It is false that Ben borrowed Ivo's tools.",
+          "label": "supported",
+          "factId": "f2",
+          "score": 0.571,
+          "worldTruth": "true",
+          "worldFactId": "f2"
+        }
+      ]
+    },
+    {
+      "case": "polarity: double negative",
+      "reply": "Tom never failed to steal bread from the bakery.",
+      "mismatches": {
+        "epistemic": [
+          true,
+          false
+        ],
+        "worldTruth": [
+          [
+            "false"
+          ],
+          [
+            "true"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Tom never failed to steal bread from the bakery.",
+          "label": "contradicts",
+          "factId": "f1",
+          "score": 0.429,
+          "worldTruth": "true",
+          "worldFactId": "f1"
+        }
+      ]
+    },
+    {
+      "case": "sources: ancestry only",
+      "reply": "The stranger told me Tom stole bread from the bakery.",
+      "mismatches": {
+        "provenanceLegacy": [
+          true,
+          null
+        ]
+      },
+      "sentences": [
+        {
+          "text": "The stranger told me Tom stole bread from the bakery.",
+          "label": "supported",
+          "factId": "f1",
+          "score": 0.667,
+          "worldTruth": "false",
+          "worldFactId": "f1"
+        }
+      ]
+    },
+    {
+      "case": "sources: according to",
+      "reply": "According to Mira, Tom stole bread from the bakery.",
+      "mismatches": {
+        "epistemic": [
+          true,
+          false
+        ],
+        "provenanceLegacy": [
+          true,
+          null
+        ]
+      },
+      "sentences": [
+        {
+          "text": "According to Mira, Tom stole bread from the bakery.",
+          "label": "unknown-to-speaker",
+          "worldTruth": "unknown"
+        }
+      ]
+    },
+    {
+      "case": "sources: name outside cast",
+      "reply": "Wren told me Tom stole bread from the bakery.",
+      "mismatches": {
+        "provenanceLegacy": [
+          false,
+          null
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Wren told me Tom stole bread from the bakery.",
+          "label": "supported",
+          "factId": "f1",
+          "score": 1,
+          "worldTruth": "false",
+          "worldFactId": "f1"
+        }
+      ]
+    },
+    {
+      "case": "sources: fabricated witness",
+      "reply": "I saw Tom steal bread from the bakery.",
+      "mismatches": {
+        "epistemic": [
+          false,
+          true
+        ]
+      },
+      "sentences": [
+        {
+          "text": "I saw Tom steal bread from the bakery.",
+          "label": "supported",
+          "factId": "f1",
+          "score": 0.5,
+          "worldTruth": "false",
+          "worldFactId": "f1"
+        }
+      ]
+    },
+    {
+      "case": "sources: embedded report",
+      "reply": "Rosa told me that Mira told her Tom stole bread.",
+      "mismatches": {
+        "epistemic": [
+          true,
+          false
+        ]
+      },
+      "sentences": [
+        {
+          "text": "Rosa told me that Mira told her Tom stole bread.",
+          "label": "unknown-to-speaker",
+          "worldTruth": "unknown"
+        }
+      ]
+    }
+  ]
+}

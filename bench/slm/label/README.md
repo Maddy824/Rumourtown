@@ -111,3 +111,5 @@ npm run bench:slm:smoke
 ```
 
 `label.harness.test.ts` is picked up by the existing `bench/slm/**/*.harness.test.ts` include pattern. It checks a hand-computed kappa (1/2), F1 values (4/5 and 2/3), nominal alpha (9/16) with missing data, blinding, deterministic rare-stratum sampling, input validation, report breakdowns, safe output creation, and parity between the page’s sentence splitter and the real verifier. No network or model provider is needed.
+
+Phase 0 research verdicts encode no-claim calibration as `null`; agreement reports accept it and show the oracle category “not applicable”. Legacy boolean exports remain readable. Oracle N/A on a human factual reply remains a visible disagreement, rather than becoming a passing confidence flag. The revised speech-act proxy must be calibrated against independent human task-completion labels; the authored development challenges are not that audit. World truth still needs a separate reference-guided audit, especially for compound claims.

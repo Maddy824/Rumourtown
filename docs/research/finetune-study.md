@@ -4,7 +4,7 @@ Status: running (22 October 2026). Literature check: [literature-finetune-2026-1
 
 ## Claim under test
 
-Staying inside a character's belief state is a trainable, verifiable skill. A small model distilled only on replies that a simulation-derived verifier accepts *and* that perform the requested speech act should improve on held-out seeds. The open question is whether it also improves on held-out rumor **mechanisms** (story types never seen in training). A gain on unseen seeds alone would show memorised content, not a transferable skill. A null result on mechanisms is plausible and worth reporting.
+Staying inside a character's belief state is a trainable, verifiable skill. A small model distilled only on replies that a simulation-derived verifier accepts *and* that perform the requested speech act should improve on held-out seeds. The open question is whether it also improves on held-out rumor **mechanisms** (story types never seen in training). A gain on unseen seeds alone would not distinguish content-specific learning from transfer. A null result on mechanisms is plausible and worth reporting.
 
 ## Why the speech-act gate matters
 
@@ -50,26 +50,31 @@ All reported numbers use the fixed scenarios and are re-scored with one verifier
 - Direct and indirect injection: no explicit refusals (0% on the refusal proxy). The oracle still found 95 to 100% epistemic faithfulness, so the attacks rarely made it claim things, but it did not push back either.
 - Citation hallucination: under the `cite` strategy, Llama-3.2-1B invents fact ids that look plausible ("wren-practices-for-fair" next to the real "wren-practises-for-fair"). The protocol gate catches these.
 
-## Screening results (22 October 2026, one training seed, before the Phase 0 measurement fixes)
+## Screening results (reconciled under the locked Phase 0 scorer)
 
-Held-out evaluation, 220 probes per row, grounded prompt unless noted. "Both" means epistemically faithful and performing the gold speech act (surface proxy). Three epochs; validation loss was lowest near two, so these adapters are slightly overtrained. Treat as screening, not results.
+Exploratory, one training seed, three epochs, historical training/validation leakage and inspected test families. These rows cannot support a confirmatory claim. “Success” is acceptance plus substantive gold-act completion (Q); faithfulness (F) and Q use all non-skipped tasks, including errors. The old “Both” column used a different proxy. Checkpoints and historical selection were not rerun.
 
-| Model | Held-out seeds: faithful | Both | Held-out stories: faithful | Both |
-|---|---:|---:|---:|---:|
-| Qwen3-0.6B base | 77.7% | 30.9% | 70.9% | 27.3% |
-| Qwen3-0.6B base, best-of-4 | 93.2% | 42.7% | 87.7% | 35.9% |
-| Qwen3-0.6B, unfiltered SFT | 87.3% | 39.1% | 38.2% | 16.8% |
-| Qwen3-0.6B, verifier-only SFT | 95.9% | 42.7% | 73.2% | 34.5% |
-| **Qwen3-0.6B, verifier + act SFT** | 94.1% | **69.5%** | 53.6% | 37.3% |
-| Llama-3.2-1B base | 87.7% | 45.5% | 67.3% | 38.2% |
-| Llama-3.2-1B, verifier + act SFT | 91.8% | 58.6% | 59.5% | 40.0% |
-| Llama-3.2-3B base | 85.0% | 39.5% | 71.4% | 25.9% |
-| Llama-3.2-3B base, best-of-4 | 96.4% | 30.9% | 93.2% | 29.5% |
-| Llama-3.2-3B, verifier + act SFT | 94.1% | 57.7% | 55.5% | 35.0% |
+Scorer SHA-256: 9a57ceaa563cb5bfc3c79288b34442aab6fdacf48290e884ac5f491bd671f708. Raw count/provenance artifact: bench/slm/data/confirmation-screening-37/provenance.json.
 
-What it suggests, pending confirmation:
+| Model/run | Strategy | Seeds: faithful | Seeds: success | Stories: faithful | Stories: success |
+|---|---|---:|---:|---:|---:|
+| llama1b-act | grounded | 91.8% (202/220) | 52.7% (116/220) | 59.5% (131/220) | 35.0% (77/220) |
+| llama1b-base | best-of-4 | 99.1% (218/220) | 35.9% (79/220) | 87.7% (193/220) | 45.5% (100/220) |
+| llama1b-base | grounded | 87.7% (193/220) | 44.1% (97/220) | 67.3% (148/220) | 36.4% (80/220) |
+| llama3b-act | grounded | 94.1% (207/220) | 51.8% (114/220) | 55.5% (122/220) | 33.2% (73/220) |
+| llama3b-base | best-of-4 | 96.4% (212/220) | 27.7% (61/220) | 93.2% (205/220) | 26.8% (59/220) |
+| llama3b-base | grounded | 85.0% (187/220) | 35.0% (77/220) | 71.4% (157/220) | 25.9% (57/220) |
+| qwen06b-act | grounded | 94.1% (207/220) | 63.6% (140/220) | 53.6% (118/220) | 32.7% (72/220) |
+| qwen06b-base | best-of-4 | 93.2% (205/220) | 40.9% (90/220) | 87.7% (193/220) | 34.5% (76/220) |
+| qwen06b-base | grounded | 77.7% (171/220) | 29.5% (65/220) | 70.9% (156/220) | 26.4% (58/220) |
+| qwen06b-unfiltered | grounded | 87.3% (192/220) | 38.6% (85/220) | 38.2% (84/220) | 14.1% (31/220) |
+| qwen06b-verifier | grounded | 95.9% (211/220) | 41.8% (92/220) | 73.2% (161/220) | 30.0% (66/220) |
 
-1. **The speech-act gate is the ingredient.** On held-out seeds the act-filtered 0.6B model more than doubles useful, faithful answers (30.9% to 69.5%) and beats the untuned 3B model; verifier-only and unfiltered data do not come close.
-2. **Selection buys faithfulness with silence** on a second model: best-of-4 raised the 3B model's faithfulness to 96.4% while useful answers fell from 47.3% to 31.8%.
-3. **Helpfulness transfers; the knowledge boundary only partly does.** On the two held-out story families, act-tuned models answered more usefully but invented more: faithfulness fell 8–17 points below their bases. Verifier-only training kept faithfulness (73.2%) and, on those stories, trailed the act arm by only 2.8 points of useful-and-faithful answers (34.5% against 37.3%). A 2.8-point gain bought with a 19.6-point loss of faithfulness is not a deployment case for the act arm on its own. The models learnt to answer more than they learnt when not to.
-4. **Next:** mix verifier-only and act targets, add preference pairs that penalise confident invention, train two epochs with whole-seed validation, three seeds, and re-score under the Phase 0 metrics with fresh confirmation data. Keep the runtime guard in the loop for any deployment.
+The table is generated from stored outputs by `bench/slm/finetune/reconcile-screening.ts`; interpretation must follow those counts. The historical base grounded condition used temperature 0 and best-of-4 used 0.7, so that contrast confounds selection with decoding. Confirmation uses fresh roots, withheld wording, matched data and updates, root-disjoint validation, two epochs, validation-selected checkpoints and three seeds on the 3B comparison. Human audit and power/margin freezing remain required. No historical row is silently replaced by new inference.
+
+What the reconciled rows suggest, pending confirmation:
+
+1. **The speech-act gate drives the gain on new worlds.** Held-out-seed success: Qwen3-0.6B 29.5% base, 38.6% unfiltered, 41.8% verifier-only, 63.6% act-filtered; Llama-3.2-1B 44.1% to 52.7%; Llama-3.2-3B 35.0% to 51.8%. The tuned 0.6B model beats both untuned Llamas on this split.
+2. **On unseen stories the gain shrinks and faithfulness erodes.** Story success for the act arm against base: Qwen +6.3 points, 3B +7.3, 1B −1.4; story faithfulness falls 8 to 17 points for every act-tuned model. Verifier-only training keeps faithfulness (73.2%) and trails the act arm on story success by 2.7 points. The models learnt to answer more than they learnt when not to.
+3. **First-pass best-of-4 is the strongest condition on unseen stories in this screen:** the highest story faithfulness for every base (87.7%, 87.7%, 93.2%) and, for Llama-3.2-1B, the highest story success of anything tested (45.5%), while lowering seed success for 1B and 3B. It ran at temperature 0.7 against greedy grounded decoding, so selection and temperature are confounded; the same-temperature control in the confirmation round decides.
+4. **Next:** the confirmation round (mixture sweep, same-temperature selection controls, fresh roots and wording, three seeds on 3B) and the neural track (is erosion a readout or a representation change, and can a frozen-weight steering direction repair it).

@@ -18,6 +18,9 @@ test('real simulation export is repeatable, witnessed, and separates held-out se
       expect(s.facts.every(f => !held.has(f.id))).toBe(true);
       expect(JSON.stringify([s.facts, s.unknownWorldFacts, s.others])).not.toMatch(/Mira paid Pim|Mira owes Pim|Rosa has been nursing Ada|Rosa sneaks off every afternoon/);
     } else expect(s.facts.every(f => held.has(f.id))).toBe(true);
+    expect(s.worldFacts!.some(f => f.trueInWorld)).toBe(true);
+    expect(s.worldFacts!.some(f => !f.trueInWorld)).toBe(true);
+    expect(s.worldFacts!.every(f => held.has(f.id) === (s.split === 'test-mechanism'))).toBe(true);
     const ids = s.facts.map(f => f.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(s.facts.every(f => !s.unknownWorldFacts.includes(f.text))).toBe(true);

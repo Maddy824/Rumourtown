@@ -1,0 +1,162 @@
+[
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-seed",
+    "kind": "all",
+    "correct": 0,
+    "total": 100,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-seed",
+    "kind": "knowledge",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-seed",
+    "kind": "source",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-seed",
+    "kind": "confidence",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-seed",
+    "kind": "correction",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-mechanism",
+    "kind": "all",
+    "correct": 0,
+    "total": 100,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-mechanism",
+    "kind": "knowledge",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-mechanism",
+    "kind": "source",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-mechanism",
+    "kind": "confidence",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/abstain",
+    "split": "test-mechanism",
+    "kind": "correction",
+    "correct": 0,
+    "total": 25,
+    "bothRight": 0
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-seed",
+    "kind": "all",
+    "correct": 70,
+    "total": 100,
+    "bothRight": 0.7
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-seed",
+    "kind": "knowledge",
+    "correct": 21,
+    "total": 25,
+    "bothRight": 0.84
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-seed",
+    "kind": "source",
+    "correct": 17,
+    "total": 25,
+    "bothRight": 0.68
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-seed",
+    "kind": "confidence",
+    "correct": 16,
+    "total": 25,
+    "bothRight": 0.64
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-seed",
+    "kind": "correction",
+    "correct": 16,
+    "total": 25,
+    "bothRight": 0.64
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-mechanism",
+    "kind": "all",
+    "correct": 100,
+    "total": 100,
+    "bothRight": 1
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-mechanism",
+    "kind": "knowledge",
+    "correct": 25,
+    "total": 25,
+    "bothRight": 1
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-mechanism",
+    "kind": "source",
+    "correct": 25,
+    "total": 25,
+    "bothRight": 1
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-mechanism",
+    "kind": "confidence",
+    "correct": 25,
+    "total": 25,
+    "bothRight": 1
+  },
+  {
+    "condition": "mock:phase0/template",
+    "split": "test-mechanism",
+    "kind": "correction",
+    "correct": 25,
+    "total": 25,
+    "bothRight": 1
+  }
+]

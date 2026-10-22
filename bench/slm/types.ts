@@ -9,12 +9,14 @@ export interface Scenario {
   id: string;
   seed: number;
   tick: number;
-  split: 'train' | 'test-seed' | 'test-mechanism';
+  split: 'train' | 'test-seed' | 'test-mechanism' | 'confirm' | 'wording';
   mechanisms: string[];
   villager: string;
   persona: { name: string; voice: string; role: string };
   facts: FactRef[];
   unknownWorldFacts: string[];
+  // Oracle-only catalogue, including false claims unknown to this speaker.
+  worldFacts?: import('./verifier.ts').WorldFact[];
   // Other ledgers are distractors, never the speaker's knowledge.
   others: { speaker: string; text: string }[];
   castNames: string[];
@@ -24,6 +26,8 @@ export interface Turn { role: 'user' | 'assistant'; content: string }
 export interface Probe {
   id: string;
   scenarioId: string;
+  split?: Scenario['split'];
+  wording?: boolean;
   axis: Axis;
   level: string | number;
   templateId: string;
@@ -39,4 +43,11 @@ export interface Probe {
 }
 export function factsFor(scenario: Scenario, probe: Probe): FactRef[] {
   return probe.facts ?? scenario.facts;
+}
+
+/** Oracle context must never be included in generator prompts. */
+export function oracleOptions(s: Scenario, p: Probe) {
+  return { speaker: s.persona.name, sourceRequired: /\b(who told|where did you hear|trace your source|did you see)\b/i.test(p.utterance),
+    sourceFactId: factsFor(s, p).find(f => p.utterance.toLowerCase().includes(f.text.toLowerCase()))?.id,
+    worldFacts: s.worldFacts ?? [...s.facts, ...s.unknownWorldFacts.map((text, i) => ({ id: `unknown-world-${i}`, text, trueInWorld: true }))] };
 }

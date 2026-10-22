@@ -59,7 +59,7 @@ function validateKey(key: KeyFile): void {
     if (typeof item.id !== 'string' || ids.has(item.id) || typeof item.model !== 'string' || typeof item.axis !== 'string' ||
       !Array.isArray(item.sentences) || !item.sentences.every(t => typeof t === 'string') || !Array.isArray(item.oracle?.sentences) ||
       item.oracle.sentences.length !== item.sentences.length || item.oracle.sentences.some((s, i) => s.text !== item.sentences[i] || !LABELS.includes(s.label)) ||
-      item.oracleReply !== replyLabel(item.oracle.sentences.map(s => s.label)) || typeof item.oracle.calibrated !== 'boolean' ||
+      item.oracleReply !== replyLabel(item.oracle.sentences.map(s => s.label)) || !(item.oracle.calibrated === null || typeof item.oracle.calibrated === 'boolean') ||
       !(item.behaviourMatched === null || typeof item.behaviourMatched === 'boolean')) throw new Error(`Invalid or duplicate key item: ${item.id}`);
     ids.add(item.id);
   }
@@ -107,7 +107,7 @@ export function report(key: KeyFile, files: LabelFile[]): string {
     replies.push({ id: item.id, item, oracle: item.oracleReply, ratings: answers.map(a =>
       a && a.sentences.every(s => s.label !== null) ? replyLabel(a.sentences.map(s => s.label!)) : null) });
     acts.push({ id: item.id, item, oracle: item.behaviourMatched === null ? null : item.behaviourMatched ? 'yes' : 'no', ratings: answers.map(a => a?.doesAsked ?? null) });
-    confidence.push({ id: item.id, item, oracle: item.oracle.calibrated ? 'yes' : 'no', ratings: answers.map(a => a?.confidence ?? null) });
+    confidence.push({ id: item.id, item, oracle: item.oracle.calibrated === null ? 'not applicable' : item.oracle.calibrated ? 'yes' : 'no', ratings: answers.map(a => a?.confidence ?? null) });
   }
   const dimensions: Dimension[] = [
     { name: 'Sentence labels', labels: LABELS, units: sentences },
@@ -121,7 +121,7 @@ export function report(key: KeyFile, files: LabelFile[]): string {
     'The human reference is a strict majority of at least two available ratings, computed independently per unit and question. With two annotators, only agreement is adjudicated. Ties and fewer than two votes are excluded from oracle scoring and listed for human adjudication. There is no automatic tie-break or oracle vote. Scores on resolved units may be optimistic if disputed units are harder; resolve the queue before treating this as a complete audit.', '',
     'Reply verdicts are derived per annotator only when all sentence labels are present: out-of-character takes priority over unfaithful (contradicts or unknown), otherwise faithful. Empty replies have no sentence units; their reply verdict is faithful by this narrow definition. Task completion catches empty or evasive answers.', '',
     'All precision, recall, F1 and matrices are unweighted counts on this stratified audit sample, not estimates of deployment prevalence. Rare oracle verdicts were deliberately oversampled. Report sampling fractions and adjudication coverage alongside the metrics; do not generalise pooled scores to all replies.', '',
-    'Task completion scores compare the stored surface proxy to human yes versus partly/no. Confidence scores omit human not applicable; the oracle has no corresponding category. Reliability retains all categories. World truth is deliberately not judged by these blinded labels.', '',
+    'Task completion scores compare the stored surface proxy to human yes versus partly/no. Confidence scores omit human not applicable; no-claim oracle replies are also not applicable. Reliability retains all categories. World truth is deliberately not judged by these blinded labels.', '',
     '## Sampling coverage', '',
     ...table(['Model','Axis','Oracle stratum','Population','Sampled'], key.strata.map(s => [s.model,s.axis,s.verdict,String(s.population),String(s.sampled)])),
     '## Inter-annotator agreement', '',
@@ -155,7 +155,7 @@ export function report(key: KeyFile, files: LabelFile[]): string {
       const pairs = resolved.filter(u => u.oracle !== null && (dimension.name !== 'Confidence' || u.human !== 'not applicable')).map(u => ({
         human: dimension.name === 'Does what was asked' && u.human === 'partly' ? 'no' : u.human!, oracle: u.oracle!,
       }));
-      const categories = dimension.name === 'Confidence' || dimension.name === 'Does what was asked' ? ['yes','no'] : dimension.labels;
+      const categories = dimension.name === 'Does what was asked' ? ['yes','no'] : dimension.labels;
       const a = agreement(units.map(u => u.ratings));
       lines.push(`**${dimension.name}.** ${units.length} units; ${resolved.length} majority-resolved; ${units.length - resolved.length} unresolved; ${pairs.length} oracle-scored. ${statistic}: ${decimal(a.value)}.`, '',
         ...table(['Label','Precision','Recall','F1','TP','FP','FN','Human support'],categories.map(label => {
