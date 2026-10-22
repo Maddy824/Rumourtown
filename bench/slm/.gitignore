@@ -3,3 +3,5 @@
 /results/
 /data/finetune*/
 /data/pairs*.jsonl
+
+/data/confirmation*/

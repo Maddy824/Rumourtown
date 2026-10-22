@@ -21,12 +21,16 @@ export interface RunOptions {
   directory: string;
   resume?: boolean;
   split: 'all' | Scenario['split'];
-  bestOf: 2 | 4 | 8;
+  bestOf: 1 | 2 | 4 | 8;
+  temperature?: number;
+  maxTokens?: number;
+  rootBalanced?: boolean;
   cascadeModel: string;
   quantisations: Record<string, string>;
 }
 export interface Row {
   key: string;
+  seed?: number;
   model: string;
   actualModel: string;
   strategy: Strategy;
@@ -218,9 +222,9 @@ export async function runBenchmark(options: RunOptions): Promise<Row[]> {
   try {
     const manifestPath = join(options.directory, 'manifest.json');
     const outputPath = join(options.directory, 'outputs.jsonl');
-    const sources = await sourceHashes(['run.ts', 'strategies.ts', 'providers.ts', 'types.ts', 'io.ts', 'probes.ts', 'verifier.ts']);
+    const sources = await sourceHashes(['run.ts', 'strategies.ts', 'providers.ts', 'types.ts', 'io.ts', 'probes.ts', 'verifier.ts', 'baselines.ts']);
     const settings = { models: options.models, strategies: options.strategies, axes: options.axes,
-      limit: options.limit, split: options.split, bestOf: options.bestOf, cascadeModel: options.cascadeModel,
+      limit: options.limit, split: options.split, bestOf: options.bestOf, temperature: options.temperature ?? null, maxTokens: options.maxTokens ?? 192, rootBalanced: options.rootBalanced ?? false, cascadeModel: options.cascadeModel,
       quantisations: options.quantisations, sources,
       scenarios: await fileHash(options.scenariosPath), probes: await fileHash(options.probesPath) };
     const fingerprint = hash(settings);
@@ -246,13 +250,13 @@ export async function runBenchmark(options: RunOptions): Promise<Row[]> {
     for await (const scenario of readJsonl<Scenario>(options.scenariosPath)) scenarios.set(scenario.id, scenario);
     // Round-robin axes and splits: a small default run must actually include
     // held-out seeds, rather than taking only the first training records.
-    const splits = options.split === 'all' ? ['train', 'test-seed', 'test-mechanism'] as const : [options.split];
+    const splits = options.split === 'all' ? ['train', 'test-seed', 'test-mechanism', 'confirm', 'wording'] as const : [options.split];
     const candidates = new Map(options.axes.flatMap(axis => splits.map(split => [`${axis}:${split}`, [] as Probe[]] as const)));
     for await (const p of readJsonl<Probe>(options.probesPath)) {
       const s = scenarios.get(p.scenarioId);
       if (!s) throw new Error(`Missing scenario for probe ${p.id}`);
-      const bucket = candidates.get(`${p.axis}:${s.split}`);
-      if (bucket && bucket.length < options.limit) bucket.push(p);
+      const bucket = candidates.get(`${p.axis}:${p.split ?? s.split}`);
+      if (bucket && (options.rootBalanced || bucket.length < options.limit)) bucket.push(p);
     }
     const selected: Probe[] = [];
     for (let i = 0; selected.length < options.limit; i++) {
@@ -264,6 +268,28 @@ export async function runBenchmark(options: RunOptions): Promise<Row[]> {
       if (!added) break;
     }
     if (!selected.length) throw new Error('No probes match the selected axes and split');
+    if (options.rootBalanced) {
+      // Methods §7 environment unit: allocate the fixed probe budget across all roots.
+      const byRoot = new Map<number, Probe[]>();
+      for (let round = 0; ; round++) {
+        let added = false;
+        for (const split of splits) for (const axis of options.axes) {
+          const p = candidates.get(`${axis}:${split}`)?.[round];
+          if (p) { const root = scenarios.get(p.scenarioId)!.seed; byRoot.set(root, [...(byRoot.get(root) ?? []), p]); added = true; }
+        }
+        if (!added) break;
+      }
+      if (options.limit < byRoot.size) throw new Error('Root-balanced limit must cover every root');
+      selected.length = 0;
+      for (let round = 0; selected.length < options.limit; round++) {
+        let added = false;
+        for (const root of [...byRoot.keys()].sort((a, b) => a - b)) {
+          const p = byRoot.get(root)![round];
+          if (p && selected.length < options.limit) { selected.push(p); added = true; }
+        }
+        if (!added) break;
+      }
+    }
     const jobs = selected.flatMap(p => options.models.flatMap(model => options.strategies.map(strategy => ({ p, model, strategy }))));
     let cursor = 0;
     const work = async (): Promise<void> => {
@@ -274,11 +300,11 @@ export async function runBenchmark(options: RunOptions): Promise<Row[]> {
         const s = scenarios.get(p.scenarioId)!;
         const actualModel = p.quantisation ? options.quantisations[`${model}:${p.quantisation}`] : model;
         const row: Row = { key, model, actualModel: actualModel ?? model, strategy, probeId: p.id, scenarioId: s.id,
-          split: s.split, axis: p.axis, level: p.level, actualSize: p.actualSize, gold: p.gold, status: 'ok' };
+          seed: s.seed, split: p.split ?? s.split, axis: p.axis, level: p.level, actualSize: p.actualSize, gold: p.gold, status: 'ok' };
         if (!actualModel) { row.status = 'skipped'; row.reason = 'No explicit tag for this model and quantisation'; }
         else try {
           row.result = await execute(strategy, s, p, { ...providerFor(actualModel),
-            bestOf: options.bestOf, cascade: strategy === 'cascade' ? providerFor(options.cascadeModel) : undefined });
+            bestOf: options.bestOf, temperature: options.temperature, maxTokens: options.maxTokens, cascade: strategy === 'cascade' ? providerFor(options.cascadeModel) : undefined });
           row.behaviourMatched = surfaceBehaviour(p, row.result);
           row.behaviourMatchedLegacy = surfaceBehaviourLegacy(p, row.result);
           if (p.gold.injectionMarker) row.injectionSuccess = row.result.reply.includes(p.gold.injectionMarker) || !row.result.verdict.epistemicFaithful;
@@ -300,7 +326,7 @@ export async function runBenchmark(options: RunOptions): Promise<Row[]> {
 
 export function parseArgs(args: string[]): RunOptions {
   const flags = new Map<string, string>();
-  const allowed = new Set(['models', 'strategies', 'axes', 'limit', 'concurrency', 'scenarios', 'probes', 'out', 'resume', 'split', 'best-of', 'cascade-model', 'quantisations']);
+  const allowed = new Set(['models', 'strategies', 'axes', 'limit', 'concurrency', 'scenarios', 'probes', 'out', 'resume', 'split', 'best-of', 'temperature', 'max-tokens', 'root-balanced', 'cascade-model', 'quantisations']);
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i]?.replace(/^--/, ''), value = args[i + 1];
     if (!args[i]?.startsWith('--') || !key || !allowed.has(key) || !value || value.startsWith('--') || flags.has(key)) throw new Error('Invalid or duplicate CLI option');
@@ -312,12 +338,16 @@ export function parseArgs(args: string[]): RunOptions {
   const axes = list('axes', AXES.join(',')) as Axis[];
   const limit = Number(flags.get('limit') ?? 200), concurrency = Number(flags.get('concurrency') ?? 2);
   const bestOf = Number(flags.get('best-of') ?? 4) as RunOptions['bestOf'];
+  const temperature = flags.has('temperature') ? Number(flags.get('temperature')) : undefined;
+  if (flags.has('root-balanced') && !['true', 'false'].includes(flags.get('root-balanced')!)) throw new Error('root-balanced must be true or false');
+  const rootBalanced = flags.get('root-balanced') === 'true';
+  const maxTokens = Number(flags.get('max-tokens') ?? 192);
   const split = (flags.get('split') ?? 'all') as RunOptions['split'];
   if (!models.length || new Set(models).size !== models.length || !strategies.length || !axes.length ||
     strategies.some(s => !STRATEGIES.includes(s)) || axes.some(a => !AXES.includes(a)) ||
     new Set(strategies).size !== strategies.length || new Set(axes).size !== axes.length ||
     !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(concurrency) || concurrency < 1 ||
-    ![2, 4, 8].includes(bestOf) || !['all', 'train', 'test-seed', 'test-mechanism'].includes(split)) throw new Error('Invalid model, strategy, axis, split or numeric option');
+    ![1, 2, 4, 8].includes(bestOf) || (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0)) || !Number.isSafeInteger(maxTokens) || maxTokens < 1 || !['all', 'train', 'test-seed', 'test-mechanism', 'confirm', 'wording'].includes(split)) throw new Error('Invalid model, strategy, axis, split or numeric option');
   const quantisations: Record<string, string> = {};
   for (const pair of list('quantisations', '')) {
     const at = pair.indexOf('=');
@@ -325,7 +355,7 @@ export function parseArgs(args: string[]): RunOptions {
     quantisations[pair.slice(0, at)] = pair.slice(at + 1);
   }
   if (flags.has('out') && flags.has('resume')) throw new Error('Choose --out or --resume');
-  return { models, strategies, axes, limit, concurrency, bestOf, split, quantisations,
+  return { models, strategies, axes, limit, concurrency, bestOf, temperature, maxTokens, rootBalanced, split, quantisations,
     cascadeModel: flags.get('cascade-model') ?? 'cf:@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     scenariosPath: resolve(flags.get('scenarios') ?? join(DATA, 'scenarios.jsonl')),
     probesPath: resolve(flags.get('probes') ?? join(DATA, 'probes.jsonl')),

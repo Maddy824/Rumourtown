@@ -42,7 +42,7 @@ export function directSources(chain: readonly string[], name: string): string[] 
   return [...byTeller.values()].slice(-3);
 }
 
-export async function generateScenarios(options: { seeds?: number[]; ticks?: number[] } = {}): Promise<Scenario[]> {
+export async function generateScenarios(options: { seeds?: number[]; ticks?: number[]; split?: 'confirm' } = {}): Promise<Scenario[]> {
   const { cast, claims, villageMap, createSimulation, createWorld, createMover, createTalk } = await loadSimulation();
   const seeds = options.seeds ?? Array.from({ length: 200 }, (_, i) => i + 1);
   const ticks = options.ticks ?? [0, 180, 420];
@@ -54,7 +54,7 @@ export async function generateScenarios(options: { seeds?: number[]; ticks?: num
   const trueIds = new Set(claims.filter(c => cast.some(d => d.id === c.about &&
     d.secrets.some(secret => secret.confirms.includes(c.kind)))).map(c => c.id));
   for (const seed of seeds) {
-    if (!Number.isInteger(seed) || seed < 1 || seed > 200) throw new Error('Seeds must be in 1–200');
+    if (!Number.isInteger(seed) || seed < 1 || (options.split === 'confirm' ? seed <= 200 : seed > 200)) throw new Error('Use seeds 1–200 for the original design, seeds above 200 for confirm');
     const sim = createSimulation({ seed, cast, claims,
       world: { ...createWorld(villageMap), createMover }, talk: createTalk(cast), days: 1,
       interventions: [
@@ -77,7 +77,7 @@ export async function generateScenarios(options: { seeds?: number[]; ticks?: num
       const base = { seed, tick, villager: person.id,
         persona: { name: person.name, voice: person.voice, role: person.role }, castNames: cast.map(d => d.name),
         witnessEvents: sim.events(0).filter(e => e.kind === 'witness').length };
-      const split = seed <= 150 ? 'train' as const : 'test-seed' as const;
+      const split = options.split ?? (seed <= 150 ? 'train' as const : 'test-seed' as const);
       rows.push({ ...base, id: `s${seed}-t${tick}-${person.id}-${split}`, split, mechanisms: ['general'],
         facts: facts.filter(f => !heldIds.has(f.id)),
         unknownWorldFacts: unknown.filter(c => !heldIds.has(c.id)).map(c => c.text),
@@ -90,13 +90,21 @@ export async function generateScenarios(options: { seeds?: number[]; ticks?: num
         worldFacts: claims.filter(c => heldIds.has(c.id)).map(c => ({ id: c.id, text: c.text, trueInWorld: trueIds.has(c.id) })),
         others: others.filter(o => claims.some(c => heldIds.has(c.id) && c.text === o.text)) });
     }
-    if (seed % 25 === 0) console.error(`Exported seed ${seed}/200`);
+    if (seed % 25 === 0) console.error(`Exported seed ${seed} (${seeds[0]}–${seeds.at(-1)})`);
   }
   return rows;
 }
 
 if (isMain(import.meta.url)) {
-  const rows = await generateScenarios();
-  await writeJsonl(join(DATA, 'scenarios.jsonl'), rows);
+  const args = process.argv.slice(2);
+  const flag = (name: string) => { const i = args.indexOf('--' + name); return i < 0 ? undefined : args[i + 1]; };
+  if (args.some((a, i) => i % 2 === 0 && !['--seeds', '--split', '--out'].includes(a))) throw new Error('Unknown scenario flag');
+  const range = flag('seeds')?.match(/^(\d+)-(\d+)$/);
+  if (flag('seeds') && !range) throw new Error('Use --seeds first-last');
+  if (flag('split') && flag('split') !== 'confirm') throw new Error('Only --split confirm is supported');
+  const seeds = range ? Array.from({ length: Number(range[2]) - Number(range[1]) + 1 }, (_, i) => Number(range[1]) + i) : undefined;
+  if (seeds && !seeds.length) throw new Error('Empty seed range');
+  const rows = await generateScenarios({ seeds, split: flag('split') as 'confirm' | undefined });
+  await writeJsonl(flag('out') ?? join(DATA, 'scenarios.jsonl'), rows);
   console.log(`Wrote ${rows.length} real simulation scenarios`);
 }

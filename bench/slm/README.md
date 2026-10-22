@@ -116,3 +116,46 @@ Pair scores are grouped by model, strategy, held-out split and intervention. Sup
 Re-score stored outputs with `rescore.ts` before comparing old runs. It recomputes the research verdict, protocol-aware acceptance and both act proxies and uses exactly the same summary function as new runs. The report fingerprint covers the research/runtime verifier and scoring/gating/context code. Re-scoring does not redo best-of/cascade selection or training and does not change historical dataset bytes.
 
 For custom datasets, use `rescore.ts <run-dir> --scenarios <original-scenarios.jsonl> --probes <original-probes.jsonl>`. When a run manifest supplies dataset hashes they must match, or rescoring stops before writing that run's outputs. Original unmanifested historical runs remain readable but cannot establish dataset identity from a manifest.
+
+## Confirmation round (task 37)
+
+Preparation and analysis are CPU-only. Keep the current GPU benchmark running; launch training only after it finishes. All confirmation artifacts default to a new local `bench/slm/data/confirmation-37/` directory, outside the shared `data/finetune` and `results` symlinks. The prepared datasets and launch settings are fingerprinted; changed inputs require a new directory name. No new packages are needed.
+
+```sh
+# Read existing teacher samples, score them, and create fresh roots 201–260.
+bench/slm/finetune/run-confirmation.sh --prepare-only --out bench/slm/data/confirmation-37-ready
+bench/slm/finetune/run-confirmation.sh --check --out bench/slm/data/confirmation-37-ready
+
+# GPU: run only when the current benchmark has finished. Repeat this exact command to resume.
+bench/slm/finetune/run-confirmation.sh --launch --out bench/slm/data/confirmation-37-ready
+```
+
+`--prepare-only` filters the stored 12,800 teacher replies and uses the existing train roots. `make-data.ts filter` also accepts `--input <samples.jsonl>`, `--scenarios`, `--probes`, `--out`, `--seed`, `--match act` (or comma-separated set names/paths), `--balance`, `--batch-multiple 4`, `--boundary-quota 20` and `--rare-state-floor 50`. Matching intersects prompt IDs across emitted families and the reference, separately within train/validation; each has one target per prompt before balancing. The residual families are `mix-0`, `mix-0.5`, `mix-1`, with weights from methods Eq. (4). The endpoints reproduce `act` and `verifier` byte for byte, respectively. A seeded draw is made for each accepted non-completing candidate at 0.5; first-passing selection otherwise stays unchanged.
+
+The installed mlx-lm 0.32 chat loader has no per-example loss-weight input. `--balance` therefore resamples training examples with replacement to a uniform represented-act mix, using a fixed seed; `weight` records τ/ρ for audit and is not consumed as an mlx loss weight. Validation is never resampled. The same prompt indices are used across matched arms. The confirmation preparation rounds the ordinary training count down to a multiple of four before adding the common supplements. Every arm receives the same 20 passing ledger boundary pairs (40 targets, training roots only), plus 50 distinct name-source states and 50 distinct refusal states from deterministic templates. These are separately recorded controlled supplements, not teacher successes. `stats.json` records pre-match survival by act/state, final counts by act/state, distinct-state support before and after supplements, boundary count/kind, balancing, and rejected teacher output tokens. Historical samples lack token counts: those entries explicitly use `ceil(characters/4)` estimates; supplied `outputTokens` are used when present.
+
+The driver screens all four arms (`verifier-only`, `act`, `mix-0.5`, `unfiltered-control`) on Qwen3-0.6B with seed 7. It selects act (μ=0) or μ=0.5 on root-disjoint validation by highest act-macro Q subject to a raw F loss of at most 0.02 and a lexical opportunity-leakage increase of at most 0.01 against the base. If neither clears those guards it records the negative screen and stops. The selected comparison, verifier-only, and the unfiltered diagnostic then train on Llama-3.2-3B with seeds 7, 17, 27. Both epoch checkpoints are evaluated before any confirmation replies are inspected; each run records its guarded validation choice (and a guard-failure flag if both fail). The checkpoints used for evaluation are explicit `epoch-*/fused` paths. The historical `train.sh` positional arguments still work, with an optional positional epoch count and new `--seed`, `--data-root`, `--out-root` options. The default epoch count is now two. Standalone training retains its final `fused` path for the old study script.
+
+Every evaluated checkpoint and base runs first-pass best-of-1 and best-of-4 at temperature 0.7 and a 192-token cap on `confirm`, `test-mechanism`, and `wording`. `run.ts --temperature <t>` also applies to grounded decoding; without it, historical defaults remain grounded 0 / best-of 0.7. All candidates, their acceptance/rejection and the selected result remain in raw rows; an exhausted best-of has a rejected final attempt. The manifest records temperature, cap, best-of budget and root-balanced sampling. Confirmation defaults to 1,980 probes per split, distributed across all 60 roots; `--limit` changes that frozen budget. The driver runs a private MLX server on port 8766, checks the port is free, and terminates only its own child. It never uses `pkill` or skips missing arms. Interrupted training restarts that run deterministically; completed training and append-only evaluation resume with verified settings. Dead driver locks are recovered; a live writer blocks another launch.
+
+Fresh standalone exports are also supported:
+
+```sh
+node --experimental-strip-types bench/slm/scenarios.ts --seeds 201-260 --split confirm --out /tmp/confirmation-scenarios.jsonl
+node --experimental-strip-types bench/slm/probes.ts --scenarios /tmp/confirmation-scenarios.jsonl --wording --out /tmp/wording-probes.jsonl
+node --experimental-strip-types bench/slm/pairs.ts export bench/slm/data/scenarios.jsonl /tmp/training-pairs.jsonl 20 37 --train
+node --experimental-strip-types bench/slm/pairs.ts export bench/slm/data/scenarios.jsonl /tmp/null-pairs.jsonl 100 37 --nulls
+```
+
+The two `WITHHELD` templates per axis are separate from the original four templates and from teacher/selection/few-shot generation. Wording probes carry `split: wording` and `wording: true`; training rejects that tag/template family. Fresh general and wording contexts retain the original debt/nursing exclusions; those stories occur only on the separately labelled story split. Each exported changed pair has a matched formatting null in every family, fixed semantic gold projections `(proposition, polarity, confidence, source, act)`, and separate IDs. Evaluation uses the same request seed on paired sides to couple decoding. The training quota is frozen separately and contains no evaluation roots.
+
+The launch finishes by rescoring its stored replies and writing analysis JSON/Markdown. Analysis can be rerun offline:
+
+```sh
+node --experimental-strip-types bench/slm/analyse.ts bench/slm/data/confirmation-37-ready/llama3b-analysis.json /tmp/confirmation-analysis.md
+node --experimental-strip-types bench/slm/finetune/reconcile-screening.ts --out bench/slm/data/confirmation-screening-new
+```
+
+`analyse.ts` implements the methods §7 pooled paired act-macro contrast, 10,000 seeded crossed root/run bootstrap replicates, common joint split/act-support-stratified root draws for retention, run means, centred one-sided margin tests, Holm over the four primary hypotheses, conservative Bonferroni simultaneous lower bounds, and exact McNemar on one outcome-independent lexicographic probe/root in the first run. Runs are resampled independently across arms unless the exported bootstrap API is explicitly given `pairedRuns: true` for matched randomisations. Pair reports include both-sides success, Fréchet bounds, semantic change sensitivity, null invariance, their balanced mean and directed correctness. Add independently audited `auditedProjection` objects to pair rows for semantic metrics; without those labels completed sides are N/A, never compared by raw wording. Missing/error sides remain failures in pair/task denominators. JSON analysis config accepts `inputs`, `pairInputs`, `scenarios`, `probes`, `pairs`, `selected`, `seed`, and `replicates`.
+
+The screening reconciler checks the locked Phase 0 scorer fingerprint and original dataset hashes, reads shared historical raw outputs, writes only a new destination, and regenerates the screening section in `docs/research/finetune-study.md` with numerator/denominator cells. It never redoes historical selection. Independent audit correction, audit-informed margin/budget/power freezing and any subsequent confirmatory claim remain research prerequisites; generated reports label all endpoints as raw proxies. The provisional numerical margins and launch budgets are explicit and frozen, not justified by the inspected screening table.

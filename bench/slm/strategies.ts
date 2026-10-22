@@ -25,9 +25,10 @@ export interface StrategyResult {
 export interface StrategyOptions {
   provider: Provider;
   model: string;
-  bestOf?: 2 | 4 | 8;
-  cascade?: { provider: Provider; model: string };
+  bestOf?: 1 | 2 | 4 | 8;
+  temperature?: number;
   maxTokens?: number;
+  cascade?: { provider: Provider; model: string };
 }
 export const REPLY_SCHEMA = { type: 'object', properties: {
   uses: { type: 'array', items: { type: 'string' } }, reply: { type: 'string' },
@@ -129,14 +130,15 @@ export async function execute(strategy: Strategy, s: Scenario, p: Probe, options
         accepted: protocolValid && passes(verdict) });
     }
   } else if (strategy === 'best-of') {
+    // Methods §4, Eqs. (2)–(3): first pass from an identical base candidate stream.
     const n = options.bestOf ?? 4;
-    if (![2, 4, 8].includes(n)) throw new Error('bestOf must be 2, 4 or 8');
+    if (![1, 2, 4, 8].includes(n)) throw new Error('bestOf must be 1, 2, 4 or 8');
     for (let i = 0; i < n; i++) {
-      const attempt = await make(options.provider, options.model, false, false, .7, i);
+      const attempt = await make(options.provider, options.model, false, false, options.temperature ?? .7, i);
       attempts.push(attempt); if (attempt.accepted) break;
     }
   } else {
-    attempts.push(await make(options.provider, options.model, strategy === 'cite' || strategy === 'grammar', strategy === 'grammar'));
+    attempts.push(await make(options.provider, options.model, strategy === 'cite' || strategy === 'grammar', strategy === 'grammar', options.temperature ?? 0));
     if (strategy === 'cascade' && !attempts[0]!.accepted) {
       if (!options.cascade) throw new Error('Cascade requires a reference provider and model');
       attempts.push(await make(options.cascade.provider, options.cascade.model));

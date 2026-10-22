@@ -9,7 +9,7 @@ export interface Scenario {
   id: string;
   seed: number;
   tick: number;
-  split: 'train' | 'test-seed' | 'test-mechanism';
+  split: 'train' | 'test-seed' | 'test-mechanism' | 'confirm' | 'wording';
   mechanisms: string[];
   villager: string;
   persona: { name: string; voice: string; role: string };
@@ -26,6 +26,8 @@ export interface Turn { role: 'user' | 'assistant'; content: string }
 export interface Probe {
   id: string;
   scenarioId: string;
+  split?: Scenario['split'];
+  wording?: boolean;
   axis: Axis;
   level: string | number;
   templateId: string;
