@@ -7,6 +7,10 @@ Rumourtown separates the world's state from each villager's beliefs. This makes 
 
 A villager can faithfully repeat a lie they believe. Inventing an eyewitness account is a different error. These distinctions concern a synthetic game world; they do not validate the simulation as a model of real people.
 
+## Current plan
+
+[Useful within bounds](research-plan-2026-10.md): the merged research plan of 22 October 2026, covering what to claim and not claim, the measurement fixes that come first, the training and bank-transfer experiments, and the timeline. The fine-tuning study it builds on is [here](finetune-study.md).
+
 ## What is implemented
 
 The [SLM harness](../../bench/slm/README.md) exports real seeded simulation snapshots, separates held-out seeds and story mechanisms, and generates probes across twelve stress axes. It compares persona-only prompting, grounding, citations, planning, verifier-guided sampling, cascades and schema-constrained output. Fixture and smoke tests check the harness without model calls. Generated datasets and run outputs stay out of git.
