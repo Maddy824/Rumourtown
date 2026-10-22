@@ -9,7 +9,8 @@ DATA=bench/slm/data/finetune/$SET
 OUT=bench/slm/results/finetune/$NAME
 mkdir -p $OUT
 N=$(wc -l < $DATA/train.jsonl | tr -d ' ')
-ITERS=$(( (N * EPOCHS + 3) / 4 ))
+EPOCH_ITERS=$(( (N + 3) / 4 ))
+ITERS=$(( EPOCH_ITERS * EPOCHS ))
 LAYERS=$($PY -c "import json,huggingface_hub as h; print(json.load(open(h.snapshot_download('$MODEL', allow_patterns=['config.json'])+'/config.json'))['num_hidden_layers'])")
 cat > $OUT/lora.yaml <<YAML
 model: $MODEL
@@ -23,7 +24,8 @@ learning_rate: 1.0e-4
 steps_per_report: 20
 steps_per_eval: 100
 val_batches: -1
-save_every: 1000
+# One checkpoint per epoch, so an earlier epoch can be evaluated if later ones overfit.
+save_every: $EPOCH_ITERS
 max_seq_length: 4608
 mask_prompt: true
 grad_checkpoint: true
