@@ -1,0 +1,28 @@
+# 39: Build the neural-track harness
+
+Read `agent-tradeoff/CONTINUE.md` section 3 first; every rule binds. Then `docs/research/neural-track.md` (the merged design; section 8 is the build list), `docs/research/methods-formal.md` (metrics), `bench/slm/{types,strategies,run,rescore}.ts`, `bench/slm/finetune/{train.sh,to-peft.py,sample.py}`, and the installed `mlx-lm` 0.32.2 sources under `~/.venvs/rt-mlx/lib/python3.12/site-packages/mlx_lm/` (`models/qwen3.py`, `models/llama.py`, `tuner/utils.py`, `tuner/lora.py`, `generate.py`).
+
+## Goal
+
+A Python package `bench/slm/neural/` (run with `~/.venvs/rt-mlx/bin/python`; the virtual environment already has mlx, mlx-lm and numpy; add nothing else) that implements section 8 of the design, plus the grid runner extension, with tests that run without loading a model. **Do not load or run any model in this task**: the GPU is reserved for a benchmark that must not be disturbed. Model-dependent code is validated later by the controller in step 0 of the plan.
+
+## Build
+
+1. `prompts.py`: read `bench/slm/data/scenarios.jsonl` and `probes.jsonl`, apply the same effective-ledger overrides as `factsFor` and render exactly what `messagesFor` renders (persona, ledger JSON, distractors, revisions, history, utterance), then the chat template suffix through the tokenizer; emit byte offsets and token spans for persona, each ledger entry, the distractor section and each distractor, revisions, history, utterance and suffix. A test renders ten probes and compares the string byte for byte with a fixture produced by a small TypeScript script you add (`bench/slm/neural/fixture.ts`) that calls `messagesFor` on the same probes. Evaluator sidecar (gold, world truth, pair ids, root seed, story family) is written to a separate file.
+2. `states.py`: hooks that capture embeddings, post-block residuals and the final normalised state at the three specified positions, pooled only, written as float16 memmaps with an index; a manifest with model, adapter, tokenizer and config hashes; resumable.
+3. `probes.py` (CPU, numpy): grouped standardisation, $L_2$ logistic regression by gradient descent with nested root-group folds and the $C$ grid, multiclass one-versus-rest, structured permutation nulls, root bootstrap of AUROC, the emergence-layer rule with sensitivity, linear CKA with controls, frozen-scaler transfer scoring (AUROC and log loss). Tests on synthetic data with known separability, known CKA (rotated copies give 1; independent noise gives about 0) and a planted emergence layer.
+4. `steer.py`: direction construction (mean difference and mapped probe weights, unit norm, projected SD, orientation), post-block injection at the last prompt and decode positions with cache rebuild, first-decision-only mode, activation replacement, matched-norm random directions, and an $\alpha = 0$ equivalence check; writes rows in the harness `outputs.jsonl` format so `rescore.ts` can score them. Tests use a tiny synthetic two-layer model built in MLX to check that injection changes the residual by exactly $\alpha s_l v_l$ at the right positions and nowhere else.
+5. `attention.py`: a slow attention path for Qwen3 and Llama (RoPE, q/k RMSNorm where present, grouped-query mapping) exposed per head, validated against the fused path on a tiny synthetic model in tests (within a stated tolerance); online span-mass reduction at query $j - 1$; pre-softmax masks for prefill and decode spans; content swaps; per-head output ablation before the output projection; the $S_L$ statistic and random-span controls in the analysis part.
+6. `drift.py`: cached greedy base continuations, chunked full-vocabulary FP32 conditional KL as defined in design section 5, EOS and truncation preserved; `calibration.py`: alternative-set first-token masses, trie likelihoods for multi-token alternatives, uncovered mass and the policy-ECE summary. Synthetic tests for both.
+7. Grid runner: extend `bench/slm/finetune/train.sh` (or add `train-grid.sh`) with explicit module manifests for placement {attention, mlp, both} × layers {all, bottom, top} × rank, norm-only and output-only controls; it must write the exact trainable tensor names and counts to a manifest before training and refuse to run if they differ from the expected counts in design section 3; fixed data order, updates and scale. Test the manifest logic against the saved Qwen3-0.6B config without loading weights.
+8. `analysis/`: the root-cluster bootstrap for the grid associations (Spearman and $\tau_b$ under one shared resample), paired contrasts with Holm, and the mapped $\alpha(\mu)$ equivalence test, each with a synthetic unit test where the answer is known.
+9. `README.md` in the package: how to run each stage in the order of design section 7, what each file writes, and the validation checklist for step 0 (prompt bytes, spans, no-op logits, cache equivalence, throughput).
+
+## Rules
+
+- No new dependencies, in either the Python environment or the repository. No simulation changes. Do not edit `apps/`, `bench/slm/*.ts` other than adding `neural/fixture.ts`, or anything under `bench/slm/results/`.
+- Every formula implemented cites the design section in a comment.
+- Tests: `~/.venvs/rt-mlx/bin/python -m pytest bench/slm/neural -q` must pass without a model (use `unittest` if pytest is absent; do not install it), plus `npm run bench:slm:smoke` and root typecheck for the TypeScript fixture.
+- You cannot commit. Write `agent-tradeoff/reports/39-report.md`: what was built, how step 0 validation is run, files to commit and a plain commit message without assistant attribution.
+
+End with `STATUS: DONE` or `STATUS: BLOCKED` and a one-line test summary.
