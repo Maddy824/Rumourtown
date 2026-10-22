@@ -81,11 +81,13 @@ export async function generateScenarios(options: { seeds?: number[]; ticks?: num
       rows.push({ ...base, id: `s${seed}-t${tick}-${person.id}-${split}`, split, mechanisms: ['general'],
         facts: facts.filter(f => !heldIds.has(f.id)),
         unknownWorldFacts: unknown.filter(c => !heldIds.has(c.id)).map(c => c.text),
+        worldFacts: claims.filter(c => !heldIds.has(c.id)).map(c => ({ id: c.id, text: c.text, trueInWorld: trueIds.has(c.id) })),
         others: others.filter(o => !claims.some(c => heldIds.has(c.id) && c.text === o.text)) });
       // A separate track tests the two withheld mechanisms, including on unseen seeds.
       rows.push({ ...base, id: `s${seed}-t${tick}-${person.id}-test-mechanism`, split: 'test-mechanism',
         mechanisms: Object.keys(HELD_OUT), facts: facts.filter(f => heldIds.has(f.id)),
         unknownWorldFacts: unknown.filter(c => heldIds.has(c.id)).map(c => c.text),
+        worldFacts: claims.filter(c => heldIds.has(c.id)).map(c => ({ id: c.id, text: c.text, trueInWorld: trueIds.has(c.id) })),
         others: others.filter(o => claims.some(c => heldIds.has(c.id) && c.text === o.text)) });
     }
     if (seed % 25 === 0) console.error(`Exported seed ${seed}/200`);

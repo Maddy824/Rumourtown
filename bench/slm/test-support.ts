@@ -5,8 +5,10 @@ export async function stubVerify(reply: string, facts: FactRef[]): Promise<Verdi
   const bad = reply.includes('UNSUPPORTED');
   const mentioned = facts.find(f => reply.includes(f.text));
   return { sentences: [{ text: reply, label: bad ? 'unknown-to-speaker' : mentioned ? 'supported' : 'chatter',
-    ...(mentioned ? { factId: mentioned.id } : {}) }],
+    worldTruth: mentioned ? mentioned.trueInWorld ? 'true' : 'false' : 'unknown', ...(mentioned ? { factId: mentioned.id } : {}) }],
     epistemicFaithful: !bad, worldFaithful: !bad && (!mentioned || mentioned.trueInWorld),
-    calibrated: !reply.includes('UNCALIBRATED'), provenanceCorrect: null,
+    worldFaithfulLegacy: !bad && (!mentioned || mentioned.trueInWorld), calibratedLegacy: !reply.includes('UNCALIBRATED'),
+    calibrated: mentioned ? !reply.includes('UNCALIBRATED') : null, provenanceCorrect: null,
+    requiredSourceCoverage: null, exactDirectTeller: null, validAncestry: null,
     abstained: /have not heard|haven't heard|do not know/i.test(reply) };
 }

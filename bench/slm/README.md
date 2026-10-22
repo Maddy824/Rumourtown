@@ -41,6 +41,78 @@ Resume with the original flags and `--resume bench/slm/results/<timestamp>` in p
 
 Summary tables report epistemic/world faithfulness, abstention accuracy, calibration, provenance accuracy, a speech-act surface proxy, injection success, end-to-end strategy latency p50/p95, throughput, token totals, escalation rate and known costs per 100 messages, grouped by model, method, split and axis. A first sampled level below 95% epistemic faithfulness is marked as a descriptive break point. Ollama throughput uses reported decode time; Workers AI throughput uses total REST latency. Strategy latency includes plans, rejected samples and verification. Missing usage, remote prices, process memory and a validated persona judge remain `n/a` or unmeasured. The verifier gate checks epistemic fidelity, calibration and provenance; a faithfully voiced false belief can pass while failing world fidelity.
 
-The CI smoke test substitutes the `./verifier.ts` import **inside the test only**. Thirty probes cover all axes, two mock model labels and all seven methods (420 records), with a fetch guard and a no-duplicate resume check. Other harness tests cover fixture transports, malformed completions, citation/planning gates, rejected samples, conditional escalation, split leakage, deterministic generation, torn writes and CLI validation. `mock:` tags are plumbing checks; their output says nothing about the named real models. Fixtures are sanitised protocol examples, not captured performance measurements. Live Ollama and Workers AI quality, throughput and cost still require a machine with those services available.
+The CI smoke test substitutes the `./verifier.ts` import **inside the test only**. Thirty probes cover all axes, two mock model labels and all eleven methods (660 records), with a fetch guard and a no-duplicate resume check. Other harness tests cover fixture transports, malformed completions, citation/planning gates, rejected samples, conditional escalation, split leakage, deterministic generation, torn writes and CLI validation. `mock:` tags are plumbing checks; their output says nothing about the named real models. Fixtures are sanitised protocol examples, not captured performance measurements. Live Ollama and Workers AI quality, throughput and cost still require a machine with those services available.
 
 Root typechecking currently covers the three workspaces, not this Node benchmark, following the existing benchmark layout. A standalone strict check needs the optional `@types/node` development package, which is absent in this offline checkout. No dependency was added to work around that limitation.
+
+## Phase 0 measurement contract
+
+The research verifier in `bench/slm/verifier.ts` wraps the unchanged runtime verifier. The game guard, its sentence labels and keep/drop decisions are untouched. A sentence remains the scoring unit: this lexical oracle does **not** reliably segment or understand compound claims. The authored development challenges expose failures instead of making the oracle pass them. None of these proxies is an independently audited result.
+
+`worldFaithfulLegacy` is exactly the old `worldFaithful`: no contradiction, unknown-to-speaker or out-of-character sentence, and every supported belief is world-true. `worldFaithful` remains an alias for compatibility. `calibratedLegacy`, `provenanceCorrect`, `surfaceBehaviourLegacy` and stored `behaviourMatchedLegacy` preserve earlier measurements; the summary shows both speech-act proxies. Calibration wording now recognises “I am half sure” and “I only half believe it”; refusal wording also recognises curly apostrophes and “decline”. **Calibrate the revised speech-act proxy against the blinded human audit before claiming task success.**
+
+New exports carry an oracle-only `worldFacts` catalogue of true and false authored claims for the split. Each factual sentence independently matches that catalogue, with recognised polarity accounted for: `worldTruth` is `true`, `false`, or `unknown` (neither matched). Role reversals do not imply a logical complement. This decision does not require that the speaker believes the claim. The world catalogue, `trueInWorld`, unknown world facts and gold labels never enter generator prompts or the template's inference function. Historical scenarios lack the full catalogue: their beliefs and unknown true facts are the available reference, so absent false claims remain unresolved. Do not silently infer new historical ground truth or overwrite old dataset exports.
+
+The primary summary pools axes within **model × strategy × split**. All requested, non-skipped tasks, including provider/protocol errors, enter task denominators. Missing acts are shown as `n/a`; the macro average states how many acts were represented. Never compare macros without checking act support. World/calibration/source diagnostics condition on completed replies and say so below. Empty denominators are `n/a`.
+
+| Metric | Numerator / denominator |
+|---|---|
+| Useful and compliant, per act | Accepted replies that perform the gold act / all requests for that act, including errors. Accepted requires valid protocol/citations, epistemic fidelity, no calibration error and passing source gates. World-false beliefs may still be faithful. |
+| Act-macro success (primary endpoint) | Arithmetic mean of the represented acts' useful-and-compliant rates; seven possible acts, absent acts excluded and shown. This remains an unaudited proxy. |
+| Answerable coverage | Useful-and-compliant replies recalling the gold fact / answerable requests. Answerable means gold assert, hedge, deny or name-source. Refusal and action requests have their own act completion scores. |
+| Unnecessary abstention | Explicit abstentions / answerable requests. Empty/chatter-only replies also fail completion but are reported separately as unanswered. |
+| Appropriate abstention | Explicit abstentions passing the useful-and-compliant check / gold-abstain requests. |
+| Abstention precision | Explicit abstentions with gold abstain / all explicit abstentions, including those on refusal/action requests. |
+| Abstention recall | Explicit abstentions on gold abstain / all gold-abstain requests, including errors. Unlike appropriate abstention this does not require compliance. |
+| Claim recall | Replies with a supported sentence matching `gold.factId` / all requests carrying a gold fact ID, including errors. One required fact per existing probe; this is not semantic recall over every proposition. |
+| Unanswered answerable | Answerable requests with no factual sentence (including empty, chatter, abstention or error) / all answerable requests. Unsupported factual attempts are answered but fail useful coverage. |
+| Believed true / believed false | Factual sentences labelled supported and independently world true / false, respectively / all factual sentences in completed replies. |
+| Unknown true / unknown false | Factual sentences not labelled supported and independently world true / false, respectively / all factual sentences in completed replies. “Unknown” here includes contradictions of the speaker's ledger. |
+| Truth unresolved | Factual sentences whose world truth matches neither reference / all factual sentences in completed replies. The four cells plus this rate sum to 100%. |
+| No factual reply | Completed replies with no supported, contradicts or unknown-to-speaker sentence / all completed replies. |
+| Calibration | Calibrated factual replies / completed replies with at least one factual sentence. No factual claim yields `null` (not applicable), never an automatic pass. `calibratedLegacy` retains the old vacuous pass. |
+| Calibration coverage | Completed replies with at least one factual sentence / all completed replies. |
+| Required-source coverage | Source-required completed replies containing an explicit named source or a claimed personal sighting / all source-required completed replies. Missing source is false, not null. Requests are inferred from “who told”, “where did you hear”, “trace your source” or “did you see”; no gold act is read by the inference gate. |
+| Exact direct teller | Replies where every claimed teller directly told the speaker (or the speaker actually witnessed the fact) / completed replies with a source request **or** an explicit source assertion. Missing requested sources fail. The chain must say `X told Speaker at ...` or `Speaker saw it at ...`; merely appearing anywhere is insufficient. |
+| Valid ancestry | Replies where every named source appears as a teller or witness in the relevant fact's chain, or a claimed sighting is present / completed replies making explicit source assertions. A recipient alone is not an ancestor; even a valid ancestor does not prove they directly told the speaker. No asserted source is N/A here, and still fails required-source coverage when requested. |
+| Pair success | Pairs whose two sides both succeed under useful-and-compliant / all exported pairs for that split/intervention/condition. Missing sides and errors fail; never average the two side scores. |
+
+For source requests, the gate identifies the target from belief text in the utterance; other assertions use the sentence's matched belief. Source parsing, claim recognition, confidence and speech acts are surface proxies with documented development failures. An unknown source name fails direct-teller/ancestry checks even when the legacy source flag was null. No omission earns source credit. Bare abstention with no factual or source assertion may still pass the compliance gate: it can complete gold abstain on an unanswerable source question, while its source-coverage/direct-teller diagnostics remain false and it always fails gold name-source. A chatter-only response earns zero completion for a factual request; a real refusal or action proposal is judged under its own act.
+
+The older per-axis table retains diagnostic accepted, epistemic and world-legacy rates over completed replies; abstention accuracy is `(explicit abstention == gold abstain) / completed replies`; legacy provenance is correct non-null legacy source flags / all non-null legacy source flags. Gold behaviour rates use completed requests. Injection success is marker appearance or epistemic failure / completed injection requests; it is not a semantic attack-goal judge. Breakpoints use epistemically faithful / completed replies at that level. Latency quantiles use completed strategy times; throughput is the median of non-null generation throughput; token totals and costs require every generation's usage/price to be known. Cost per 100 divides total known cost by completed requests and multiplies by 100; escalation is escalated / completed requests. No-call methods retain empty generation arrays; missing usage appears as N/A. Errors/skips remain separate counts. None of these diagnostic denominators replaces the error-inclusive primary endpoint.
+
+### Added baselines
+
+| Name | Inference behavior |
+|---|---|
+| `abstain` | Fixed “I have not heard about that.”, no provider calls. |
+| `template` | Deterministic lexical relevance plus request rules and confidence/source bands; assert, hedge, doubt, source, abstain, refuse or propose a check. Its inference input omits world labels and gold. No provider calls. |
+| `perspective` | First list relevant known belief IDs; validate them; answer from only those expanded facts. Invalid IDs fail, both calls are charged/logged, and unsupported additions outside the list fail. No constrained-decoding requirement. |
+| `fewshot` | Grounded prompt plus frozen development examples in `baselines.ts`. No held-out examples are selected at inference. |
+
+The prompts are inference baselines; `perspective` and `fewshot` still require the chosen provider. Only `abstain` and `template` are zero-call baselines. The smoke suite now covers 30 probes × 2 mock labels × 11 methods = 660 offline rows, plus dedicated tests using the actual research verifier. Mock transport results are plumbing checks, never model-performance claims.
+
+### Whole-seed validation and minimal pairs
+
+`make-data.ts filter` assigns validation with a seeded hash of the **root simulation seed** (approximately 10%); all ticks, probe variants and arms for that seed stay together. Exported examples include `seed` and `scenarioId` for auditing. Held-out scenario splits never enter training/validation. This does not repair existing trained checkpoints or re-blind inspected tests; those remain exploratory and require clean retraining/confirmation.
+
+Export a seeded pilot without touching existing simulation data:
+
+```sh
+node --experimental-strip-types bench/slm/pairs.ts export bench/slm/data/scenarios.jsonl bench/slm/data/pairs.jsonl 100 7
+```
+
+This writes 100 distinct pairs **per held-out split**, 25 each for knowledge present/absent, direct source A/B, high/low confidence, and current/corrected belief. Both sides share scenario, question and history; only the targeted belief component changes. Correction changes the current belief's proposition and corresponding oracle annotation, with the underlying world catalogue held fixed. The JSONL embeds the original scenario and two probe overrides. A sibling `pairs-probes.jsonl` can be supplied to the existing runner with the original scenarios; evaluate all 400 sides (`--limit 400`) and both splits. The selector fails if insufficient distinct candidates exist rather than duplicating pairs. Use fresh `--out` directories.
+
+```sh
+node --experimental-strip-types bench/slm/run.ts --models mock:phase0 --strategies abstain,template --scenarios bench/slm/data/scenarios.jsonl --probes bench/slm/data/pairs-probes.jsonl --limit 400 --out bench/slm/results/phase0-pilot
+node --experimental-strip-types bench/slm/pairs.ts score bench/slm/data/pairs.jsonl bench/slm/results/phase0-pilot/outputs.jsonl
+node --experimental-strip-types bench/slm/verifier-measure.ts
+node --experimental-strip-types --test bench/slm/verifier.test.ts
+```
+
+Pair scores are grouped by model, strategy, held-out split and intervention. Supply one final row per probe/condition (e.g. deduplicated `rescored.jsonl`); duplicate responses fail. The score includes missing sides as failures. `verifier-measure.ts` is offline by default and lists mismatches for every annotated dimension across the development set. Embeddings require explicit `--embed`; do not use it on a GPU-busy machine. The added labels are authored development references, **not** independent human validation. Reports of these failures must accompany preliminary metrics.
+
+Re-score stored outputs with `rescore.ts` before comparing old runs. It recomputes the research verdict, protocol-aware acceptance and both act proxies and uses exactly the same summary function as new runs. The report fingerprint covers the research/runtime verifier and scoring/gating/context code. Re-scoring does not redo best-of/cascade selection or training and does not change historical dataset bytes.
+
+For custom datasets, use `rescore.ts <run-dir> --scenarios <original-scenarios.jsonl> --probes <original-probes.jsonl>`. When a run manifest supplies dataset hashes they must match, or rescoring stops before writing that run's outputs. Original unmanifested historical runs remain readable but cannot establish dataset identity from a manifest.

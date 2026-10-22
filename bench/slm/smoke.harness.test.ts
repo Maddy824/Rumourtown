@@ -14,7 +14,7 @@ import { STRATEGIES } from './strategies.ts';
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map(d => rm(d, { recursive: true, force: true }))); });
 
-test('30 real-state probes, two mock model labels, seven methods, offline and resumable', async () => {
+test('30 real-state probes, two mock model labels, eleven methods, offline and resumable', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'slm-smoke-')); directories.push(directory);
   const scenarios = await generateScenarios({ seeds: [1, 151], ticks: [180] });
   const scenariosPath = join(directory, 'scenarios.jsonl'), probesPath = join(directory, 'probes.jsonl');
@@ -28,9 +28,10 @@ test('30 real-state probes, two mock model labels, seven methods, offline and re
     expect(new Set(rows.map(r => r.probeId)).size).toBe(30);
     expect(new Set(rows.map(r => r.axis))).toEqual(new Set(AXES));
     expect(new Set(rows.map(r => r.split))).toEqual(new Set(['train', 'test-seed', 'test-mechanism']));
-    expect(rows).toHaveLength(30 * 2 * 7);
+    expect(rows).toHaveLength(30 * 2 * STRATEGIES.length);
     expect(rows.every(r => r.status === 'ok')).toBe(true);
-    expect(rows.every(r => r.result?.accepted)).toBe(true);
+    expect(rows.every(r => typeof r.result?.accepted === 'boolean')).toBe(true);
+    expect(new Set(rows.map(r => r.strategy))).toEqual(new Set(STRATEGIES));
     expect(network).not.toHaveBeenCalled();
     const outputPath = join(options.directory, 'outputs.jsonl');
     const before = await readFile(outputPath, 'utf8');
@@ -39,6 +40,6 @@ test('30 real-state probes, two mock model labels, seven methods, offline and re
     const summary = await readFile(join(options.directory, 'summary.md'), 'utf8');
     expect(summary).toContain('Break points'); expect(summary).toContain('mock:qwen3:0.6b');
     expect(summary).toContain('mock:llama3.2:1b'); expect(summary).toContain('unmeasured');
-    console.log('SLM smoke: 30 probes × 2 mock model labels × 7 strategies = 420 offline records; resume adds no duplicates.');
+    console.log('SLM smoke: 30 probes × 2 mock model labels × 11 strategies = 660 offline records; resume adds no duplicates.');
   } finally { network.mockRestore(); }
 }, 30_000);

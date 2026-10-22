@@ -16,7 +16,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DATA, choice, hash, isMain, readJsonl } from '../io.ts';
 import { messagesFor, passes, type StrategyResult } from '../strategies.ts';
-import { factsFor, type Probe, type Scenario } from '../types.ts';
+import { factsFor, oracleOptions, type Probe, type Scenario } from '../types.ts';
 import { verify } from '../verifier.ts';
 import { surfaceBehaviour } from '../run.ts';
 
@@ -33,6 +33,10 @@ export function selectProbes(probes: Probe[], scenarios: Map<string, Scenario>, 
     if (!added) break;
   }
   return picked;
+}
+
+export function validationSeed(seed: number): boolean {
+  return choice([...Array(10).keys()], `root-seed:${seed}`) === 0;
 }
 
 async function load(): Promise<{ scenarios: Map<string, Scenario>; probes: Probe[] }> {
@@ -60,9 +64,9 @@ async function exportPrompts(args: string[]): Promise<void> {
 
 interface Sample { probeId: string; sample: number; text: string }
 
-async function filter(args: string[]): Promise<void> {
+export async function filter(args: string[], dataset?: { scenarios: Map<string, Scenario>; probes: Probe[] }): Promise<void> {
   const dir = arg(args, 'out') ?? join(DATA, 'finetune');
-  const { scenarios, probes } = await load();
+  const { scenarios, probes } = dataset ?? await load();
   const byId = new Map(probes.map(p => [p.id, p]));
   const samples = new Map<string, Sample[]>();
   for await (const s of readJsonl<Sample>(join(dir, 'samples.jsonl'))) samples.set(s.probeId, [...(samples.get(s.probeId) ?? []), s]);
@@ -77,7 +81,7 @@ async function filter(args: string[]): Promise<void> {
     let firstAccepted: string | null = null, firstOnAct: string | null = null;
     for (const sample of list.sort((a, b) => a.sample - b.sample)) {
       const reply = sample.text.trim();
-      const verdict = await verify(reply, facts, s.unknownWorldFacts, s.castNames);
+      const verdict = await verify(reply, facts, s.unknownWorldFacts, s.castNames, oracleOptions(s, p));
       const accepted = !!reply && passes(verdict);
       const onAct = accepted && surfaceBehaviour(p, { reply, verdict });
       stats.samples++; if (accepted) stats.accepted++; if (onAct) stats.onAct++;
@@ -86,11 +90,11 @@ async function filter(args: string[]): Promise<void> {
       if (onAct && firstOnAct === null) firstOnAct = reply;
     }
     stats.probes++;
-    // Split by scenario so no snapshot appears in both train and valid.
-    const target = choice([...Array(10).keys()], p.scenarioId) === 0 ? valid : sets;
+    // Keep all snapshots and counterfactual variants of a root simulation seed together.
+    const target = validationSeed(s.seed) ? valid : sets;
     const prompt = messagesFor(s, p);
     if (prompt.reduce((n, m) => n + m.content.length, 0) > MAX_CHARS) { stats.tooLong++; continue; }
-    const example = (reply: string) => ({ probeId, messages: [...prompt, { role: 'assistant', content: reply }] });
+    const example = (reply: string) => ({ probeId, seed: s.seed, scenarioId: s.id, messages: [...prompt, { role: 'assistant', content: reply }] });
     const first = list[0]!.text.trim();
     if (first) target.unfiltered.push(example(first));
     if (firstAccepted) target.verifier.push(example(firstAccepted));
