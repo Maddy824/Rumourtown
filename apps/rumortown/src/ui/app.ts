@@ -4,7 +4,8 @@
  * renderer draws every animation frame, blending the previous and current snapshots.
  */
 import { createStatusLine } from './status-line.js';
-import { meetingPerson } from './awake.js';
+import { createWorld } from '../sim/world/index.js';
+import { canReachListener } from './awake.js';
 import { headAnchor, headLift } from './anchors.js';
 import { localStartTick } from './local-clock.js';
 import { createExchanges, followsExchange, focusedScript, longestChain, type StoryStats } from './exchanges.js';
@@ -42,7 +43,7 @@ import { evaluateDare, reflectionParagraphs, runReflection } from './debrief.js'
 import { clamp, h, svg } from './dom.js';
 import { clockText, tickLabel } from './format.js';
 import { faceImg } from './faces.js';
-import { nowSentence, playerStoryEvents, storyBeat, storyTarget, storyZoom, type StoryBeat } from './story-beats.js';
+import { nowSentence, selectedStoryEvents, storyBeat, storyTarget, storyZoom, type StoryBeat } from './story-beats.js';
 import { dialArt, postboxArt } from './icons.js';
 import { createLayers } from './layers.js';
 import { advanceTicks } from './loop.js';
@@ -103,6 +104,8 @@ function randomSeed(): number {
 
 export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const map = deps.map;
+  const travelWorld = createWorld(map);
+  const reachable = (id: string): boolean => canReachListener(cur, travelWorld, id);
   const castVersion = deps.castVersion ?? 'v1';
   const durationTicks = Math.max(1, deps.runDays ?? 3) * MINUTES_PER_DAY;
   const phoneQuery = window.matchMedia('(max-width: 759px), (max-height: 500px)');
@@ -192,21 +195,20 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   const timeText = h('span', { class: 'clock-time' });
   const dayText = h('span', { class: 'clock-day' });
   const clock = h('div', { class: 'clock', role: 'group', 'aria-label': 'Clock. The village keeps your clock.', title: 'The village keeps your clock.' }, dial.root, h('span', { class: 'clock-text' }, timeText, dayText));
-  const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false', hidden: true }, 'Follow a rumor');
-  const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Story');
+  const threadsBtn = h('button', { class: 'pin', 'data-pin': 'threads', type: 'button', 'aria-pressed': 'false', hidden: true }, 'Follow the speaker');
+  const storyBtn = h('button', { class: 'pin', 'data-pin': 'story', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, 'Rumors');
   const shareBtn = h('button', { class: 'pin', 'data-pin': 'share', type: 'button', 'aria-haspopup': 'dialog' }, 'Share this village');
-  const exploreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Explore');
-  const researchBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Notebook');
-  const moreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'More');
+  const exploreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Map');
+  const researchBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Research notebook');
+  const moreBtn = h('button', { class: 'pin', type: 'button', 'aria-haspopup': 'dialog' }, 'Menu');
   const pins = h('nav', { class: 'pins', 'aria-label': 'Village tools' }, exploreBtn, storyBtn, moreBtn, threadsBtn);
   const top = h('header', { class: 'rt-top' }, clock, pins);
   const nowFaces = h('span', { class: 'now-faces', 'aria-hidden': 'true' });
-  const nowText = h('span', { class: 'now-sentence' }, 'Whisper something and watch the agents react.');
+  const nowText = h('span', { class: 'now-sentence' }, 'Try a whisper to see what happens. Later tellings appear in Rumors.');
   const nowAwake = h('small', { class: 'now-awake', hidden: true });
-  const runningStory = h('button', { class: 'now-open', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, h('span', { class: 'sr-only' }, 'Now: '), nowFaces, h('span', { class: 'now-copy' }, nowText, nowAwake), h('span', { class: 'now-chevron', 'aria-hidden': 'true' }, '⌃'));
-  const resumeFollow = h('button', { class: 'following-paused', type: 'button', hidden: true }, 'Following paused. Tap to resume.');
+  const runningStory = h('button', { class: 'now-open', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-story' }, h('span', { class: 'sr-only' }, 'View rumor: '), nowFaces, h('span', { class: 'now-copy' }, nowText, nowAwake), h('span', { class: 'now-chevron', 'aria-hidden': 'true' }, '⌃'));
+  const resumeFollow = h('button', { class: 'following-paused', type: 'button', hidden: true }, 'Following paused while you explore. Resume following');
   threadsBtn.className = 'follow-toggle';
-  nowFaces.append(faceImg('stranger', 'stranger', 22), faceImg('mira', sim.cast.get('mira')?.look ?? 'stranger', 22));
   const nowBar = h('div', { class: 'now-bar' }, runningStory, threadsBtn, resumeFollow);
   let runningBeat: StoryBeat | null = null;
   let dragged = false;
@@ -226,7 +228,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   runningStory.addEventListener('pointerup', () => measureInsets());
 
   const nearbyNote = h('small', { class: 'nearby-note', 'aria-hidden': 'true' }, 'Meet someone');
-  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Talk or act', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Talk or act', nearbyNote));
+  const postbox = h('button', { class: 'quick-whisper', type: 'button', 'aria-label': 'Whisper', 'aria-haspopup': 'dialog' }, postboxArt(), h('span', { class: 'postbox-label' }, 'Whisper', nearbyNote));
+
+  const talkButton = h('button', { class: 'button quick-talk', type: 'button', 'aria-haspopup': 'dialog' }, 'Talk');
 
   const toast = h('p', { class: 'toast', role: 'status', hidden: true });
   const rewindText = h('span', { class: 'rewind-text' });
@@ -244,6 +248,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let acc = 0;
   let maxTick = sim.tick;
   let threadsOn = false;
+  let followingChoice: boolean | undefined;
+  let pendingWhisper = '';
+  let watchingKey = '';
   let watchBeats = false;
   let trailVisible = false;
   let scrubFar = false;
@@ -251,6 +258,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let rewindToken = 0;
   let cursor = { tick: 0, seen: 0 };
   let follow: { id: VillagerId; whisper: boolean; rumor?: boolean } | null = null;
+  let whisperWalkSpeed: Speed | null = null;
   const heldKeys = new Map<string, Vec2>();
   let keyTarget: { tile: Vec2; at: number } | null = null;
   let destination: { pos: Vec2; label: string } | null = null;
@@ -323,7 +331,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const now = performance.now();
     if (now - lastPausedNote < 4000) return;
     lastPausedNote = now;
-    say(speed === 0 ? 'Time is paused. Pick a speed to walk.' : 'Time is held for a moment.');
+    say(speed === 0 ? 'Time is paused. Pick a speed to walk.' : 'Time is paused while a panel is open.');
   };
 
   const tag = createTag({
@@ -354,12 +362,20 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     layers,
     whisper: (listener, claimId) => doWhisper(listener, claimId),
     walkTo: (id) => walkToVillager(id, true),
+    reachable,
+    following: () => followingChoice === false ? 'off' : focus.paused ? 'paused' : 'on',
     onOpenChange: (open) => {
       if (open) {
         whisper.warm();
         hold('whisper');
         hideToast();
-      } else release('whisper');
+      } else {
+        release('whisper');
+        if (pendingWhisper) {
+          const claimId = pendingWhisper; pendingWhisper = '';
+          story.present(claimId, postbox);
+        }
+      }
       syncScrim();
     },
   });
@@ -373,7 +389,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       else { release('play-typing'); setSpeed(speedBeforeTalk); }
       syncScrim(); measureInsets();
     },
-    rumors: () => whisper.open({ opener: postbox }),
+    rumors: () => openWhisper(postbox),
     act: reply => {
       if (rewinding || sim.tick >= runTicks) { say('Start a new visit to act in the village.'); return; }
       if (reply.action === 'move') { const place = map.places.find(p => p.id === reply.target); if (place) walkTo(place.door); }
@@ -392,7 +408,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     isPhone,
     history: () => trailHistory.links,
     exchanges: () => exchanges,
-    onFollow: () => { playback.reset(); focus.resume(); },
+    onFollow: () => { playback.reset(); followedClaim = ''; followedCount = 0; },
+    onWhisper: () => openWhisper(storyBtn),
+    paused: () => speed === 0,
+    onResume: () => { setSpeed(lastPlaying); story.refresh(); },
     onShow: ids => {
       playback.reset();
       spotlight = { ids, until: performance.now() + 4000 };
@@ -478,42 +497,67 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   });
   const musicButton = h('button', { class: 'button button-quiet', type: 'button' });
   deps.music?.subscribe(() => {
-    musicButton.textContent = deps.music!.enabled ? 'Quiet music: on' : 'Quiet music: off';
+    musicButton.textContent = deps.music!.enabled ? 'Music: on' : 'Music: off';
     musicButton.setAttribute('aria-pressed', String(deps.music!.enabled));
-    musicButton.setAttribute('aria-label', 'Quiet music');
+    musicButton.setAttribute('aria-label', 'Music');
   });
   musicButton.addEventListener('click', () => deps.music?.setEnabled(!deps.music.enabled));
-  const rumorButton = h('button', { class: 'button button-quiet', type: 'button', onclick: () => { tools.close(); whisper.open({ opener: moreBtn }); } }, 'Spread a rumor');
-  const trailButton = h('button', { class: 'button button-quiet', type: 'button', 'aria-pressed': 'false', onclick: () => {
-    trailVisible = !trailVisible; trailButton.setAttribute('aria-pressed', String(trailVisible));
-    trailButton.textContent = trailVisible ? 'Rumor lines: on' : 'Rumor lines: off';
-    root.dataset.rumorLines = String(trailVisible);
-  } }, 'Rumor lines: off');
-  const readButton = h('button', { class: 'button button-quiet', type: 'button', 'aria-pressed': 'false', onclick: () => {
-    watchBeats = !watchBeats; readButton.setAttribute('aria-pressed', String(watchBeats));
-    readButton.textContent = watchBeats ? 'Read conversations: on' : 'Read conversations: off';
-    playback.reset();
-    if (watchBeats) { showTrail(true); playback.ignore(exchanges.all); }
-  } }, 'Read conversations: off');
-  const tools = createTools({ layers, actions: [rumorButton, trailButton, readButton, researchBtn, shareBtn, ...(deps.music?.available ? [musicButton] : [])], onAgent: startAgent,
+  const pathButtons: HTMLButtonElement[] = [], readingButtons: HTMLButtonElement[] = [], followButtons: HTMLButtonElement[] = [];
+  function togglePaths(): void { trailVisible = !trailVisible; root.dataset.rumorLines = String(trailVisible); syncWatching(); }
+  function toggleReading(): void {
+    watchBeats = !watchBeats; playback.reset();
+    if (watchBeats) playback.ignore(exchanges.all);
+    syncWatching();
+  }
+  function toggleFollowing(): void {
+    const next = !threadsOn || focus.paused;
+    followingChoice = next;
+    if (next && threadsOn) focus.resume(); else showTrail(next);
+    followedClaim = ''; followedCount = 0; syncWatching();
+  }
+  function watchingButtons(): HTMLButtonElement[] {
+    const paths = h('button', { class: 'button button-quiet', type: 'button', onclick: togglePaths });
+    const reading = h('button', { class: 'button button-quiet', type: 'button', onclick: toggleReading });
+    const following = h('button', { class: 'button button-quiet', type: 'button', onclick: toggleFollowing });
+    pathButtons.push(paths); readingButtons.push(reading); followButtons.push(following);
+    return [paths, reading, following];
+  }
+  function syncWatching(): void {
+    watchingKey = `${trailVisible}/${watchBeats}/${threadsOn}/${focus.paused}`;
+    for (const [buttons, label, on] of [[pathButtons, 'Show rumor paths', trailVisible], [readingButtons, 'Slow down for conversations', watchBeats], [followButtons, 'Follow the speaker', threadsOn && !focus.paused]] as const) {
+      for (const button of buttons) {
+        button.textContent = `${label}: ${on ? 'on' : 'off'}`;
+        button.setAttribute('aria-pressed', String(on));
+      }
+    }
+    if (focus.paused) for (const button of followButtons) button.textContent = 'Following paused while you explore. Resume following';
+    threadsBtn.textContent = threadsOn ? 'Stop following' : 'Resume following';
+    threadsBtn.setAttribute('aria-pressed', String(threadsOn && !focus.paused));
+  }
+  const tools = createTools({ layers, actions: {
+    play: [shareBtn], settings: [...(deps.music?.available ? [musicButton] : []), ...watchingButtons()], curious: [researchBtn],
+  }, onAgent: startAgent,
     onReplayArrival: () => { void replayArrival(); }, onOpenChange: open => {
     heldKeys.clear();
     if (open) { hold('tools'); hideToast(); } else release('tools');
     syncScrim();
   } });
+  story.watchingSlot.append(...watchingButtons(), h('p', { class: 'sheet-note' }, 'Following moves the camera. Paths show who told whom. Slower conversations give you time to read.'));
+  syncWatching();
   for (const button of [researchBtn, shareBtn]) button.className = 'button button-quiet';
-  const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'Tap a path to walk. Gold is you. Explore shows the whole town.');
+  const movementHint = h('p', { class: 'movement-hint', 'aria-live': 'polite' }, 'Tap a path to walk. Gold is you. Map shows the whole town.');
   const movementStatus = createStatusLine(movementHint);
   const agentText = h('span');
   const agentNotice = h('div', { class: 'agent-notice', hidden: true },
     h('span', { role: 'status', 'aria-live': 'polite' }, agentText),
     h('button', { type: 'button', class: 'button button-quiet', onclick: () => stopAgent() }, 'Take over'));
-  const opening = createOpening(layers, () => {
-    const person = meetingPerson(cur, map);
-    if (person) walkToVillager(person.id); else guide.show('explore', postbox);
-  }, () => tools.showHelp(moreBtn), open => {
+  const walkingText = h('span');
+  const walking = h('div', { class: 'walking-status', hidden: true }, h('span', { role: 'status' }, walkingText),
+    h('button', { type: 'button', class: 'text-button', onclick: () => { cancelWalk(); postbox.focus({ preventScroll: true }); } }, 'Cancel'));
+  const opening = createOpening(layers, () => openWhisper(postbox), () => tools.showHelp(moreBtn), open => {
     if (open) hold('opening'); else release('opening');
-  }, () => meetingPerson(cur, map)?.name);
+    syncScrim();
+  });
   async function replayArrival(): Promise<void> {
     if (!deps.arrival) { opening.show(true); return; }
     opening.close(); story.close(); whisper.close(); play.close(); tag.close(); time.closeDrawer();
@@ -523,14 +567,17 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     awaitingArrival = false; release('arrival'); opening.show(true);
   }
   const dialogue = createDialogue(() => sim, () => playback.next(speed), () => { playback.skip(speed); acc = 0; });
-  const bottom = h('div', { class: 'rt-bottom' }, postbox, time.bar, time.tab);
-  root.append(canvas, opening.el, dialogue.el, labelLayer, nowBar, districtBanner, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, play.el, scrim, share.el, guide.el, tools.el, agentNotice, movementHint, rewind, toast, stitching, live, actionLive);
+  const bottom = h('div', { class: 'rt-bottom' }, postbox, talkButton, time.bar, time.tab);
+  root.append(canvas, opening.el, dialogue.el, labelLayer, nowBar, districtBanner, focusFrame, strings, bubbleLayer, marker, top, bottom, villagers, tag.el, story.el, time.drawer, whisper.el, play.el, scrim, share.el, guide.el, tools.el, agentNotice, walking, movementHint, rewind, toast, stitching, live, actionLive);
   story.endingSlot.append(dayEnd.el);
   story.setHandle(nowBar, root);
   const bubbles = createBubbles(bubbleLayer, live);
 
   function syncScrim(): void {
     scrim.hidden = !(whisper.isOpen() || play.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen());
+    const modal = layers.anyModal() || whisper.isOpen() || play.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen();
+    root.dataset.modal = String(modal);
+    nowBar.hidden = story.isOpen() || modal;
     scrim.dataset.strong = dayEnd.isOpen() || share.isOpen() || guide.isOpen() || tools.isOpen() ? 'true' : 'false';
   }
   scrim.addEventListener('click', () => {
@@ -548,6 +595,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     speed = s;
     acc = 0;
     if (s !== 0) lastPlaying = s;
+    story.refresh();
   }
 
   function nextBeat(): void {
@@ -595,7 +643,6 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function resumeForWalk(): void {
     if (speed === 0 && sim.tick < runTicks) { setSpeed(1); say('Walking resumes time.', 1800); }
     if (effectiveRate() === 0) notePaused();
-    if (threadsOn) showTrail(false);
   }
 
   function stopAgent(): void {
@@ -634,7 +681,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (kind === 'water') { say('The river is deep. Cross at the bridge.'); return; }
     const tile = nearestWalkable(requested);
     if (!tile) return;
-    follow = null;
+    follow = null; whisperWalkSpeed = null; walking.hidden = true;
     heldKeys.clear();
     keyTarget = null;
     const place = map.places.find(p => p.door.x === tile.x && p.door.y === tile.y);
@@ -652,34 +699,54 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
     const v = cur.villagers.find((x) => x.id === id);
     if (!v || rewinding) return;
+    if (!reachable(id)) { say(`${v.name} is not reachable. Choose another listener.`); return; }
     if (v.activity === 'sleep') { say(`${v.name} is asleep. Look for someone awake at the inn.`); return; }
     heldKeys.clear();
     destination = null;
     follow = { id, whisper: true, rumor };
-    movementStatus.show(`Walking to ${v.name}.`);
+    whisperWalkSpeed = rumor ? speed : null;
+    movementStatus.clear();
+    walkingText.textContent = `Walking to ${v.name}${rumor ? ' to whisper. Stories open when you arrive.' : ' to talk.'}`;
+    walking.hidden = false;
     keyTarget = null;
     sim.movePlayer(tileOf(v.pos));
     resumeForWalk();
   }
 
+  function cancelWalk(): void {
+    follow = null; walking.hidden = true; movementStatus.clear();
+    sim.movePlayer(tileOf(cur.player.pos)); cur = sim.snapshot();
+    if (whisperWalkSpeed !== null) { const previous = whisperWalkSpeed; whisperWalkSpeed = null; setSpeed(previous); }
+  }
+
+  function openWhisper(opener: Element): void {
+    if (rewinding) return;
+    if (!opening.el.hidden) opening.close();
+    stopAgent(); cancelWalk(); tools.close(); play.close(); guide.close();
+    closeSheetsForPhone('whisper');
+    whisper.open({ opener });
+  }
+
   function followStep(): void {
     if (!follow) return;
     const v = cur.villagers.find((x) => x.id === follow?.id);
-    if (!v || v.activity === 'sleep') {
-      follow = null;
-      sim.movePlayer(tileOf(cur.player.pos));
+    if (!v || v.activity === 'sleep' || !reachable(v.id)) {
+      const name = v?.name ?? 'That person';
+      cancelWalk();
+      say(`${name} is no longer available. Choose someone else in Whisper.`, 5000);
       return;
     }
     const p = cur.player.pos;
     if (Math.hypot(v.pos.x - p.x, v.pos.y - p.y) <= 2) {
-      movementStatus.clear();
+      movementStatus.clear(); walking.hidden = true;
       const done = follow;
       follow = null;
       sim.movePlayer(tileOf(p));
+      if (whisperWalkSpeed !== null) { const previous = whisperWalkSpeed; whisperWalkSpeed = null; setSpeed(previous); }
       if (done.whisper && !whisper.isOpen() && !layers.anyModal()) {
         closeSheetsForPhone('whisper');
         if (done.rumor) whisper.open({ listener: done.id, opener: postbox });
-        else play.open(postbox, done.id);
+        else play.open(talkButton, done.id);
       }
       return;
     }
@@ -705,7 +772,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     destination = null;
 
     keyTarget = { tile: next, at: now };
-    follow = null;
+    follow = null; whisperWalkSpeed = null; walking.hidden = true;
     sim.movePlayer(next);
     resumeForWalk();
   }
@@ -733,9 +800,10 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     interventions.sort((a, b) => a.tick - b.tick);
     written = writeShareToLocation(shareState());
     cur = sim.snapshot();
-    story.focus(claimId); showTrail(true);
+    if (!threadsOn && followingChoice !== false) showTrail(true);
     const fresh = consumeEvents();
     if (fresh.length) story.push(fresh);
+    story.focus(claimId); pendingWhisper = claimId;
     bubbles.boost(listener, 5000);
     tag.refresh(true);
     return true;
@@ -746,13 +814,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function showTrail(open: boolean): void {
     threadsOn = open; focus.toggle(open);
     root.dataset.tracing = String(open);
-    threadsBtn.setAttribute('aria-pressed', String(open));
+    syncWatching();
     followedClaim = ''; followedCount = 0;
     if (open) { hideToast(); story.updateChain(); }
     else playback.reset();
     measureInsets();
   }
-  resumeFollow.addEventListener('click', () => { focus.resume(); followedClaim = ''; followedCount = 0; });
+  resumeFollow.addEventListener('click', () => { followingChoice = true; focus.resume(); syncWatching(); followedClaim = ''; followedCount = 0; });
 
   function consumeEvents(): SimEvent[] {
     trailHistory.record(cur.threads);
@@ -774,11 +842,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     }
     recordBeats(out);
     const newWhisper = out.find((e): e is Extract<SimEvent, { kind: 'whisper' }> => e.kind === 'whisper');
-    if (newWhisper && !exchanges.introduced.size) showTrail(true);
+    if (newWhisper && !exchanges.introduced.size && !threadsOn && followingChoice !== false) showTrail(true);
     const touched = exchanges.push(out);
     exchanges.expire(sim.tick);
     for (const exchange of touched) if (followsExchange(exchange, newWhisper?.claimId ?? story.selectedClaim(), exchanges.introduced)) {
-      if (searchingBeat || (threadsOn && watchBeats && !focus.paused)) {
+      if (searchingBeat || (watchBeats && !focus.paused)) {
         if (!playback.offer(exchange)) continue;
         acc = 0;
         if (searchingBeat) { searchingBeat = false; showTrail(true); actionLive.textContent = exchange.beat.text; }
@@ -858,6 +926,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const fresh = consumeEvents();
     if (fresh.length) story.push(fresh);
     followStep();
+    story.updateJourney();
     tag.refresh();
     const end = fresh.find((e): e is DayEndEvent => e.kind === 'day-end');
     if (sim.tick >= runTicks && !end) {
@@ -909,7 +978,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     cur = sim.snapshot();
     prev = cur;
     acc = 0;
-    follow = null;
+    follow = null; whisperWalkSpeed = null; walking.hidden = true;
     heldKeys.clear();
     destination = null;
     keyTarget = null;
@@ -926,7 +995,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   exploreBtn.addEventListener('click', () => { closeSheetsForPhone(''); guide.show('explore', exploreBtn); });
   researchBtn.addEventListener('click', () => { tools.close(); closeSheetsForPhone(''); guide.show('research', moreBtn); });
   threadsBtn.addEventListener('click', () => {
-    showTrail(!threadsOn);
+    toggleFollowing();
   });
   storyBtn.addEventListener('click', () => {
     tools.close();
@@ -941,13 +1010,15 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     closeSheetsForPhone('share');
     share.open(moreBtn);
   });
-  postbox.addEventListener('click', () => {
+  postbox.addEventListener('click', () => openWhisper(postbox));
+  talkButton.addEventListener('click', () => {
     if (rewinding) return;
-    stopAgent();
-    closeSheetsForPhone('play');
-    play.open(postbox);
+    if (!opening.el.hidden) opening.close();
+    stopAgent(); cancelWalk(); tools.close(); guide.close(); whisper.close();
+    closeSheetsForPhone('play'); play.open(talkButton);
   });
   time.tab.addEventListener('click', () => {
+    if (!opening.el.hidden) opening.close();
     if (time.isDrawerOpen()) closeSheetsForPhone('time');
   });
 
@@ -1026,6 +1097,11 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   function resize(): void {
     const w = root.clientWidth || window.innerWidth;
     const hgt = root.clientHeight || window.innerHeight;
+    const viewport = window.visualViewport;
+    const keyboardInset = phone && viewport ? Math.max(0, hgt - viewport.height - viewport.offsetTop) : 0;
+    root.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+    root.style.setProperty('--viewport-top', `${phone ? viewport?.offsetTop ?? 0 : 0}px`);
+    root.dataset.keyboard = String(keyboardInset > 120);
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     renderer.resize(w, hgt, dpr);
     rig.resize(w, hgt);
@@ -1047,6 +1123,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   phoneQuery.addEventListener('change', applyLayout);
   const onResize = (): void => resize();
   window.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('scroll', onResize);
   applyLayout();
   const geometryObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(measureInsets) : null;
   for (const element of [nowBar, clock, pins, bottom]) geometryObserver?.observe(element);
@@ -1062,8 +1140,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
 
   function sheetCover(): number {
     if (!phone) return 0;
-    const sideRail = window.matchMedia('(orientation: landscape)').matches;
-    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [play.el, play.isOpen()], [story.el, story.isOpen() && !sideRail], [time.drawer, time.isDrawerOpen()]] as const;
+    const panels = [[tag.el, tag.selected() !== null], [whisper.el, whisper.isOpen()], [play.el, play.isOpen()], [story.el, story.isOpen()], [time.drawer, time.isDrawerOpen()]] as const;
     return Math.max(0, ...panels.filter(([, open]) => open).map(([el]) => rig.camera.height - el.getBoundingClientRect().top));
   }
 
@@ -1071,7 +1148,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     try {
       const options: PresentationOptions = {
         threads: trailVisible, selected: tag.selected() ?? undefined, alpha, reducedMotion: reducedMotion(), phone,
-        spotlight: playback.active?.people ?? (spotlight && performance.now() < spotlight.until ? spotlight.ids : undefined),
+        spotlight: (threadsOn && !focus.paused ? playback.active?.people : undefined) ?? (spotlight && performance.now() < spotlight.until ? spotlight.ids : undefined),
         spotlightDim: playback.active ? .5 : undefined,
         arriving: awaitingArrival && !reducedMotion(),
         onReady: () => { stitching.hidden = true; },
@@ -1129,7 +1206,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     if (heldKeys.size && !layers.anyModal() && effectiveRate() > 0) stepKey([...heldKeys.values()].at(-1)!);
     if (destination && !cur.player.moving) {
       const arrived = Math.hypot(cur.player.pos.x - destination.pos.x, cur.player.pos.y - destination.pos.y) < .7;
-      movementStatus.show(arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Explore to keep travelling.');
+      movementStatus.show(arrived ? `You have reached ${destination.label}. Enter meets someone nearby.` : 'Choose a path in Map to keep travelling.');
       destination = null;
 
     }
@@ -1171,9 +1248,9 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     resumeFollow.hidden = !focus.paused || !threadsOn;
     movementStatus.update(now); loadingStatus.update(now);
     rig.far = scrubFar;
-    const sideRail = story.isOpen() && (!phone || window.matchMedia('(orientation: landscape)').matches);
+    const sideRail = story.isOpen() && !phone;
     rig.setInsets({ top: insets.top, bottom: insets.bottom, left: 0, right: sideRail ? 332 : 0, sheet: cover });
-    const beatPeople = playback.active?.people;
+    const beatPeople = threadsOn && !focus.paused ? playback.active?.people : undefined;
     if (playback.active && framedBeat !== playback.active.id) { framedBeat = playback.active.id; rig.glide(); }
     const highlight = beatPeople ? storyTarget(beatPeople, cur) : spotlight && now < spotlight.until ? storyTarget(spotlight.ids, cur) : null;
     const focusPeople = focus.target(now);
@@ -1245,19 +1322,19 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       markerAt = null;
     }
 
-    const filterKey = `${beats.length}/${story.includesVillage()}`;
+    const filterKey = `${beats.length}/${story.includesVillage()}/${story.selectedClaim()}`;
     if (filterKey !== visibleBeatsKey) {
       visibleBeatsKey = filterKey;
-      const own = playerStoryEvents(beats.map(b => b.event), sim);
+      const own = selectedStoryEvents(beats.map(b => b.event), sim, story.selectedClaim());
       visibleBeats = story.includesVillage() ? beats : beats.filter(b => own.has(b.event));
     }
     const nextBeat = visibleBeats.at(-1) ?? null;
     const night = nightNow(cur, nextBeat?.event);
-    const nowSentenceText = night.quiet ? 'The village sleeps' : nextBeat ? nowSentence(nextBeat, sim) : 'Whisper something and watch the agents react.';
+    const nowSentenceText = night.quiet ? 'The village sleeps' : nextBeat ? `${tickLabel(nextBeat.tick)}. ${nowSentence(nextBeat, sim)} Read reply in Rumors.` : 'Try a whisper to see what happens. Later tellings appear in Rumors.';
     const awakeText = night.awake.length ? `Still awake: ${night.awake.join(', ')}` : '';
     if (nextBeat !== runningBeat || nowText.textContent !== nowSentenceText || nowAwake.textContent !== awakeText) {
       runningBeat = nextBeat;
-      const faces = night.quiet ? cur.villagers.filter(v => v.activity !== 'sleep').slice(0, 3).map(v => v.id) : nextBeat?.faces ?? ['stranger', 'mira'];
+      const faces = night.quiet ? cur.villagers.filter(v => v.activity !== 'sleep').slice(0, 3).map(v => v.id) : nextBeat?.faces ?? [];
       nowFaces.replaceChildren(...faces.map(id => faceImg(id, sim.cast.get(id)?.look ?? 'stranger', 22)));
       nowText.textContent = nowSentenceText;
       nowAwake.textContent = awakeText; nowAwake.hidden = !awakeText;
@@ -1270,11 +1347,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
     const nearby = inReach(cur).length;
     nearbyNote.textContent = nearby ? `${nearby} nearby` : 'Find someone';
     postbox.dataset.reach = String(nearby > 0);
-    const held = holds.size > 0 || rewinding;
-    const key = `${cur.tick}|${maxTick}|${speed}|${held}|${interventions.length}|${beats.length}|${story.includesVillage()}`;
+    if (watchingKey !== `${trailVisible}/${watchBeats}/${threadsOn}/${focus.paused}`) syncWatching();
+    const held = holds.size > 0 || rewinding || searchingBeat || sim.tick >= runTicks;
+    const pauseReason = holds.has('whisper') ? 'Paused while you choose a story.' : holds.has('play-typing') ? 'Paused while you type.' : rewinding ? 'Paused while the replay rebuilds.' : searchingBeat ? 'Paused while finding the next moment.' : sim.tick >= runTicks ? 'Paused at the end of this visit.' : holds.size ? 'Paused while this panel is open.' : speed === 0 ? 'You paused the village. Choose a speed to resume.' : '';
+    const key = `${cur.tick}|${maxTick}|${speed}|${held}|${pauseReason}|${interventions.length}|${beats.length}|${story.includesVillage()}|${story.selectedClaim()}`;
     if (key !== lastTimeKey) {
       lastTimeKey = key;
-      time.update({ tick: cur.tick, maxTick, runTicks, marks: interventions, beats: visibleBeats, speed, held });
+      time.update({ tick: cur.tick, maxTick, runTicks, marks: interventions, beats: visibleBeats, speed, held, pauseReason });
     }
   }
 
@@ -1316,6 +1395,8 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       window.removeEventListener('blur', clearKeys);
       window.removeEventListener('hashchange', onHash);
       window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('scroll', onResize);
       phoneQuery.removeEventListener('change', applyLayout);
       root.replaceChildren();
     },

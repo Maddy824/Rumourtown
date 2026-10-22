@@ -12,7 +12,7 @@ import { awakePeople, isNight } from './awake.js';
 import { faceImg } from './faces.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
-import { createRumorLibrary } from './rumor-library.js';
+import { createRumorLibrary, firstStories } from './rumor-library.js';
 
 export const WHISPER_RANGE = 2;
 
@@ -25,6 +25,8 @@ export interface WhisperContext {
   /** Returns false when the listener is no longer in reach. */
   whisper: (listener: VillagerId, claimId: ClaimId) => boolean;
   walkTo: (id: VillagerId) => void;
+  reachable?: (id: VillagerId) => boolean;
+  following?: () => 'on' | 'off' | 'paused';
   onOpenChange: (open: boolean) => void;
   /** Injectable verified flow for UI checks. Production uses the configured API. */
   flow?: Pick<RumorFlow, 'start'> & Partial<Pick<RumorFlow, 'warm'>>;
@@ -56,17 +58,18 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const feedback = h('p', { class: 'whisper-feedback', role: 'status',
     style: 'display: block; flex: 1 1 0; min-width: 0; min-height: 2lh;' });
   const sendBtn = h('button', { class: 'button button-primary', type: 'submit', disabled: true }, 'Whisper');
+  const followNote = h('p', { class: 'sheet-note whisper-following' });
   const localBtn = h('button', { class: 'button button-quiet', type: 'button', hidden: true, onclick: () => {
     revision++; busy = false; activeRevision = -1;
     form.removeAttribute('aria-busy');
     prepare(neutralMeaning(), 'Your exact story will spread without assigning blame. No extra AI request.');
   } }, 'Continue without AI');
   const form = h('form', { class: 'whisper-form', novalidate: true }, content,
-    h('div', { class: 'whisper-actions' }, feedback, sendBtn));
+    h('div', { class: 'whisper-actions' }, feedback, localBtn, sendBtn, followNote));
   const el = h('section', { class: 'sheet whisper', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-whisper-title', hidden: true },
     h('div', { class: 'sheet-paper' }, h('header', { class: 'sheet-head' }, h('div', null,
       h('h2', { id: 'rt-whisper-title', class: 'sheet-title' }, 'Whisper'),
-      h('p', { class: 'sheet-note' }, 'Time holds while you choose.')),
+      h('p', { class: 'sheet-note' }, 'Paused while you choose a story.')),
     h('button', { class: 'close', type: 'button', 'aria-label': 'Close the whisper sheet', onclick: () => api.close() }, closeIcon())), form));
   let open = false, busy = false, revision = 0, activeRevision = -1;
   let listener: VillagerId | null = null;
@@ -79,8 +82,10 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '';
   const invalidate = (): void => { revision++; confirmed = null; confirmation.hidden = true; feedback.textContent = ''; };
   const update = (): void => {
-    sendBtn.disabled = busy || !listener || !(selected || ownText.trim());
-    sendBtn.textContent = confirmed ? 'Whisper it' : 'Whisper';
+    sendBtn.disabled = busy || !listener || !(selected || ownText.trim()) || (confirmed ?? selected)?.about === listener;
+    sendBtn.textContent = ownText.trim() && !confirmed ? 'Review story' : `Whisper to ${ctx.sim().cast.get(listener!)?.name ?? 'listener'}`;
+    const following = ctx.following?.() ?? 'on';
+    followNote.textContent = following === 'on' ? 'The camera will follow speakers. Stop in Menu or move to explore.' : following === 'paused' ? 'Following paused while you explore. Resume in Menu.' : 'Camera following is off. Resume in Menu.';
     localBtn.hidden = !busy;
   };
   const prepare = (meaning: Parameters<typeof createOpenClaim>[1], note: string): void => {
@@ -97,10 +102,13 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
           prepare(neutralMeaning(), 'No one is assigned blame. Your wording is unchanged.');
         } }, 'Leave people unassigned'),
         h('button', { type: 'button', class: 'button button-quiet', onclick: () => {
-          invalidate(); update(); content.querySelector<HTMLElement>('textarea')?.focus();
+          invalidate(); update();
+          const writing = content.querySelector<HTMLDetailsElement>('.write-story'); if (writing) writing.open = true;
+          content.querySelector<HTMLElement>('textarea')?.focus();
         } }, 'Edit story'));
       confirmation.hidden = false;
-      feedback.textContent = note;
+      confirmation.scrollIntoView({ block: 'nearest' });
+      feedback.textContent = confirmed.about === listener ? `${note} Choose another listener or leave people unassigned.` : note;
     } catch { confirmed = null; feedback.textContent = 'Write one short story, up to 100 characters.'; }
     update();
   };
@@ -145,34 +153,45 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
   const build = (preferred?: VillagerId): void => {
     ownText = ''; selected = null; invalidate();
     const sim = ctx.sim(), snap = ctx.snapshot(), near = inReach(snap);
-    listener = near.find(v => v.id === preferred)?.id ?? near[0]?.id ?? null;
-    if (!near.length) {
-      const listed = awakePeople(snap).slice(0, 8);
+    listener = near.find(v => v.id === preferred)?.id ?? null;
+    const title = el.querySelector<HTMLElement>('.sheet-title')!;
+    if (!listener) {
+      title.textContent = 'Who should hear it?';
+      const listed = awakePeople(snap).filter(v => ctx.reachable?.(v.id) ?? true);
+      const personRow = (v: VillagerView) => h('div', { class: 'nearby-person' },
+        faceImg(v.id, v.look, 34), h('span', null, h('strong', null, v.name), h('small', null, sim.cast.get(v.id)?.role ?? 'Neighbour')),
+        h('button', { class: 'button button-quiet walk-to', type: 'button', 'aria-label': `Choose ${v.name}, walk over to whisper`,
+          onclick: () => { api.close(); ctx.walkTo(v.id); } }, `Choose ${v.name}`));
       content.replaceChildren(h('div', { class: 'nearby-people' },
-        h('p', { class: 'sheet-note' }, isNight(snap) && listed.length ? 'Most of the village is asleep. The inn is still awake.' : listed.length ? 'Walk closer to someone to whisper.' : 'The village is asleep. Try again in the morning.'), listed.map(v => h('div', { class: 'nearby-person' },
-          faceImg(v.id, v.look, 34), h('span', null, h('strong', null, v.name), h('small', null, sim.cast.get(v.id)?.role ?? 'Neighbour')),
-          h('button', { class: 'button button-quiet walk-to', type: 'button', disabled: v.activity === 'sleep',
-            'aria-label': v.activity === 'sleep' ? `${v.name}, asleep` : `Walk to ${v.name}`,
-            onclick: () => { api.close(); ctx.walkTo(v.id); } }, v.activity === 'sleep' ? 'Asleep' : 'Walk to')))));
+        h('p', { class: 'sheet-note' }, listed.length ? `${isNight(snap) ? 'Most people are asleep. These people are awake. ' : ''}Choose someone. You’ll walk over, then choose a story.` : 'No awake listener is reachable. Try again later.'),
+        listed.slice(0, 3).map(personRow), listed.length > 3 ? h('details', null, h('summary', null, 'More people'), listed.slice(3).map(personRow)) : null));
       form.dataset.empty = 'true'; update(); return;
     }
+    title.textContent = `Whisper to ${sim.cast.get(listener)?.name ?? listener}`;
     form.dataset.empty = 'false';
     const who = h('fieldset', { class: 'whisper-who' }, h('legend', null, 'To'), h('div', { class: 'who-list' }, near.map(v => {
       const input = h('input', { type: 'radio', name: 'rt-listener', value: v.id, class: 'sr-only', checked: v.id === listener });
-      input.addEventListener('change', () => { listener = v.id; invalidate(); update(); });
+      input.addEventListener('change', () => { listener = v.id; invalidate(); title.textContent = `Whisper to ${v.name}`; renderCards(); update(); });
       return h('label', { class: 'who' }, input, h('span', { class: 'who-card' }, faceImg(v.id, v.look, 34),
         h('span', { class: 'who-text' }, h('span', { class: 'who-name' }, v.name), h('span', { class: 'who-role' }, sim.cast.get(v.id)?.role ?? 'Neighbour'))));
     })));
     const typed = h('textarea', { id: 'rt-own-story', rows: 3, maxlength: MAX_RUMOR_TEXT,
-      placeholder: 'Tom borrowed Ben’s boat and never gave it back.', 'aria-describedby': 'rt-writing-note' });
+      placeholder: 'Write a short story about the village.', 'aria-describedby': 'rt-writing-note' });
     const preview = h('p', { class: 'sheet-note', id: 'rt-writing-note' }, 'Any kind of story, in your words. Use fictional details. Review what will be shared before sending.');
     confirmation = h('div', { class: 'whisper-confirmation', hidden: true, role: 'status' });
     const choose = (claim: GameClaim): void => {
       invalidate(); busy = false; activeRevision = -1; form.removeAttribute('aria-busy');
       ownText = ''; typed.value = ''; selected = claim;
-      feedback.textContent = 'Selected from the library. No AI credits used.';
+      cards.querySelectorAll<HTMLButtonElement>('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.claim === claim.id)));
+      feedback.textContent = claim.about === listener ? 'This story is about your listener. Choose another person or another story.' : `You chose: “${claim.text}”`;
       update(); sendBtn.focus();
     };
+    const cards = h('div', { class: 'first-stories', role: 'group', 'aria-label': 'Choose a story' });
+    const renderCards = (): void => {
+      cards.replaceChildren(...firstStories([...sim.claims.values(), ...rumorLibrary.flatMap(pack => pack.stories.map(story => story.claim))], listener!)
+        .map(claim => h('button', { type: 'button', class: 'story-choice', 'data-claim': claim.id, 'aria-pressed': String(selected?.id === claim.id), onclick: () => choose(claim) }, claim.text)));
+    };
+    renderCards();
     const what = h('fieldset', { class: 'whisper-what' }, h('legend', null, 'Say that'), [...sim.claims.values()].map(claim => {
       const input = h('input', { type: 'radio', name: 'rt-claim', value: claim.id, class: 'sr-only' });
       input.addEventListener('change', () => choose(claim));
@@ -181,13 +200,16 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
     const suggestions = h('details', { class: 'whisper-suggestions authored-stories' }, h('summary', null, 'Or choose a village story'), what);
     typed.addEventListener('input', () => {
       invalidate(); ownText = typed.value; selected = null;
-      suggestions.open = !ownText.trim();
+      cards.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', 'false'));
       what.querySelectorAll<HTMLInputElement>('input').forEach(input => { input.checked = false; });
       update();
     });
     const library = createRumorLibrary(rumorLibrary, choose);
-    content.replaceChildren(who, h('label', { class: 'own-claim', for: 'rt-own-story' }, h('span', null, 'Write your whisper'), typed),
-      preview, localBtn, confirmation, library, suggestions);
+    const writing = h('details', { class: 'write-story' }, h('summary', null, 'Write my own'),
+      h('label', { class: 'own-claim', for: 'rt-own-story' }, h('span', null, 'Your story'), typed), preview);
+    const people = h('details', { class: 'change-listener' }, h('summary', null, 'Choose another person'), who,
+      h('button', { type: 'button', class: 'text-button', onclick: () => { build(); content.querySelector<HTMLElement>('.walk-to')?.focus(); } }, 'Find more people'));
+    content.replaceChildren(cards, writing, confirmation, library, suggestions, people);
     update();
   };
   const api: WhisperSheet = {
@@ -197,7 +219,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
       activeRevision = -1; busy = false; form.removeAttribute('aria-busy'); build(opts.listener);
       if (!open) { open = true; reveal(el); ctx.layers.open({ id: 'whisper', el, modal: true, close: () => api.close() }, opts.opener); ctx.onOpenChange(true); }
       api.warm();
-      (el.querySelector<HTMLElement>(inReach(ctx.snapshot()).length ? ctx.isPhone() ? '.whisper-who input' : '.own-claim textarea' : '.walk-to') ?? el.querySelector<HTMLElement>('.close'))?.focus({ preventScroll: true });
+      (content.querySelector<HTMLElement>(listener ? '.story-choice' : '.walk-to') ?? el.querySelector<HTMLElement>('.close'))?.focus({ preventScroll: true });
     },
     warm() {
       if (!open) return;

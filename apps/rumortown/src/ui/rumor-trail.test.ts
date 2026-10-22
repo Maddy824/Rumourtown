@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadLink } from '../sim/types.js';
-import { createTrailHistory } from './rumor-trail.js';
+import { createTrailHistory, heardSinceWhisper } from './rumor-trail.js';
 
 const link = (tick: number, from = 'mira', to = 'ben'): ThreadLink => ({ tick, from, to, claimId: 'story' });
 describe('rumor transmission history', () => {
@@ -25,4 +25,21 @@ describe('rumor transmission history', () => {
     history.record([link(0)]);
     expect(history.links).toEqual([link(0)]);
   });
+});
+
+it('counts unique recipients in recorded order from the first player telling, excluding earlier same-tick gossip and other claims', () => {
+  const links = [link(10, 'ben', 'tom'), link(10, 'stranger', 'mira'), link(10, 'mira', 'ben'),
+    link(10, 'ben', 'ben'), link(11, 'mira', 'ben'), { ...link(12, 'ben', 'rosa'), claimId: 'other' }, link(13, 'ben', 'pim')];
+  expect(heardSinceWhisper(links, 'story')).toBe(3);
+  expect(heardSinceWhisper(links, 'other')).toBe(0);
+});
+it('recounts retained history after the snapshot window rolls forward and on rewind before the whisper', () => {
+  let history = createTrailHistory();
+  history.record([link(10, 'stranger', 'mira'), link(11, 'mira', 'ben')]);
+  history.record([link(50, 'ben', 'rosa')]);
+  expect(heardSinceWhisper(history.links, 'story')).toBe(3);
+  history = createTrailHistory(); history.record([link(5, 'mira', 'ben')]);
+  expect(heardSinceWhisper(history.links, 'story')).toBe(0);
+  history.record([link(10, 'stranger', 'mira')]);
+  expect(heardSinceWhisper(history.links, 'story')).toBe(1);
 });

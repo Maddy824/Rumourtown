@@ -17,12 +17,14 @@ export function createFieldGuide(ctx: {
   walkTo: (point: Vec2) => void; inspect: (id: string) => void;
   onOpenChange: (open: boolean, mode: Mode) => void;
 }) {
-  const heading = h('h2', { id: 'rt-guide-title', tabindex: '-1' }, 'Explore the village');
+  const heading = h('h2', { id: 'rt-guide-title', tabindex: '-1' }, 'Map');
   const close = h('button', { class: 'close', type: 'button', 'aria-label': 'Close village guide', onclick: () => api.close() }, closeIcon());
   const tabs = h('div', { class: 'guide-tabs', role: 'group', 'aria-label': 'Village guide' });
-  const exploreTab = h('button', { class: 'button button-quiet', type: 'button', onclick: () => setMode('explore') }, 'Explore');
+  const exploreTab = h('button', { class: 'button button-quiet', type: 'button', onclick: () => setMode('explore') }, 'Map');
   const researchTab = h('button', { class: 'button button-quiet', type: 'button', onclick: () => setMode('research') }, 'Research notebook');
   tabs.append(exploreTab, researchTab);
+  // Research remains reachable from Menu; Map opens directly on travel.
+  tabs.hidden = true;
 
   const mapEl = svg('svg', { class: 'atlas-map', viewBox: `0 0 ${ctx.map.width * 10} ${ctx.map.height * 10}`, role: 'img', 'aria-label': 'Live village map. Use the destination buttons below to travel by keyboard.' });
   const defs = svg('defs', null,
@@ -190,7 +192,7 @@ export function createFieldGuide(ctx: {
     exploreTab.setAttribute('aria-pressed', String(next === 'explore'));
     researchTab.setAttribute('aria-pressed', String(next === 'research'));
     (next === 'explore' ? explore : research).scrollTop = 0;
-    heading.textContent = next === 'explore' ? 'Explore the village' : 'Research notebook';
+    heading.textContent = next === 'explore' ? 'Map' : 'Research notebook';
     if (open) { ctx.onOpenChange(true, next); lastTick = -1; api.update(); }
   }
   mapEl.addEventListener('click', ev => {

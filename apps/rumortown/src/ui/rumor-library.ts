@@ -2,6 +2,12 @@ import type { RumorPack } from '../content/rumor-packs/registry.js';
 import type { GameClaim } from '../sim/types.js';
 import { h } from './dom.js';
 
+/** Short authored examples first; never offer the listener a story about themselves. */
+export function firstStories(claims: Iterable<GameClaim>, listener: string): GameClaim[] {
+  return [...claims].filter(claim => claim.about !== listener && claim.kind !== 'story' && !claim.alternativeOf)
+    .slice(0, 3);
+}
+
 /** One story at a time, with a separate choice before a whisper is sent. */
 export function createRumorLibrary(packs: RumorPack[], choose: (claim: GameClaim) => void): HTMLElement {
   const theme = h('select', { class: 'rumor-library-theme', 'aria-label': 'Story collection' },

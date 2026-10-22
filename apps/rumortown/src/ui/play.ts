@@ -25,22 +25,22 @@ export function createPlay(ctx: {
   isPhone: () => boolean; onTypingChange: (typing: boolean) => void;
   onOpenChange: (open: boolean) => void; act: (reply: PlayReply) => void; rumors: () => void;
 }) {
-  const title = h('h2', { id: 'rt-play-title' }, 'Talk or act');
+  const title = h('h2', { id: 'rt-play-title' }, 'Talk');
   const person = h('select', { id: 'rt-play-person', 'aria-label': 'Talk to' });
   const input = h('textarea', { id: 'rt-play-input', rows: 3, maxlength: 280, placeholder: 'Say something, ask a question, or tell me where to go…', required: true });
   const status = h('p', { class: 'play-status', role: 'status' });
   const transcript = h('div', { class: 'play-transcript', role: 'log', 'aria-label': 'Your conversation', 'aria-live': 'polite' });
   const send = h('button', { type: 'submit', class: 'button button-primary' }, 'Send');
-  const form = h('form', { class: 'play-form' }, h('label', { for: 'rt-play-person' }, 'Talk to'), person,
-    transcript, h('label', { for: 'rt-play-input' }, 'Your words'), input, status,
-    h('div', { class: 'card-actions' }, send, h('button', { type: 'button', class: 'button button-quiet', onclick: () => { api.close(); ctx.rumors(); } }, 'Spread a rumor')));
+  const form = h('form', { class: 'play-form' }, h('div', { class: 'play-content' }, h('label', { for: 'rt-play-person' }, 'Talk to'), person,
+    transcript, h('label', { for: 'rt-play-input' }, 'Your words'), input, status),
+    h('div', { class: 'card-actions play-actions' }, send, h('button', { type: 'button', class: 'button button-quiet', onclick: () => { api.close(); ctx.rumors(); } }, 'Whisper')));
   const quick = h('div', { class: 'play-quick' },
     h('button', { type: 'button', class: 'text-button', onclick: () => execute({ reply: '', action: 'look', target: '' }) }, 'Look around'),
     h('button', { type: 'button', class: 'text-button', onclick: () => execute({ reply: '', action: 'move', target: 'square' }) }, 'Walk to the square'));
   const el = h('section', { class: 'sheet play-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-play-title', hidden: true },
     h('div', { class: 'sheet-paper' }, h('header', { class: 'sheet-head' }, title,
       h('button', { type: 'button', class: 'close', 'aria-label': 'Close conversation', onclick: () => api.close() }, closeIcon())),
-    h('p', { class: 'sheet-note' }, 'The village moves slowly while we talk. Time holds while you type.'), quick, form,
+    h('p', { class: 'sheet-note play-note' }, 'The village moves slowly while we talk. Paused while you type.'), quick, form,
     h('p', { class: 'play-footnote' }, 'Walking, visiting and questions about the village are answered by the village itself. Open conversation is voiced by AI from what that villager knows. Actions happen only when you choose them.')));
   let turnstile: TurnstileClient | undefined, controller: AbortController | undefined;
   // Each villager remembers their own conversation with you; the village narrator has its own.

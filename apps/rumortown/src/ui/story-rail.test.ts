@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { newestStoryEntries, storyBeat, storyTarget } from './story-beats.js';
-import type { SimEvent, Simulation, WorldSnapshot } from '../sim/types.js';
+import type { GameClaim, SimEvent, Simulation, WorldSnapshot } from '../sim/types.js';
 import { HOW_IT_WORKS } from './how-it-works.js';
 import css from '../styles/app.css?raw';
 const sim = { cast: new Map(), claims: new Map() } as Pick<Simulation, 'cast' | 'claims'>;
@@ -56,4 +56,33 @@ it('names every library rumor in long Now beats rather than replacing it with ge
     expect(sentence).toContain(claim.text);
     expect(sentence).not.toContain('a village rumor');
   }
+});
+
+it('filters two player stories by the selected claim and its supported correction, including same-tick order', async () => {
+  const { selectedStoryEvents } = await import('./story-beats.js');
+  const claims = new Map<string, GameClaim>([
+    ['a', { id: 'a', about: 'tom', text: 'Tom stole bread', kind: 'theft', severity: 2, valence: -1 }],
+    ['b', { id: 'b', about: 'jonah', text: 'Jonah met Rosa', kind: 'romance', severity: 1, valence: -1 }],
+    ['correction', { id: 'correction', about: 'tom', text: 'Tom brought bread to Ada', alternativeOf: 'a', kind: 'kindness', severity: 1, valence: 1 }],
+  ]) as Simulation['claims'];
+  const view = { claims };
+  const line = (claimId: string): SimEvent => ({ kind: 'line', tick: 10, claimId, speaker: 'ben', listeners: ['mira'], text: claimId, act: 'gossip', lineId: 'same' });
+  const earlier = line('a'), a = { ...whisper(10, 'mira'), claimId: 'a' } as SimEvent;
+  const b = { ...whisper(10, 'ben'), claimId: 'b' } as SimEvent;
+  const correction = line('correction'), laterA = line('a'), laterB = line('b');
+  const exposure: SimEvent = { kind: 'relationship', tick: 12, from: 'ben', to: 'stranger', trust: -0.1, affinity: 0, why: 'The story that Tom stole bread came from the stranger and did not hold up' };
+  const events = [earlier, a, b, correction, laterA, laterB, exposure];
+  expect([...selectedStoryEvents(events, view, 'a')]).toEqual([a, correction, laterA, exposure]);
+  expect([...selectedStoryEvents(events, view, 'b')]).toEqual([b, laterB]);
+});
+it('keeps event keys distinct for different stories told to the same listener at one paused tick', async () => {
+  const { eventKey } = await import('./story-beats.js');
+  const a = { kind: 'whisper', tick: 10, listener: 'mira', claimId: 'bread', witnesses: [] } as const;
+  expect(eventKey({ ...a, witnesses: [] })).not.toBe(eventKey({ ...a, witnesses: [], claimId: 'other' }));
+});
+it('retains selected authored village stories even when the player has not whispered that claim', async () => {
+  const { selectedStoryEvents } = await import('./story-beats.js');
+  const village: SimEvent = { kind: 'line', tick: 8, claimId: 'village', speaker: 'ben', listeners: ['mira'], text: 'Village news', act: 'gossip', lineId: 'village' };
+  expect([...selectedStoryEvents([whisper(1, 'mira'), village], sim, 'village')]).toEqual([village]);
+  expect([...selectedStoryEvents([village], sim, '')]).toEqual([]);
 });

@@ -1,6 +1,6 @@
 /** Read-only exchange history. The engine keeps its original cadence and event stream. */
 import type { SimEvent, Simulation, ThreadLink } from '../sim/types.js';
-import { eventKey, storyBeat, type StoryBeat } from './story-beats.js';
+import { eventKey, relatedClaim, storyBeat, type StoryBeat } from './story-beats.js';
 
 export interface ScriptLine { tick: number; speaker: string; text: string; claimId?: string; act?: string; listeners?: string[] }
 const scriptLine = (line: Extract<SimEvent, { kind: 'line' }>): ScriptLine => ({ tick: line.tick, speaker: line.speaker, text: line.text, claimId: line.claimId, act: line.act, listeners: line.listeners });
@@ -89,7 +89,7 @@ export function followsExchange(exchange: Exchange, selected: string, introduced
 /** Follow one rumor and its corrections; keep the complete conversation in history. */
 export function focusedScript(exchange: Exchange, selected: string, claims: Simulation['claims']): ScriptLine[] {
   if (!selected || !exchange.lines.some(line => line.claimId)) return exchange.lines;
-  const relevant = (id: string) => id === selected || Boolean(claims.get(selected)?.contradicts?.includes(id)) || Boolean(claims.get(id)?.contradicts?.includes(selected));
+  const relevant = (id: string) => relatedClaim(id, selected, claims);
   let topic = '';
   return exchange.lines.filter(line => {
     if (line.claimId) { topic = line.claimId; return relevant(topic); }

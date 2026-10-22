@@ -17,6 +17,7 @@ export class TestElement extends EventTarget {
     if (name === 'checked') this.checked = true;
   }
   removeAttribute(name: string): void { this.attrs.delete(name); }
+  getAttribute(name: string): string | null { return this.attrs.get(name) ?? null; }
   get textContent(): string { return this.ownText + this.children.map(c => c.textContent).join(''); }
   set textContent(value: string) { this.ownText = value; this.children = []; }
   get value(): string {

@@ -21,7 +21,7 @@ function sheet(phone = false, sleeping = false) {
   snapshot.villagers = [{ id: 'mira', name: 'Mira', pos: { x: 1, y: 0 }, facing: 's', moving: false, activity: sleeping ? 'sleep' : 'idle', tier: 'regular', look: cast[0]!.look, mood: 0 }];
   const ui = createWhisperSheet({ sim: () => sim, snapshot: () => snapshot, isPhone: () => phone, reducedMotion: () => true,
     layers: { open() {}, closed() {} } as unknown as Layers, whisper: () => true, walkTo() {}, onOpenChange() {} });
-  ui.open(); const root = ui.el as unknown as TestElement;
+  ui.open({ listener: 'mira' }); const root = ui.el as unknown as TestElement;
   return { ui, root, async submit(text: string) {
     const input = root.querySelector('textarea')!; input.value = text; input.dispatchEvent(new Event('input'));
     root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
@@ -41,17 +41,17 @@ it('keeps an open story usable after shared budget exhaustion', async () => {
   expect(view.root.querySelector('.whisper-confirmation')!.textContent).toContain('someone killed tom');
   expect(view.root.querySelector('.whisper-feedback')!.textContent).toContain('Your story still works');
 });
-it('warms a fresh widget on reopen and focuses the listener on phone without opening the keyboard', () => {
+it('warms a fresh widget on reopen and focuses the first story card on phone without opening the keyboard', () => {
   const focus = vi.spyOn(TestElement.prototype, 'focus');
   const view = sheet(true);
-  expect(focus.mock.instances.at(-1)).toBe(view.root.querySelector('.whisper-who input'));
+  expect(focus.mock.instances.at(-1)).toBe(view.root.querySelector('.story-choice'));
   expect(client.warm).toHaveBeenCalled(); view.ui.close(); expect(client.destroy).toHaveBeenCalled();
-  view.ui.open(); expect(vi.mocked(loadTurnstile).mock.calls.at(-1)?.[1]).toBe(view.root.querySelector('.whisper-challenge'));
+  view.ui.open({ listener: 'mira' }); expect(vi.mocked(loadTurnstile).mock.calls.at(-1)?.[1]).toBe(view.root.querySelector('.whisper-challenge'));
   focus.mockRestore();
 });
 it('explains when everyone is asleep without offering an unreachable listener', () => {
   const view = sheet(true, true);
   expect(view.root.querySelector('textarea')).toBeNull();
   expect(view.root.querySelector('.walk-to')).toBeNull();
-  expect(view.root.textContent).toContain('The village is asleep. Try again in the morning.');
+  expect(view.root.textContent).toContain('No awake listener is reachable. Try again later.');
 });

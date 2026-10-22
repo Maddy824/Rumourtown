@@ -2,7 +2,7 @@
 import type { SimEvent, Simulation } from '../sim/types.js';
 export type BeatKind = 'whisper' | 'confrontation' | 'defence' | 'apology' | 'exposure';
 export interface StoryBeat { tick: number; kind: BeatKind; text: string; faces: [string, string]; event: SimEvent }
-export const eventKey = (e: SimEvent): string => `${e.tick}:${e.kind}:${e.kind === 'line' ? e.speaker + ':' + e.lineId : e.kind === 'whisper' ? e.listener : e.kind === 'relationship' ? e.from + ':' + e.to : e.kind === 'witness' ? e.villager + ':' + (e.subject ?? '') + ':' + (e.secretId ?? e.what) : ''}`;
+export const eventKey = (e: SimEvent): string => `${e.tick}:${e.kind}:${e.kind === 'line' ? e.speaker + ':' + e.lineId + ':' + (e.claimId ?? '') : e.kind === 'whisper' ? e.listener + ':' + e.claimId : e.kind === 'relationship' ? e.from + ':' + e.to : e.kind === 'witness' ? e.villager + ':' + (e.subject ?? '') + ':' + (e.secretId ?? e.what) : ''}`;
 export function storyBeat(e: SimEvent, sim: Pick<Simulation, 'cast' | 'claims'>): StoryBeat | null {
   const name = (id: string): string => id === 'stranger' ? 'You' : sim.cast.get(id)?.name ?? id;
   if (e.kind === 'whisper') return { tick: e.tick, kind: 'whisper', text: `You told ${name(e.listener)} that ${sim.claims.get(e.claimId)?.text ?? 'a story was going around'}`, faces: ['stranger', e.listener], event: e };
@@ -98,6 +98,26 @@ export function playerStoryEvents(events: readonly SimEvent[], sim: Pick<Simulat
         (claim?.alternativeOf && introduced.has(claim.alternativeOf)) || claim?.contradicts?.some(id => introduced.has(id)))) ||
         (e.kind === 'relationship' && e.to === 'stranger' && introduced.size > 0) ||
         (e.kind === 'witness' && [...introduced].some(id => sim.claims.get(id)?.about === e.subject))) own.add(e);
+  }
+  return own;
+}
+
+/** Match only supported links to the selected claim, never another player's story. */
+export function relatedClaim(id: string, selected: string, claims: Simulation['claims']): boolean {
+  const claim = claims.get(id), original = claims.get(selected);
+  return id === selected || claim?.alternativeOf === selected || original?.alternativeOf === id ||
+    Boolean(claim?.contradicts?.includes(selected) || original?.contradicts?.includes(id));
+}
+export function selectedStoryEvents(events: readonly SimEvent[], sim: Pick<Simulation, 'claims'>, selected: string): ReadonlySet<SimEvent> {
+  const own = new Set<SimEvent>();
+  // Authored village stories also remain selectable; only player journeys need a cutoff.
+  let started = !events.some(e => e.kind === 'whisper' && e.claimId === selected);
+  for (const e of events) {
+    if (e.kind === 'whisper' && e.claimId === selected) started = true;
+    if (!started) continue;
+    if ((e.kind === 'whisper' || e.kind === 'line') && e.claimId && relatedClaim(e.claimId, selected, sim.claims)) own.add(e);
+    if (e.kind === 'witness' && e.subject && sim.claims.get(selected)?.about === e.subject) own.add(e);
+    if (e.kind === 'relationship' && e.to === 'stranger' && e.why === `The story that ${sim.claims.get(selected)?.text} came from the stranger and did not hold up`) own.add(e);
   }
   return own;
 }

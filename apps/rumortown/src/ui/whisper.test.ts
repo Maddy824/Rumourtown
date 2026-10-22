@@ -49,7 +49,7 @@ it('lists awake people beyond nearby sleepers in the night empty state', () => {
     whisper: () => false, walkTo, onOpenChange() {} });
   ui.open();
   const root = ui.el as unknown as TestElement;
-  expect(root.textContent).toContain('Most of the village is asleep. The inn is still awake.');
+  expect(root.textContent).toContain('Most people are asleep. These people are awake.');
   const walks = root.querySelectorAll('.walk-to'); expect(walks).toHaveLength(1);
   walks[0]!.dispatchEvent(new Event('click')); expect(walkTo).toHaveBeenCalledWith('rosa');
 });
@@ -141,4 +141,58 @@ it.each(['Tom said f.u.c.k', 'Tom said F U C K', 'Tom said s.e.x', 'Tom said n i
   view.start.mockResolvedValue({ source: 'neutral', meaning: neutralMeaning(), note: 'No AI' });
   view.write('The moon is made of cheese');
   await view.submit(); await view.submit(); expect(view.whispered).toHaveLength(1);
+});
+
+it('shows three exact existing stories without opening a collection and sends only after an explicit submit', async () => {
+  const view = sheet(); view.ui.close(); view.ui.open({ listener: 'mira' });
+  const cards = view.root.querySelectorAll('.story-choice');
+  expect(cards).toHaveLength(3);
+  expect(cards.every(card => card.parent?.tagName !== 'details')).toBe(true);
+  expect(view.root.querySelectorAll('summary').map(row => row.textContent)).toContain('Write my own');
+  const text = cards[0]!.textContent;
+  cards[0]!.dispatchEvent(new Event('click'));
+  expect(view.start).not.toHaveBeenCalled(); expect(view.whispered).toEqual([]);
+  expect(view.root.querySelector('.whisper-actions')!.querySelector('button')!.disabled).toBe(false);
+  await view.submit();
+  expect(view.sim.claims.get(view.whispered[0]!)?.text).toBe(text);
+});
+it('requires a new typed preview after changing the listener', async () => {
+  const view = sheet({ source: 'neutral', meaning: neutralMeaning(), note: 'No AI' });
+  await view.submit();
+  view.root.querySelectorAll('input').find(input => input.value === 'tom')!.dispatchEvent(new Event('change'));
+  expect(view.root.querySelector('.whisper-confirmation')!.hidden).toBe(true);
+  await view.submit(); expect(view.whispered).toHaveLength(0);
+  await view.submit(); expect(view.whispered).toHaveLength(1);
+  expect(view.start).toHaveBeenCalledTimes(2);
+});
+it('requires confirmation after an inference failure and does not publish a fallback draft early', async () => {
+  const view = sheet(); view.start.mockRejectedValue(new Error('offline'));
+  await view.submit();
+  expect(view.whispered).toEqual([]);
+  expect(view.root.querySelector('.whisper-confirmation')!.hidden).toBe(false);
+  expect(view.root.querySelector('.whisper-confirmation')!.textContent).toContain('research exports and shared replay links');
+  await view.submit();
+  expect(view.sim.claims.get(view.whispered[0]!)?.meaning).toEqual(neutralMeaning());
+});
+it('offers awake reachable listeners first, then opens cards only on arrival', () => {
+  vi.stubGlobal('document', sheetDocument());
+  const sim = createFakeSimulation(731), snap = sim.snapshot(), walkTo = vi.fn();
+  snap.player.pos = { x: 0, y: 0 };
+  snap.villagers = [person('mira', 1), { ...person('ben', 2), activity: 'sleep' }, person('tom', 3), person('rosa', 4)];
+  const ui = createWhisperSheet({ sim: () => sim, snapshot: () => snap, isPhone: () => true, reducedMotion: () => true,
+    layers: { open() {}, closed() {} } as unknown as Layers, flow: { start: vi.fn() },
+    whisper: () => false, walkTo, reachable: id => id !== 'tom', onOpenChange() {} });
+  ui.open(); const root = ui.el as unknown as TestElement;
+  expect(root.querySelectorAll('.story-choice')).toHaveLength(0);
+  expect(root.querySelectorAll('.walk-to').map(row => row.textContent)).toEqual(['Choose mira', 'Choose rosa']);
+  root.querySelector('.walk-to')!.dispatchEvent(new Event('click'));
+  expect(walkTo).toHaveBeenCalledWith('mira'); expect(ui.isOpen()).toBe(false);
+  ui.open({ listener: 'mira' });
+  expect(root.querySelectorAll('.story-choice')).toHaveLength(3);
+});
+it('never offers the selected listener a ready-made story about themselves', () => {
+  const view = sheet(); view.ui.open({ listener: 'tom' });
+  const cards = view.root.querySelectorAll('.story-choice');
+  expect(cards).toHaveLength(3);
+  for (const card of cards) expect(card.textContent).not.toMatch(/^Tom /);
 });

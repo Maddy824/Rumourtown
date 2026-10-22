@@ -4,6 +4,15 @@ import { h } from './dom.js';
 import { faceImg } from './faces.js';
 import { tickLabel } from './format.js';
 
+/** Recorded order matters: earlier tellings can share the first whisper's tick. */
+export function sinceFirstWhisper(links: readonly ThreadLink[], selected: string): readonly ThreadLink[] {
+  const first = links.findIndex(link => link.claimId === selected && link.from === 'stranger' && link.to !== link.from);
+  return first < 0 ? [] : links.slice(first).filter(link => link.claimId === selected && link.from !== link.to);
+}
+export function heardSinceWhisper(links: readonly ThreadLink[], selected: string): number {
+  return new Set(sinceFirstWhisper(links, selected).map(link => link.to)).size;
+}
+
 /** Collect actual transmissions, not belief corrections (which also emit belief events). */
 export function createTrailHistory() {
   const links: ThreadLink[] = [];

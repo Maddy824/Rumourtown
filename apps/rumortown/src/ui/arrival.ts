@@ -24,7 +24,7 @@ export function createArrival(root: HTMLElement, onEnter?: () => void) {
     h('div', { class: 'arrival-stars', 'aria-hidden': 'true' }, ...paperStars.map(s => h('span', { style: `left:${s.x * 100}%;top:${s.y * 300}%;width:${s.size * 2}px;height:${s.size * 2}px` }))),
     ...[0, 1, 2, 3].map(i => h('div', { class: `felt-cloud cloud-${i}`, 'aria-hidden': 'true' })),
     h('div', { class: 'arrival-title' }, h('span', { class: 'arrival-eyebrow' }, 'Somewhere between a dream and a secret'), h('h1', null, 'Rumourtown'),
-      h('p', null, 'Walk, whisper a story, and watch it spread. The villagers think for themselves.'),
+      h('p', null, '36 autonomous agents, each with their own memory, trust and beliefs. Built as a research project on trustworthy AI.'),
       h('small', null, 'Made by ', h('a', { href: 'https://github.com/Maddy824', target: '_blank', rel: 'noopener noreferrer' }, 'Madhav'), ', who likes to hear gossip.')),
     figure, h('div', { class: 'arrival-puff', 'aria-hidden': 'true' }), skip, hint);
   document.body.append(el);

@@ -1,19 +1,20 @@
 /** Secondary tools and short instructions, kept out of the walking controls. */
 import { h } from './dom.js';
-import { AGENT_COPY, howItWorksContent } from './how-it-works.js';
+import { AGENT_COPY, HOW_TO_PLAY, howItWorksContent } from './how-it-works.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
 
 export function createTools(ctx: {
   layers: Layers;
-  actions: HTMLButtonElement[];
+  actions: { play: HTMLButtonElement[]; settings: HTMLButtonElement[]; curious: HTMLButtonElement[] };
   onAgent: () => void;
   onReplayArrival: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
-  const title = h('h2', { id: 'rt-tools-title', tabindex: '-1' }, 'More');
+  const title = h('h2', { id: 'rt-tools-title', tabindex: '-1' }, 'Menu');
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'Close tools', onclick: () => api.close() }, closeIcon());
-  const help = howItWorksContent(); help.hidden = true;
+  const help = h('section', { hidden: true }, h('p', null, HOW_TO_PLAY));
+  const inside = howItWorksContent(); inside.hidden = true;
   const repo = 'https://github.com/Maddy824/Rumourtown/blob/build/village/';
   const developers = h('section', { hidden: true },
     h('p', { class: 'guide-intro' }, 'Give your agent a town to explore'),
@@ -43,26 +44,31 @@ export function createTools(ctx: {
     h('p', null, h('a', { href: `${repo}packages/rumormind/README.md`, target: '_blank', rel: 'noopener noreferrer' }, 'Read the TypeScript library guide')),
     h('h3', null, 'Compare and reproduce'),
     h('p', null, 'Keep the same seed and action log to reproduce an agent run. The research notebook exports events, beliefs and paired comparisons. These are synthetic experiments, not validated predictions of people.'));
-  const helpBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => show('help') }, 'How it works');
+  const helpBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => show('help') }, 'How to play');
+  const insideBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => show('inside') }, 'How the AI works');
   const devBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => show('developers') }, 'Developer guide');
-  const about = h('section', { hidden: true }, h('h3', null, 'An agentic village'), h('p', null, AGENT_COPY),
+  const about = h('section', { hidden: true }, h('h3', null, 'A village of stories'), h('p', null, HOW_TO_PLAY), h('p', null, AGENT_COPY),
     h('p', null, h('a', { href: '/about', target: '_blank', rel: 'noopener noreferrer' }, 'Read about Rumourtown')),
     h('p', null, 'AI agents can play too through the published agent protocol. Open the developer guide for agent/environment.ts and npm run agent:demo.'),
     h('p', null, 'For ages 13 and up. Fictional adult villagers. A research-informed game, with tuned numbers, rather than a predictor of real people.'),
     h('p', null, 'Made by ', h('a', { href: 'https://github.com/Maddy824', target: '_blank', rel: 'noopener noreferrer' }, 'Madhav'), ', who likes to hear gossip.'));
   const aboutBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => show('about') }, 'About');
-  const replayBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => { api.close(); ctx.onReplayArrival(); } }, 'Replay the arrival');
-  const menu = h('div', { class: 'tools-menu' }, helpBtn, replayBtn, ...ctx.actions, devBtn, aboutBtn);
-  const back = h('button', { class: 'button button-quiet', type: 'button', hidden: true, onclick: () => { show('menu'); (last === 'help' ? helpBtn : last === 'about' ? aboutBtn : devBtn).focus(); } }, 'Back to tools');
-  const body = h('div', { class: 'guide-body' }, menu, back, help, developers, about);
+  const replayBtn = h('button', { class: 'button button-quiet', type: 'button', onclick: () => { api.close(); ctx.onReplayArrival(); } }, 'Watch the arrival again');
+  const menu = h('div', { class: 'tools-menu' },
+    h('section', null, h('h3', null, 'Play'), helpBtn, replayBtn, ...ctx.actions.play),
+    h('section', null, h('h3', null, 'Settings'), ...ctx.actions.settings),
+    h('section', null, h('h3', null, 'For the curious'), ...ctx.actions.curious, insideBtn, devBtn, aboutBtn));
+  help.appendChild(h('p', { class: 'sheet-note' }, 'Watching the arrival again does not restart your village.'));
+  const back = h('button', { class: 'button button-quiet', type: 'button', hidden: true, onclick: () => { show('menu'); (last === 'help' ? helpBtn : last === 'inside' ? insideBtn : last === 'about' ? aboutBtn : devBtn).focus(); } }, 'Back to menu');
+  const body = h('div', { class: 'guide-body' }, menu, back, help, inside, developers, about);
   const el = h('section', { class: 'field-guide tools', hidden: true, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rt-tools-title' },
     h('div', { class: 'guide-paper' }, h('header', { class: 'sheet-head' }, title, close), body));
   let last = 'help';
-  function show(mode: 'menu' | 'help' | 'developers' | 'about'): void {
+  function show(mode: 'menu' | 'help' | 'inside' | 'developers' | 'about'): void {
     menu.hidden = mode !== 'menu'; back.hidden = mode === 'menu';
-    help.hidden = mode !== 'help'; developers.hidden = mode !== 'developers'; about.hidden = mode !== 'about';
+    help.hidden = mode !== 'help'; inside.hidden = mode !== 'inside'; developers.hidden = mode !== 'developers'; about.hidden = mode !== 'about';
     if (mode !== 'menu') last = mode;
-    title.textContent = mode === 'menu' ? 'More' : mode === 'help' ? 'How it works' : mode === 'about' ? 'About' : 'Developer guide';
+    title.textContent = mode === 'menu' ? 'Menu' : mode === 'help' ? 'How to play' : mode === 'inside' ? 'How the AI works' : mode === 'about' ? 'About' : 'Developer guide';
     body.scrollTop = 0;
     title.focus();
   }

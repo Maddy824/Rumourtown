@@ -11,7 +11,7 @@ import type { Layers } from './layers.js';
 
 export type Speed = 0 | 0.5 | 1 | 2 | 8;
 export const SPEEDS: readonly Speed[] = [0, 0.5, 1, 2, 8];
-export const speedLabel = (s: Speed): string => (s === 0 ? 'Pause' : s === .5 ? 'Slow' : `${s}×`);
+export const speedLabel = (s: Speed): string => (s === 0 ? 'Paused' : s === .5 ? 'Slow' : s === 1 ? 'Normal' : `${s}×`);
 
 export interface TimeContext {
   layers: Layers;
@@ -35,6 +35,7 @@ export interface TimeState {
   speed: Speed;
   /** True while something else holds time, such as an open whisper sheet. */
   held: boolean;
+  pauseReason?: string;
 }
 
 export interface TimeControls {
@@ -72,6 +73,8 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
   const clock = h('span', { class: 'strip-clock' });
   const nextBeat = h('button', { class: 'text-button next-beat', type: 'button', hidden: true, title: 'Next beat (period key)', onclick: () => ctx.onNextBeat?.() }, 'Next beat');
   const bar = h('div', { class: 'timebar' }, clock, speed, nextBeat, ribbon);
+  const reason = h('p', { class: 'time-reason', role: 'status', hidden: true });
+  bar.appendChild(reason);
 
   const tabSpeed = h('span', { class: 'time-tab-speed' }, '1×');
   const tab = h('button', { class: 'time-tab', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'rt-time-drawer' },
@@ -166,8 +169,11 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
       const radio = radios.get(s.speed);
       if (radio && !radio.checked) radio.checked = true;
       bar.dataset.held = s.held ? 'true' : 'false';
-      tabSpeed.textContent = s.held ? 'Held' : s.speed === 0 ? 'Paused' : speedLabel(s.speed);
-      tab.setAttribute('aria-label', `Time controls, ${s.held ? 'time is held' : s.speed === 0 ? 'paused' : `playing at ${s.speed}×`}`);
+      const explanation = s.pauseReason ?? (s.held ? 'Paused while a panel is open.' : s.speed === 0 ? 'You paused the village. Choose a speed to resume.' : '');
+      tabSpeed.textContent = s.held ? 'Paused' : speedLabel(s.speed);
+      tab.setAttribute('aria-label', `Time controls. ${explanation || `Playing at ${s.speed}×`}`);
+      tab.title = explanation;
+      reason.textContent = explanation; reason.hidden = !explanation;
       reached.style.width = `${(maxTick / runTicks) * 100}%`;
       const dayCount = Math.ceil(runTicks / MINUTES_PER_DAY);
       if (runTicks !== lastSpan) {
@@ -197,7 +203,7 @@ export function createTimeControls(ctx: TimeContext): TimeControls {
           input.setAttribute('aria-valuetext', tickLabel(s.tick));
         }
       }
-      drawerReadout.textContent = tickLabel(s.tick);
+      drawerReadout.textContent = `${tickLabel(s.tick)}. ${explanation}`;
     },
     openDrawer(opener) {
       if (drawerOpen) return;
