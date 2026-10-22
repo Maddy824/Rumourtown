@@ -8,7 +8,7 @@ const assert = (ok, why) => { if (!ok) throw Error(why); };
 const browser = engine === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: 'chrome', headless: true });
 const results = [];
 try {
-  for (const profile of [{ width: 390, height: 844, dpr: 3, cpu: 4 }, { width: 360, height: 640, dpr: 3, cpu: 4 }, { width: 1280, height: 800, dpr: 2, cpu: 1 }]) {
+  for (const profile of [{ width: 390, height: 844, dpr: 3, cpu: 4 }, { width: 360, height: 640, dpr: 3, cpu: 4 }, { width: 1280, height: 800, dpr: 2, cpu: 1 }].filter(p => !process.env.WIDTH || p.width === Number(process.env.WIDTH))) {
     const page = await browser.newPage({ viewport: { width: profile.width, height: profile.height }, deviceScaleFactor: profile.dpr, isMobile: profile.width < 760, hasTouch: profile.width < 760 });
     const errors = []; page.on('console', message => { if (message.text().includes('renderer failed')) errors.push(message.text()); }); page.on('pageerror', e => errors.push(e.message)); page.on('crash', () => errors.push('page crashed'));
     await page.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin ? route.continue() : route.abort());

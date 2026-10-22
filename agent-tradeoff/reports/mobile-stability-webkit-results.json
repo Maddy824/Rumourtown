@@ -1,0 +1,101 @@
+[
+  {
+    "base": "http://127.0.0.1:5196",
+    "engine": "webkit",
+    "profile": {
+      "width": 390,
+      "height": 844,
+      "dpr": 3,
+      "cpu": 1
+    },
+    "initial": {
+      "count": 2493,
+      "rgbaMiB": 57.92689895629883,
+      "created": 2637,
+      "screen": [
+        488,
+        1055
+      ]
+    },
+    "final": {
+      "count": 2493,
+      "rgbaMiB": 57.92689895629883,
+      "created": 5936,
+      "screen": [
+        488,
+        1055
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "614",
+    "afterRun": "650",
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5196",
+    "engine": "webkit",
+    "profile": {
+      "width": 360,
+      "height": 640,
+      "dpr": 3,
+      "cpu": 1
+    },
+    "initial": {
+      "count": 2493,
+      "rgbaMiB": 57.041709899902344,
+      "created": 2637,
+      "screen": [
+        450,
+        800
+      ]
+    },
+    "final": {
+      "count": 2493,
+      "rgbaMiB": 57.041709899902344,
+      "created": 6134,
+      "screen": [
+        450,
+        800
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "614",
+    "afterRun": "649",
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5196",
+    "engine": "webkit",
+    "profile": {
+      "width": 1280,
+      "height": 800,
+      "dpr": 2,
+      "cpu": 1
+    },
+    "initial": {
+      "count": 2492,
+      "rgbaMiB": 198.97409439086914,
+      "created": 2844,
+      "screen": [
+        2560,
+        1600
+      ]
+    },
+    "final": {
+      "count": 2492,
+      "rgbaMiB": 198.97409439086914,
+      "created": 6166,
+      "screen": [
+        2560,
+        1600
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "618",
+    "afterRun": "652",
+    "errors": []
+  }
+]

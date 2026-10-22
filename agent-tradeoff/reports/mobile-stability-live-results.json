@@ -1,0 +1,35 @@
+[
+  {
+    "base": "https://rumourtown.dev",
+    "engine": "webkit",
+    "profile": {
+      "width": 390,
+      "height": 844,
+      "dpr": 3,
+      "cpu": 1
+    },
+    "initial": {
+      "count": 2493,
+      "rgbaMiB": 57.92689895629883,
+      "created": 2637,
+      "screen": [
+        488,
+        1055
+      ]
+    },
+    "final": {
+      "count": 2493,
+      "rgbaMiB": 57.92689895629883,
+      "created": 6456,
+      "screen": [
+        488,
+        1055
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "614",
+    "afterRun": "648",
+    "errors": []
+  }
+]
