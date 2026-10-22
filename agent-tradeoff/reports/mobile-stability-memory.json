@@ -1,0 +1,39 @@
+{
+  "before": {
+    "initial": {
+      "canvases": {
+        "count": 3693,
+        "rgbaMiB": 467.1723747253418,
+        "maxPixels": 12333265,
+        "totalCreated": 3837
+      },
+      "tick": 616
+    },
+    "afterResize": {
+      "count": 3693,
+      "rgbaMiB": 467.1723747253418,
+      "maxPixels": 12333265,
+      "totalCreated": 5068
+    },
+    "errors": []
+  },
+  "after": {
+    "initial": {
+      "canvases": {
+        "count": 2493,
+        "rgbaMiB": 57.92689895629883,
+        "maxPixels": 4108911,
+        "totalCreated": 2637
+      },
+      "tick": 623
+    },
+    "afterResize": {
+      "count": 2493,
+      "rgbaMiB": 57.92689895629883,
+      "maxPixels": 4108911,
+      "totalCreated": 2637
+    },
+    "errors": []
+  },
+  "method": "Chrome mobile emulation, 390x844 CSS px, device pixel ratio 3; dev build; 25 s initial wait, explicit GC, then 30 unchanged visualViewport resize events and 5 s wait. RGBA estimates sum live canvas width * height * 4, not total browser/process memory."
+}

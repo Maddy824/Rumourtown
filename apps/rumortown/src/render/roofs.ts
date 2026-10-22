@@ -37,12 +37,13 @@ const OVERHANG = 0.16;
 const BAND = 0.95;
 
 /** Builds one façade sprite per building at this zoom. */
-export function* buildRoofsSteps(buildings: readonly Building[], z: number, s: number): Generator<void, Standing[]> {
+export function* buildRoofsSteps(buildings: readonly Building[], z: number, s: number, own: (canvas: HTMLCanvasElement) => void = () => {}): Generator<void, Standing[]> {
   const out: Standing[] = [];
   for (const b of buildings) {
     const wT = b.w + OVERHANG * 2 + PAD * 2;
     const hT = BAND + 1.7 + PAD;
     const surf = makeCanvas(wT * z * s, hT * z * s);
+    own(surf.canvas);
     // Local origin: bottom-left of the façade's base, at the building's top-left corner.
     const left = (PAD + OVERHANG) * z;
     const base = (hT - .8) * z;

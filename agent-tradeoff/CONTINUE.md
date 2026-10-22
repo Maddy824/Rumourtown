@@ -54,6 +54,8 @@ A task is "committed" when `git log --oneline -30` shows its number prefix and `
 
 ### Latest owner follow-up (2026-10-22)
 
+Mobile stability follow-up reduces retained phone canvas buffers from about 467 MiB to 58 MiB in DPR-3 Chrome emulation. The renderer bounds backing density, warms the phone close zoom, skips unchanged resizes and immediately releases obsolete/partial buffers. Hidden tabs resume without catch-up bursts. See [report](reports/mobile-stability-report.md); final verification/release pending. The owner’s exact phone/browser failure remains unconfirmed.
+
 Open-ended stories replace the actual UI's twelve-category interpretation and death refusal. Exact wording becomes a canonical `story_` claim after preview/disclosure, with semantic AI annotations or neutral free fallback; typed stories bypass the old local classifier. `/rumor` shares the unchanged inference ledger and caps. Rumors never create eyewitness evidence or world-state deaths. Developer agents gain `whisperStory`. Research model is `v4-open-stories-1`; authored replay hash is unchanged. See [implementation and release report](reports/open-rumors-report.md), [independent review](reports/open-rumors-review.md), and [developer guide](../docs/open-rumors.md). Published code `506ea5d`; API `ff4c92d3-9fcb-4844-9f86-52cb63c780c9`, site `b09694c0-beef-4a79-9c30-78bac170a2e7`. Root typecheck, 867 local tests, build, bundle gate, independent review and live desktop/phone free-fallback checks passed. Live semantic model accuracy remains unmeasured.
 
 ### Previous owner follow-ups (2026-10-21)

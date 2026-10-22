@@ -4,11 +4,11 @@
  * and a paper-grain overlay go on top. A frame is a handful of blits and a few strokes.
  */
 import type { Camera, Renderer, Vec2, VillageMap, VillagerId, WorldSnapshot } from '../sim/types.js';
-import { CLOSE_ZOOM, computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
+import { CLOSE_ZOOM, PHONE_CLOSE_ZOOM, computeView, fitZoom, makeView, project as projectWith, unproject as unprojectWith } from './camera.js';
 import { findBuildings } from './buildings.js';
 import { roofOverlaps } from './roofs.js';
 import { LAYER_MARGIN } from './tiles.js';
-import { prepareLayer, type Layer } from './layer.js';
+import { disposeLayer, prepareLayer, type Layer } from './layer.js';
 import type { Standing } from './felt.js';
 import { BODY, CORE_SCALE, SpriteCache } from './sprites.js';
 import { ThreadPainter } from './threads.js';
@@ -47,6 +47,9 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
 
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let sized = false;
+  let sizeKey = '';
+  let layerPixels = 12e6;
+  let homeZoom = CLOSE_ZOOM;
   const buildings = findBuildings(map);
   let light = daylight(720);
   let occupied = new Set<string>();
@@ -96,13 +99,25 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
   }
 
   function setSize(width: number, height: number, ratio: number): void {
-    dpr = Math.max(1, ratio || 1);
+    // Backing density scales every cached pose and building, not just the screen.
+    const compact = width < 760 || height <= 500;
+    const nextDpr = Math.min(compact ? 1.25 : 2, Math.max(1, Number.isFinite(ratio) ? ratio : 1));
+    const nextPixels = compact ? 4e6 : 12e6;
+    const key = `${width}/${height}/${nextDpr}`;
+    if (key === sizeKey) return; // Keyboard/toolbar scroll events often leave the canvas unchanged.
+    sizeKey = key;
+    idle.clear(); // Stop jobs before releasing any surfaces they could still paint.
+    if (nextPixels !== layerPixels) for (const layer of layers.splice(0)) disposeLayer(layer);
+    layerPixels = nextPixels;
+    dpr = nextDpr;
+    homeZoom = width < 520 ? PHONE_CLOSE_ZOOM : CLOSE_ZOOM;
     canvas.width = Math.max(1, Math.round(width * dpr));
     canvas.height = Math.max(1, Math.round(height * dpr));
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     if (corkDpr !== dpr) {
       cork = null;
+      for (const tag of tags.values()) { tag.img.width = 0; tag.img.height = 0; }
       tags.clear();
       for (const place of map.places) {
         const name = buildingSignText(place, 40);
@@ -114,27 +129,29 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       tags.set('you', paperTag('You', 10, dpr, grainTile));
     }
     // Layers painted for another pixel density are useless now; free them.
-    for (let i = layers.length - 1; i >= 0; i--) if ((layers[i] as Layer).dpr !== dpr) layers.splice(i, 1);
+    for (let i = layers.length - 1; i >= 0; i--) if ((layers[i] as Layer).dpr !== dpr) disposeLayer(layers.splice(i, 1)[0]!);
     // Only called during creation/resize, never by the frame's drawing path.
     const far = fitZoom(map, width, height);
     for (let i = layers.length - 1; i >= 0; i--) {
       const z = (layers[i] as Layer).zoom;
-      if (z !== CLOSE_ZOOM && z !== far) layers.splice(i, 1);
+      if (z !== homeZoom && z !== far) disposeLayer(layers.splice(i, 1)[0]!);
     }
-    idle.clear();
     bootstrapZooms.clear();
     preparingSprites = false;
     preparingZoom = false;
-    requestedZoom = CLOSE_ZOOM;
-    sprites.retain([CLOSE_ZOOM, far], dpr);
-    for (const zoom of far === CLOSE_ZOOM ? [CLOSE_ZOOM] : [CLOSE_ZOOM, far]) {
+    requestedZoom = homeZoom;
+    sprites.retain([homeZoom, far], dpr);
+    for (const zoom of far === homeZoom ? [homeZoom] : [homeZoom, far]) {
       if (!layers.some(l => l.zoom === zoom)) {
         bootstrapZooms.add(zoom);
         idle.add((function* () {
-          const layer = yield* prepareLayer(map, buildings, zoom, dpr);
-          if (current) for (const v of current.villagers) yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
-          if (layer) yield* refreshRooms(layer, () => ({ glow: light.windows, occupied }), LAYER_MARGIN);
-          if (layer && !layers.some(l => l.zoom === zoom)) layers.push(layer);
+          const layer = yield* prepareLayer(map, buildings, zoom, dpr, () => true, layerPixels);
+          let published = false;
+          try {
+            if (current) for (const v of current.villagers) yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
+            if (layer) yield* refreshRooms(layer, () => ({ glow: light.windows, occupied }), LAYER_MARGIN);
+            if (layer && !layers.some(l => l.zoom === zoom)) { layers.push(layer); published = true; }
+          } finally { if (layer && !published) disposeLayer(layer); }
           bootstrapZooms.delete(zoom);
         })());
       }
@@ -158,29 +175,33 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
       const zoom = requestedZoom;
       // The iterator runs only from IdleQueue, never synchronously from render().
       // Keep the layer private until its complete sprite wardrobe is ready too.
-      const layer = yield* prepareLayer(map, buildings, zoom, dpr, () => zoom === requestedZoom);
+      const layer = yield* prepareLayer(map, buildings, zoom, dpr, () => zoom === requestedZoom, layerPixels);
       if (!layer) {
         sprites.retain(layers.map((l) => l.zoom), dpr);
         continue;
       }
-      for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1, 2] as const) {
-        if (zoom !== requestedZoom) break;
-        sprites.stranger(facing, frame, zoom, dpr);
-        yield;
-      }
-      while (zoom === requestedZoom && current && !spritesReadyAt(current, zoom)) {
-        const snapshot = current;
-        for (const v of snapshot.villagers) {
+      let published = false;
+      try {
+        for (const facing of ['s', 'n', 'e', 'w'] as const) for (const frame of [0, 1, 2] as const) {
           if (zoom !== requestedZoom) break;
-          yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
+          sprites.stranger(facing, frame, zoom, dpr);
+          yield;
         }
-      }
-      if (zoom === requestedZoom) {
-        yield* refreshRooms(layer, () => ({ glow: light.windows, occupied }), LAYER_MARGIN);
-        layers.push(layer);
-        // Retain close plus the two most recently prepared overview/intermediate zooms.
-        if (layers.length > MAX_LAYERS) layers.splice(layers.findIndex((l) => l.zoom !== CLOSE_ZOOM), 1);
-      }
+        while (zoom === requestedZoom && current && !spritesReadyAt(current, zoom)) {
+          const snapshot = current;
+          for (const v of snapshot.villagers) {
+            if (zoom !== requestedZoom) break;
+            yield* sprites.prepare(v.look, v.tier === 'core', zoom, dpr);
+          }
+        }
+        if (zoom === requestedZoom) {
+          yield* refreshRooms(layer, () => ({ glow: light.windows, occupied }), LAYER_MARGIN);
+          layers.push(layer);
+          published = true;
+          // Retain close plus the two most recently prepared overview/intermediate zooms.
+          if (layers.length > MAX_LAYERS) disposeLayer(layers.splice(layers.findIndex((l) => l.zoom !== homeZoom), 1)[0]!);
+        }
+      } finally { if (!published) disposeLayer(layer); }
       sprites.retain(layers.map((l) => l.zoom), dpr);
     }
     preparingZoom = false;
@@ -543,7 +564,7 @@ export function createRenderer(canvas: HTMLCanvasElement, map: VillageMap): Rend
         ctx.fillStyle = colors[map.tiles[y * map.width + x]!] ?? MOSS;
         ctx.fillRect(view.ox + x * zoom, view.oy + y * zoom, zoom + .2, zoom + .2);
       }
-      if (!options.arriving) drawPlayer(cur, CLOSE_ZOOM, zoom / CLOSE_ZOOM, now, true);
+      if (!options.arriving) drawPlayer(cur, homeZoom, zoom / homeZoom, now, true);
       return;
     }
     if (!ready) return;

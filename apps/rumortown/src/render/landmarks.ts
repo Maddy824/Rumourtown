@@ -288,7 +288,7 @@ function paintTree(ctx: CanvasRenderingContext2D, variant: number, orchard: bool
 }
 
 /** Builds a sprite per tree variant at this zoom and returns one standing piece per tree tile. */
-export function* buildTreesSteps(map: VillageMap, z: number, s: number): Generator<void, Standing[]> {
+export function* buildTreesSteps(map: VillageMap, z: number, s: number, own: (canvas: HTMLCanvasElement) => void = () => {}): Generator<void, Standing[]> {
   const k = sampler(map);
   const sprites = new Map<string, HTMLCanvasElement>();
   const left = 0.9;
@@ -306,6 +306,7 @@ export function* buildTreesSteps(map: VillageMap, z: number, s: number): Generat
       let img = sprites.get(key);
       if (!img) {
         const surf = makeCanvas(wT * z * s, hT * z * s);
+        own(surf.canvas);
         surf.ctx.setTransform(s, 0, 0, s, left * z * s, top * z * s);
         paintTree(surf.ctx, variant, orchard, z, 1000 + variant * 7 + (orchard ? 3 : 0));
         img = surf.canvas;

@@ -1181,8 +1181,13 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
   let firstFrame = true;
   let framedBeat = '';
 
+  // A suspended phone tab resumes from its current village time, without catch-up debt.
+  const onVisibility = (): void => { lastNow = performance.now(); clearKeys(); };
+  document.addEventListener('visibilitychange', onVisibility);
+
   function frame(now: number): void {
     rafId = window.requestAnimationFrame(frame);
+    if (document.hidden) { lastNow = now; return; }
     const elapsed = Math.max(0, (now - lastNow) / 1000);
     const dt = Math.min(0.25, elapsed);
     lastNow = now;
@@ -1390,6 +1395,7 @@ export function mountApp(root: HTMLElement, deps: AppDeps): AppHandle {
       whisper.destroy();
       play.destroy();
       window.cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', clearKeys);

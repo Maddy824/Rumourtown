@@ -360,7 +360,10 @@ export class SpriteCache {
   /** Discard zoom/DPR buckets which can no longer be used. */
   retain(zooms: readonly number[], dpr: number): void {
     const ids = zooms.map((zoom) => this.bucketId(zoom, dpr));
-    for (const id of this.buckets.keys()) if (!ids.includes(id)) this.buckets.delete(id);
+    for (const id of this.buckets.keys()) if (!ids.includes(id)) {
+      for (const sprite of this.buckets.get(id)!.values()) { sprite.img.width = 0; sprite.img.height = 0; }
+      this.buckets.delete(id);
+    }
     for (const key of this.prepared) if (!ids.some((id) => key.startsWith(`${id}:`))) this.prepared.delete(key);
   }
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { villageMap } from '../content/map/index.js';
 import { findBuildings } from './buildings.js';
 import { IDLE_BUDGET_MS, IdleQueue } from './idle.js';
-import { prepareLayer, type Layer } from './layer.js';
+import { disposeLayer, prepareLayer, type Layer } from './layer.js';
 
 let now: number;
 let callbacks: IdleRequestCallback[];
@@ -59,6 +59,10 @@ describe('cooperative real-map layer construction', () => {
     expect(layer).toBeDefined();
     expect(layer?.standing.some((s) => s.roof)).toBe(true);
     expect(layer?.standing.some((s) => !s.roof)).toBe(true);
+    const surfaces = [...layer!.surfaces];
+    expect(surfaces.length).toBeGreaterThan(10);
+    disposeLayer(layer!);
+    expect(surfaces.every(canvas => canvas.width === 0 && canvas.height === 0)).toBe(true);
     expect(Math.max(...steps)).toBeLessThanOrEqual(1);
     expect(Math.max(...slices)).toBeLessThanOrEqual(IDLE_BUDGET_MS);
     expect(slices.length).toBeGreaterThan(1);
@@ -66,6 +70,7 @@ describe('cooperative real-map layer construction', () => {
   });
 
   it('cancels inside a ground texture pass before any more canvas commands run', () => {
+    const created = vi.spyOn(document, 'createElement');
     let current = true;
     const work = prepareLayer(villageMap, findBuildings(villageMap), 40, 1, () => current);
     // Advance beyond surface setup into tile-by-tile ground painting.
@@ -74,6 +79,7 @@ describe('cooperative real-map layer construction', () => {
     current = false;
     expect(work.next()).toEqual({ done: true, value: undefined });
     expect(commands).toBe(before);
+    expect((created.mock.results[0]!.value as HTMLCanvasElement).width).toBe(0);
     expect(work.next().done).toBe(true);
     expect(commands).toBe(before);
   });

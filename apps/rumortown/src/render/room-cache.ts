@@ -35,6 +35,7 @@ export const glowStep = (glow: number): number => Math.floor(Math.max(0, Math.mi
 
 export function* refreshRooms(layer: { canvas: HTMLCanvasElement; rooms: RoomPatch[]; zoom: number; scale: number }, state: () => { glow: number; occupied: ReadonlySet<string> }, margin: number): Generator<void> {
   for (const room of layer.rooms) {
+    if (!layer.canvas.width) return; // Its zoom was evicted while this idle job was pending.
     const next = state();
     const occupied = next.occupied.has(room.building.id);
     const glow = occupied ? glowStep(next.glow) : 0;

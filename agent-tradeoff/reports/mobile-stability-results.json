@@ -1,0 +1,98 @@
+[
+  {
+    "base": "http://127.0.0.1:5196",
+    "profile": {
+      "width": 390,
+      "height": 844,
+      "dpr": 3,
+      "cpu": 4
+    },
+    "initial": {
+      "count": 2408,
+      "rgbaMiB": 57.89577102661133,
+      "created": 2552,
+      "screen": [
+        488,
+        1055
+      ]
+    },
+    "final": {
+      "count": 2493,
+      "rgbaMiB": 57.92689895629883,
+      "created": 5543,
+      "screen": [
+        488,
+        1055
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "619",
+    "afterRun": "653",
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5196",
+    "profile": {
+      "width": 360,
+      "height": 640,
+      "dpr": 3,
+      "cpu": 4
+    },
+    "initial": {
+      "count": 2493,
+      "rgbaMiB": 57.041709899902344,
+      "created": 2637,
+      "screen": [
+        450,
+        800
+      ]
+    },
+    "final": {
+      "count": 2493,
+      "rgbaMiB": 57.041709899902344,
+      "created": 5753,
+      "screen": [
+        450,
+        800
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "619",
+    "afterRun": "652",
+    "errors": []
+  },
+  {
+    "base": "http://127.0.0.1:5196",
+    "profile": {
+      "width": 1280,
+      "height": 800,
+      "dpr": 2,
+      "cpu": 1
+    },
+    "initial": {
+      "count": 2492,
+      "rgbaMiB": 198.97409439086914,
+      "created": 2844,
+      "screen": [
+        2560,
+        1600
+      ]
+    },
+    "final": {
+      "count": 2492,
+      "rgbaMiB": 198.97409439086914,
+      "created": 6446,
+      "screen": [
+        2560,
+        1600
+      ],
+      "overflow": false
+    },
+    "unchangedResizeAllocations": 0,
+    "beforeRun": "615",
+    "afterRun": "648",
+    "errors": []
+  }
+]

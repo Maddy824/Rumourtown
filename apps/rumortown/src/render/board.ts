@@ -6,9 +6,10 @@ import { INK, OAT, PAPER, rgba } from './palette.js';
 export const BOARD_MARGIN = 24;
 export const BOARD_PAD = 32;
 
-export function* prepareBoard(map: VillageMap, z: number, scale: number): Generator<void, HTMLCanvasElement> {
+export function* prepareBoard(map: VillageMap, z: number, scale: number, own: (canvas: HTMLCanvasElement) => void = () => {}): Generator<void, HTMLCanvasElement> {
   const w = map.width * z, h = map.height * z;
   const surf = makeCanvas((w + BOARD_PAD * 2) * scale, (h + BOARD_PAD * 2) * scale);
+  own(surf.canvas);
   const ctx = surf.ctx;
   ctx.setTransform(scale, 0, 0, scale, BOARD_PAD * scale, BOARD_PAD * scale);
   const path = new Path2D();

@@ -331,13 +331,14 @@ function puddles(ctx: CanvasRenderingContext2D, x: number, y: number, map: Villa
 }
 
 /** Whole field sprites keep every stalk cached; wind only changes the blit transform. */
-export function* buildCropsSteps(map: VillageMap, z: number, scale: number): Generator<void, Standing[]> {
+export function* buildCropsSteps(map: VillageMap, z: number, scale: number, own: (canvas: HTMLCanvasElement) => void = () => {}): Generator<void, Standing[]> {
   const g = groundOf(map);
   const out: Standing[] = [];
   const comps = components(map.width, map.height, (x, y) => g(x, y) === 'field');
   for (let i = 0; i < comps.length; i++) {
     const comp = comps[i]!;
     const surf = makeCanvas(comp.w * z * scale, comp.h * z * scale);
+    own(surf.canvas);
     surf.ctx.setTransform(scale, 0, 0, scale, -comp.x * z * scale, -comp.y * z * scale);
     const shape = new Path2D();
     for (const index of comp.tiles) { shape.rect((index % map.width) * z, Math.floor(index / map.width) * z, z, z); yield; }

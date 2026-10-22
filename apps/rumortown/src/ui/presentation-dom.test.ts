@@ -381,3 +381,35 @@ it('connects welcome, listener walking, cards, explicit send and the real simula
   expect(root.dataset.tracing).toBe('false');
   app.destroy();
 });
+
+it('suspends hidden-tab frames and resumes without simulating time spent away', async () => {
+  const root = paperDocument(true), events = new EventTarget();
+  let scheduled: FrameRequestCallback = () => {}, now = 1000, hidden = false;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+  Object.assign(window, {
+    location: { href: 'https://rumourtown.test/', hash: '' }, history: { replaceState: vi.fn() },
+    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
+    requestAnimationFrame: (callback: FrameRequestCallback) => { scheduled = callback; return 1; }, cancelAnimationFrame() {},
+    matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+  });
+  const { mountApp } = await import('./app.js');
+  const render = vi.fn();
+  const app = mountApp(root as unknown as HTMLElement, { map: villageMap, startTick: 0,
+    createSim: seed => createFakeSimulation(seed),
+    createRenderer: () => ({ resize() {}, render, project: p => p, unproject: (x, y) => ({ x, y }), villagerAt: () => null }),
+  });
+  await Promise.resolve();
+  root.querySelector('.opening')!.querySelector('.text-button')!.dispatchEvent(new Event('click'));
+  now += 1000; scheduled(now);
+  expect(app.sim.tick).toBeGreaterThan(0);
+  const tick = app.sim.tick, frames = render.mock.calls.length;
+  hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  now += 300000; scheduled(now);
+  expect(app.sim.tick).toBe(tick); expect(render).toHaveBeenCalledTimes(frames);
+  hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+  for (let i = 0; i < 5; i++) { now += 16; scheduled(now); }
+  expect(app.sim.tick).toBe(tick); // 80 ms cannot produce a tick at normal speed.
+  expect(render.mock.calls.length).toBeGreaterThan(frames);
+  app.destroy();
+});

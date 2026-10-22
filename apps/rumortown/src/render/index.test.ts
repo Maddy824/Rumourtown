@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Camera, Look, RenderOptions, VillageMap, VillagerView, WorldSnapshot } from '../sim/types.js';
 import { CLOSE_ZOOM, createRenderer, fitZoom } from './index.js';
+import { PHONE_CLOSE_ZOOM } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { cast } from '../content/cast/index.js';
 import * as daylightPainter from './daylight.js';
@@ -324,7 +325,7 @@ describe('prepared zoom and sprite caches', () => {
     canvas.blits.length = 0;
     renderer.render(null, cur, camera(zoom), options);
     const exact = canvas.blits.find(b => b.args.length === 8)?.image as HTMLCanvasElement;
-    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * zoom * 2));
+    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * zoom * 1.25));
     expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
   });
 
@@ -346,7 +347,7 @@ describe('prepared zoom and sprite caches', () => {
     renderer.render(null, cur, camera(30), options);
     const exact = canvas.blits.find(b => b.args.length === 8)?.image as HTMLCanvasElement;
     expect(exact).not.toBe(discarded);
-    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * 30 * (cause === 'resize' ? 2 : 1)));
+    expect(exact.width).toBe(Math.ceil((map.width + tiles.LAYER_MARGIN * 2) * 30 * (cause === 'resize' ? 1.25 : 1)));
     expect(canvas.getContext('2d')?.imageSmoothingQuality).toBe('low');
   });
 
@@ -359,7 +360,7 @@ describe('prepared zoom and sprite caches', () => {
       drainIdle();
     }
     expect(paint).toHaveBeenCalledTimes(4);
-    for (const zoom of [CLOSE_ZOOM, 6.3, 6.4]) renderer.render(null, cur, camera(zoom), options);
+    for (const zoom of [PHONE_CLOSE_ZOOM, 6.3, 6.4]) renderer.render(null, cur, camera(zoom), options);
     expect(callbacks).toHaveLength(0);
     renderer.render(null, cur, camera(6.1), options);
     expect(callbacks).toHaveLength(1);
@@ -375,7 +376,7 @@ describe('prepared zoom and sprite caches', () => {
     renderer.resize(360, 640, 3);
     drainIdle();
     const prepared = canvases.length;
-    for (const zoom of [CLOSE_ZOOM, fitZoom(map, 360, 640)]) renderer.render(null, cur, camera(zoom), options);
+    for (const zoom of [PHONE_CLOSE_ZOOM, fitZoom(map, 360, 640)]) renderer.render(null, cur, camera(zoom), options);
     expect(canvases).toHaveLength(prepared);
     expect(callbacks).toHaveLength(0);
   });
@@ -480,4 +481,46 @@ describe('finished world light and the expanded cast', () => {
     expect(cached.mock.results.every(result => result.value !== undefined)).toBe(true);
     expect(canvases).toHaveLength(count);
   });
+});
+
+it('bounds high-density phone buffers and does not rebuild on unchanged viewport events', () => {
+  const cur = snapshot(cast.map(d => ({ id: d.id, name: d.name, tier: d.tier, look: d.look,
+    pos: { x: 15, y: 12 }, facing: 's' as const, moving: false, activity: 'idle', mood: 0 })));
+  const canvas = canvasStub(), renderer = createRenderer(canvas, village());
+  renderer.resize(390, 844, 3);
+  renderer.render(null, cur, camera(30, 390, 844), options);
+  drainIdle();
+  renderer.render(null, cur, camera(30, 390, 844), options);
+  expect(canvas.width).toBe(488); // CSS geometry is unchanged; only backing density is bounded.
+  expect(renderer.project({ x: 15, y: 12 }, camera(30, 390, 844))).toEqual({ x: 195, y: 360 });
+  const retainedBytes = canvases.reduce((sum, surface) => sum + surface.width * surface.height * 4, 0);
+  expect(retainedBytes).toBeLessThan(70 * 1024 * 1024);
+  const prepared = canvases.length;
+  for (let i = 0; i < 30; i++) renderer.resize(390, 844, 3);
+  expect(canvases).toHaveLength(prepared);
+  expect(callbacks).toHaveLength(0);
+});
+
+it('releases evicted sprite and map backing stores without waiting for garbage collection', () => {
+  const cur = snapshot([villager('mira')]);
+  const { renderer, canvas } = setup(cur);
+  renderer.render(null, cur, camera(20), options); drainIdle();
+  canvas.blits.length = 0; renderer.render(null, cur, camera(20), options);
+  const oldGround = canvas.blits.find(b => b.args.length === 8)!.image as HTMLCanvasElement;
+  for (const zoom of [21, 22, 23]) { renderer.render(null, cur, camera(zoom), options); drainIdle(); }
+  expect(oldGround.width).toBe(0);
+  const sprites = new SpriteCache();
+  const image = sprites.stranger('s', 0, 40, 3).img;
+  sprites.retain([30], 1.25);
+  expect(image.width * image.height).toBe(0);
+});
+
+it('draws the player during phone stitching using the warmed phone wardrobe', () => {
+  const canvas = canvasStub(), renderer = createRenderer(canvas, village());
+  renderer.resize(390, 844, 3);
+  const cached = vi.spyOn(SpriteCache.prototype, 'cachedStranger');
+  renderer.render(null, snapshot(), camera(30, 390, 844), options);
+  expect(cached).toHaveBeenCalled();
+  expect(cached.mock.calls[0]?.[2]).toBe(PHONE_CLOSE_ZOOM);
+  expect(cached.mock.results[0]?.value).toBeDefined();
 });
