@@ -49,3 +49,27 @@ All reported numbers use the fixed scenarios and are re-scored with one verifier
 - Provenance: 0% source naming.
 - Direct and indirect injection: no explicit refusals (0% on the refusal proxy). The oracle still found 95 to 100% epistemic faithfulness, so the attacks rarely made it claim things, but it did not push back either.
 - Citation hallucination: under the `cite` strategy, Llama-3.2-1B invents fact ids that look plausible ("wren-practices-for-fair" next to the real "wren-practises-for-fair"). The protocol gate catches these.
+
+## Screening results (22 October 2026, one training seed, before the Phase 0 measurement fixes)
+
+Held-out evaluation, 220 probes per row, grounded prompt unless noted. "Both" means epistemically faithful and performing the gold speech act (surface proxy). Three epochs; validation loss was lowest near two, so these adapters are slightly overtrained. Treat as screening, not results.
+
+| Model | Held-out seeds: faithful | Both | Held-out stories: faithful | Both |
+|---|---:|---:|---:|---:|
+| Qwen3-0.6B base | 77.7% | 30.9% | 70.9% | 27.3% |
+| Qwen3-0.6B base, best-of-4 | 93.2% | 42.7% | 87.7% | 35.9% |
+| Qwen3-0.6B, unfiltered SFT | 87.3% | 39.1% | 38.2% | 16.8% |
+| Qwen3-0.6B, verifier-only SFT | 95.9% | 42.7% | 73.2% | 34.5% |
+| **Qwen3-0.6B, verifier + act SFT** | 94.1% | **69.5%** | 53.6% | 37.3% |
+| Llama-3.2-1B base | 87.7% | 45.5% | 67.3% | 38.2% |
+| Llama-3.2-1B, verifier + act SFT | 91.8% | 58.6% | 59.5% | 40.0% |
+| Llama-3.2-3B base | 85.0% | 39.5% | 71.4% | 25.9% |
+| Llama-3.2-3B base, best-of-4 | 96.4% | 30.9% | 93.2% | 29.5% |
+| Llama-3.2-3B, verifier + act SFT | 94.1% | 57.7% | 55.5% | 35.0% |
+
+What it suggests, pending confirmation:
+
+1. **The speech-act gate is the ingredient.** On held-out seeds the act-filtered 0.6B model more than doubles useful, faithful answers (30.9% to 69.5%) and beats the untuned 3B model; verifier-only and unfiltered data do not come close.
+2. **Selection buys faithfulness with silence** on a second model: best-of-4 raised the 3B model's faithfulness to 96.4% while useful answers fell from 47.3% to 31.8%.
+3. **Helpfulness transfers; the knowledge boundary only partly does.** On the two held-out story families, act-tuned models answered more usefully but invented more: faithfulness fell 8–17 points below their bases. Verifier-only training kept faithfulness (73.2%). The models learnt to answer more than they learnt when not to.
+4. **Next:** mix verifier-only and act targets, add preference pairs that penalise confident invention, train two epochs with whole-seed validation, three seeds, and re-score under the Phase 0 metrics with fresh confirmation data. Keep the runtime guard in the loop for any deployment.
