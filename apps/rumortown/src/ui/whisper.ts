@@ -164,7 +164,7 @@ export function createWhisperSheet(ctx: WhisperContext): WhisperSheet {
         h('span', { class: 'who-text' }, h('span', { class: 'who-name' }, v.name), h('span', { class: 'who-role' }, sim.cast.get(v.id)?.role ?? 'Neighbour'))));
     })));
     const typed = h('textarea', { id: 'rt-own-story', rows: 3, maxlength: MAX_RUMOR_TEXT,
-      placeholder: 'Someone killed Tom. Nobody knows who.', 'aria-describedby': 'rt-writing-note' });
+      placeholder: 'Tom borrowed Ben’s boat and never gave it back.', 'aria-describedby': 'rt-writing-note' });
     const preview = h('p', { class: 'sheet-note', id: 'rt-writing-note' }, 'Any kind of story, in your words. Use fictional details. Review what will be shared before sending.');
     confirmation = h('div', { class: 'whisper-confirmation', hidden: true, role: 'status' });
     const choose = (claim: GameClaim): void => {
