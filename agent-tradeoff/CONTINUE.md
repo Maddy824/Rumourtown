@@ -15,6 +15,13 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 - Secrets live outside the repo: `~/.config/rumourtown/cloudflare.env`, `~/.config/rumourtown/turnstile.env`, `~/.config/rumourtown/signing.json`, and the git-ignored `apps/api/.dev.vars`. Never print, copy or commit them.
 - Design authority: `docs/superpowers/specs/2026-10-21-rumortown-design.md`. Research: `/Users/maddy/B2B/reports/` (outside the repo). Rulings and history: `.superpowers/sdd/2026-10-21-village-build/progress.md`.
 
+## 1e. State at 2026-10-22 20:35 (controller)
+
+- Production audit (live traffic): browser soaks on iPhone-size Chrome and WebKit plus desktop passed; Codex audited headers, API and code (`/Users/maddy/B2B/rumortown-audit/codex-audit.md`, outside the repo). Fixes shipped in `106e69d` after CI `39798386344` and Codex release review: accurate AI error messages (human check, burst vs hourly limit, resting allowance), 400 for malformed input, a real 404 page (`not_found_handling = "404-page"`), and a Permissions-Policy on both hosts. Game asset `main-Dau9Mzw5.js`; API version `637822fd`.
+- Open owner decision: the ledger counts Workers AI at $0, which is safe only on the Workers Free plan. The owner must confirm the plan.
+- `baseline-2` (9 models) finished 18:06. `research/phase0` was merged into `build/village` as `cf5ed14`.
+- GPU is busy: `bench/slm/finetune/run-confirmation.sh --launch` started 20:33 (log: `bench/slm/results/confirmation-37/launch.log`, resumable with the same command). Do not load models by hand until it ends. Next: neural step 0 (`bench/slm/neural/README.md`), then step 1.
+
 ## 1d. State at 2026-10-22 14:45 (controller)
 
 - Owner's goals: a paper and, if a new invention appears, a patent. Patent material lives only in the private, non-git folder `/Users/maddy/B2B/private-research`; the first candidate was found anticipated (WO2026150382A2) and dropped. Nothing patent-bearing may be committed or published.
