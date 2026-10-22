@@ -15,6 +15,14 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 - Secrets live outside the repo: `~/.config/rumourtown/cloudflare.env`, `~/.config/rumourtown/turnstile.env`, `~/.config/rumourtown/signing.json`, and the git-ignored `apps/api/.dev.vars`. Never print, copy or commit them.
 - Design authority: `docs/superpowers/specs/2026-10-21-rumortown-design.md`. Research: `/Users/maddy/B2B/reports/` (outside the repo). Rulings and history: `.superpowers/sdd/2026-10-21-village-build/progress.md`.
 
+## 1d. State at 2026-10-22 14:45 (controller)
+
+- Owner's goals: a paper and, if a new invention appears, a patent. Patent material lives only in the private, non-git folder `/Users/maddy/B2B/private-research`; the first candidate was found anticipated (WO2026150382A2) and dropped. Nothing patent-bearing may be committed or published.
+- Paper: `docs/research/methods-formal.md` (merged formal core), `docs/research/neural-track.md` (merged neural design), `docs/research/research-plan-2026-10.md`. Briefs ready: `37-confirmation-round.md` (being built by Codex in the worktree `/Users/maddy/B2B/rumortown-phase0`, branch `research/phase0`, which already holds Phase 0; data and results are symlinked into it) and `39-neural-harness.md` (built, 33 tests pass, committed on `build/village`).
+- GPU: `baseline-2` (9 models) still running from the main checkout; do not edit `bench/slm/{run,strategies,providers,types,io,probes,verifier,scenarios}.ts` in the main checkout until it ends. Then: merge `research/phase0` into `build/village`, run the harness step-0 validation (`bench/slm/neural/README.md`), launch `bench/slm/finetune/run-confirmation.sh`, then neural step 1.
+- Live site: simplified first visit and "How the AI works" deployed (game `578d6ff2`); CI green; Actions on v7.
+- Owner is switching the controller to Opus 5.5 for the build phase.
+
 ## 1c. Overnight state (2026-10-22 early hours, controller; owner asleep)
 
 - Live: game `512ab167`, API `b611b3ae` (commit 7227ebd). Phone day/night fixes, louder score with a string pad, and task 26's security fixes (CSP/HSTS/frame denial, IP-keyed hourly allowance, moderation of direct `/rumor`, generated questions and chat replies) are deployed and checked in a browser. The CSP allows Turnstile and Cloudflare Web Analytics; errors inside Turnstile's own iframe are Cloudflare's, not ours.
