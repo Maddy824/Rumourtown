@@ -248,7 +248,7 @@ it('pins the selected rumor’s actual reply above the newest moments, with olde
   const root = story.el as unknown as PaperElement;
   expect(root.querySelector('.latest-moments')!.children).toHaveLength(3);
   // The listener's reply to your whisper stays pinned first; the newest tellings follow it.
-  expect(root.querySelector('.latest-moments')!.firstElementChild!.textContent).toContain('I will ask Tom myself.');
+  expect(root.querySelector('.latest-moments')!.children[0]!.textContent).toContain('I will ask Tom myself.');
   expect(root.querySelector('.latest-moments')!.textContent).toContain('The newest bread telling');
   expect(root.querySelector('.earlier-moments')!.textContent).toContain('A later bread telling');
   expect(root.querySelector('.earlier-moments')!.closest('.story-detail')).not.toBeNull();
