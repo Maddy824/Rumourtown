@@ -26,13 +26,26 @@ export function createRumorFlow(opts: { baseUrl: string; turnstile: Pick<Turnsti
           method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
           body: JSON.stringify({ text, turnstileToken: token }),
         });
-        if (!response.ok) throw Error('unavailable');
+        if (!response.ok) {
+          const reason = await response.json().then((b: unknown) => (b && typeof b === 'object' && 'reason' in b ? (b as { reason: unknown }).reason : undefined), () => undefined);
+          const wait = Number(response.headers.get('Retry-After'));
+          throw Error(reason === 'budget' || reason === 'limit-global' ? 'resting'
+            : reason === 'limit-visitor' ? (wait > 0 && wait <= 120 ? 'burst' : 'limit') : 'unavailable');
+        }
         const meaning = readRumorMeaning(await response.json(), text, cast);
         if (!meaning) throw Error('unclear');
         return { meaning, source: 'ai', note: 'AI helped understand this story. Your wording is unchanged.' };
       };
       return await Promise.race([infer(), deadline]);
-    } catch { return fallback('AI was unavailable or uncertain. Your story still works; no one is assigned blame.'); }
+    } catch (error) {
+      const why = error instanceof Error ? error.message : error === 'turnstile' ? 'human-check' : '';
+      const lead = why === 'human-check' ? 'Couldn’t check that you’re human, so the village read your story without AI.'
+        : why === 'resting' ? 'The shared AI allowance is resting, so the village read your story without AI.'
+        : why === 'limit' ? 'You’ve used this hour’s AI stories, so the village read this one without AI.'
+        : why === 'burst' ? 'That was a lot of stories at once, so the village read this one without AI.'
+        : 'AI was unavailable or uncertain.';
+      return fallback(`${lead} Your story still works; no one is assigned blame.`);
+    }
     finally { clearTimeout(timer); }
   }
   return { warm() { void opts.turnstile.warm?.().catch(() => undefined); },

@@ -29,7 +29,12 @@ export async function askVillage(text: string, context: PlayContext, opts: {
   if (!response.ok) {
     const reason = record(body) ? body.reason : undefined;
     if (reason === 'budget' || reason === 'limit-global') throw Error('The shared AI allowance is resting. You can still walk and use ready-made rumors.');
-    if (reason === 'limit-visitor') throw Error('You’ve reached the hourly AI limit. You can still explore, or come back later to chat.');
+    if (reason === 'limit-visitor') {
+      // The edge limit asks for a minute; the ledger's hourly allowance asks for up to an hour.
+      const wait = Number(response.headers.get('Retry-After'));
+      if (Number.isFinite(wait) && wait > 0 && wait <= 120) throw Error('That was a lot of talk at once. Wait a minute, then try again.');
+      throw Error('You’ve reached the hourly AI limit. You can still explore, or come back later to chat.');
+    }
     throw Error('The village could not answer. Try again in a moment.');
   }
   const result = readPlayReply(body, context.places.map(p => p.id), opts.people);

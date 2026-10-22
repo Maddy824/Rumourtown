@@ -9,6 +9,9 @@ import { h } from './dom.js';
 import { closeIcon } from './icons.js';
 import type { Layers } from './layers.js';
 
+/** Turnstile could not confirm a person, often because the browser blocks Cloudflare's check. */
+const HUMAN_CHECK_FAILED = 'Couldn’t check that you’re human. Try again, and if it keeps happening your browser may be blocking Cloudflare’s check.';
+
 /** A requested person must never silently turn into a different conversation partner. */
 export function conversationChoices(snapshot: WorldSnapshot, requested?: string) {
   const reachable = nearbyPeople(snapshot, 2).filter(p => p.activity !== 'sleep');
@@ -129,7 +132,7 @@ export function createPlay(ctx: {
       entry.dataset.checked = guarded.dropped ? 'corrected' : 'faithful';
       answer(entry, name, { ...reply, reply: guarded.reply }, 'model');
     } catch (error) {
-      if (ownRevision === revision && !el.hidden) thinking.replaceWith(h('p', { class: 'play-error' }, request.signal.aborted ? 'The reply took too long. Try again.' : error instanceof Error ? error.message : 'Could not connect. Try again.'));
+      if (ownRevision === revision && !el.hidden) thinking.replaceWith(h('p', { class: 'play-error' }, request.signal.aborted ? 'The reply took too long. Try again.' : error === 'turnstile' ? HUMAN_CHECK_FAILED : error instanceof Error ? error.message : 'Could not connect. Try again.'));
     } finally {
       window.clearTimeout(timer); window.clearTimeout(slow);
       if (ownRevision === revision) { controller = undefined; send.disabled = false; form.removeAttribute('aria-busy'); if (!el.hidden) input.focus(); }

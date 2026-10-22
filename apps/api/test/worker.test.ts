@@ -154,6 +154,7 @@ describe('Worker routes', () => {
     const preflight = await worker.fetch(new Request('https://api.test/interpret', { method: 'OPTIONS', headers: { Origin: origin } }), env);
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
+    expect(preflight.headers.get('Permissions-Policy')).toBe('camera=(), microphone=(), geolocation=(), payment=(), usb=()');
     const missing = await worker.fetch(new Request('https://api.test/missing', { headers: { Origin: origin } }), env);
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ reason: 'invalid' });
@@ -165,7 +166,8 @@ describe('Worker routes', () => {
   ])('rejects malformed requests before fetch %#', async override => {
     const { worker, env, mock } = setup();
     const response = await worker.fetch(interpretRequest(undefined, override), env);
-    expect(response.status).toBe(503);
+    // Bad client input is the client's fault, not an outage.
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ reason: 'invalid' });
     expect(mock.calls).toHaveLength(0);
   });

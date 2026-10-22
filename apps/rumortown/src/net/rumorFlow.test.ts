@@ -40,3 +40,23 @@ it.each(['Tom was insulted by Mira', 'Tom was cheated by Mira', 'Tom was nursed 
   const offline = createRumorFlow({ baseUrl: '', turnstile: { getToken: vi.fn() } });
   expect(await offline.start(text)).toMatchObject({ source: 'neutral', meaning: { actor: null, affected: null, valence: 0 } });
 });
+
+it.each([
+  [{ reason: 'budget' }, 503, 'shared AI allowance is resting'],
+  [{ reason: 'limit-global' }, 429, 'shared AI allowance is resting'],
+  [{ reason: 'limit-visitor' }, 429, 'this hour’s AI stories'],
+  [{ reason: 'model' }, 503, 'AI was unavailable or uncertain'],
+])('tells the player why a story went without AI (%o)', async (body, status, note) => {
+  const result = await setup(body, status).flow.start('The moon turned into cheese');
+  expect(result).toMatchObject({ source: 'neutral' });
+  expect(result.note).toContain(note);
+});
+it('tells a short burst apart from the hourly story allowance', async () => {
+  const fetcher = async () => Response.json({ reason: 'limit-visitor' }, { status: 429, headers: { 'Retry-After': '60' } });
+  const flow = createRumorFlow({ baseUrl: 'https://test.invalid', turnstile: { getToken: async () => 'token' }, fetch: fetcher });
+  expect((await flow.start('The moon turned into cheese')).note).toContain('a lot of stories at once');
+});
+it('names a failed human check instead of blaming the network', async () => {
+  const flow = createRumorFlow({ baseUrl: 'https://test.invalid', turnstile: { getToken: () => Promise.reject('turnstile') } });
+  expect((await flow.start('The stars fell into the river')).note).toContain('Couldn’t check that you’re human');
+});

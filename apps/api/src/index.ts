@@ -63,11 +63,11 @@ async function interpret(request: Request, env: Env, fetcher: Fetcher, now: () =
   const input = await readInput(request);
   if (!record(input) || Object.keys(input).some(key => !['text', 'turnstileToken', 'castVersion'].includes(key)) ||
       typeof input.text !== 'string' || typeof input.turnstileToken !== 'string' || !input.turnstileToken.trim() || input.turnstileToken.length > 2048 ||
-      typeof input.castVersion !== 'string' || input.castVersion.trim().length === 0 || input.castVersion.length > 128) throw new Failure('invalid');
+      typeof input.castVersion !== 'string' || input.castVersion.trim().length === 0 || input.castVersion.length > 128) throw new Failure('invalid', 400);
   const text = input.text.trim();
-  if (Array.from(text).length < 1 || Array.from(text).length > 140) throw new Failure('invalid');
+  if (Array.from(text).length < 1 || Array.from(text).length > 140) throw new Failure('invalid', 400);
   const normalised = normalise(text);
-  if (!normalised) throw new Failure('invalid');
+  if (!normalised) throw new Failure('invalid', 400);
   const unsupported = blockedReason(normalised);
   if (unsupportedStory(text)) return { unsupported: 'unsupported-story', castVersion: input.castVersion, issuedAt: now() };
   if (unsupported) return { unsupported, castVersion: input.castVersion, issuedAt: now() };
@@ -202,6 +202,7 @@ export function createWorker(deps: Dependencies = {}) {
         'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
         'Strict-Transport-Security': 'max-age=31536000', 'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
       };
       const origin = request.headers.get('Origin');
       if (!env.ALLOWED_ORIGIN || !origin || !allowedOrigins(env).includes(origin)) return Response.json({ reason: 'invalid' }, { status: 403, headers: { ...securityHeaders, Vary: 'Origin', 'Cache-Control': 'no-store' } });
