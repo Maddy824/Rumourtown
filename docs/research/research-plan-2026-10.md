@@ -81,3 +81,15 @@ The six adapters and the paired evaluation now running are kept as screening res
 | 3–5 Nov | Three-seed confirmations, intervals, 70B subset; results write-up and venue decision | 3 h |
 
 Compute is local and free. Every spending cap stays as it is.
+
+## Corrections after cross-review (22 October 2026)
+
+The second reviewer read this plan and found seven places where it understated the work (`agent-tradeoff/reports/31-cross-review-codex.md`). All are accepted:
+
+1. **Exact state does not make the text oracle exact.** Phase 0 adds validation for paraphrase, compound claims, polarity, sources and unknown truth, with independent claim segmentation. The old world-faithfulness score is kept under its original definition alongside the new one.
+2. **Re-scoring is not enough everywhere.** It cannot undo seed leakage between training and validation or re-blind inspected tests. Clean claims need fresh confirmation data and, where training depends on clean validation, retraining. Earlier runs stay exploratory.
+3. **Statistics keep their controls:** an audited useful-and-compliant primary endpoint, margins chosen on development data, per-act denominators, risk–coverage comparisons, and training-run uncertainty (three seeds for every effect claimed, not only the 3B). Two epochs is a screening observation, not a rule.
+4. **Selection and target controls:** inference-time selectors infer the needed behaviour from the input, never from gold acts or world truth; best-of-1, token and latency accounting, and exhausted or fallback outcomes are reported; template-only and natural-language targets are compared; a common-prompt subset and held-out realisation families are kept; rejected teacher tokens and rare-act diversity are recorded.
+5. **The audit target is at least 500 distinct outputs with two independent labels.** The owner's 200–250 labels are a pilot. Disagreements are preserved and adjudicated separately; oversampled strata are reweighted before population claims; the second rater's time is measured in a timed pilot.
+6. **The village does not test permissions.** Knowledge and authorisation coincide there only by design. The bank pilot needs separate policies for confirming existence, derived or paraphrased disclosure, revoked permissions and multi-turn carry-over, with held-out attack families. Renamed records test schema reuse, not bank generalisation.
+7. **Owner time is about 40 hours over the fortnight, not 16–18.** Oracle decisions, semantic review, analysis and device checks cannot be delegated. The pre-dispatch quota ledger, the 120-call ceiling for the 70B reference, prompt and output caps, no paid fallback and stop rules all stay. The bank pilot is not a prerequisite for a valid village benchmark paper.
