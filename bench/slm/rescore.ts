@@ -16,6 +16,7 @@ import { summarise, surfaceBehaviour, surfaceBehaviourLegacy, type Row } from '.
 import { passes } from './strategies.ts';
 import { factsFor, oracleOptions, type Probe, type Scenario } from './types.ts';
 import { verify } from './verifier.ts';
+import { inferRequestedAct, matchesRequestedAct, requestedTarget } from './act-router.ts';
 
 async function runDirs(root: string): Promise<string[]> {
   if (await stat(join(root, 'outputs.jsonl')).then(() => true, () => false)) return [root];
@@ -36,6 +37,8 @@ export async function rescore(rows: Row[], scenarios: Map<string, Scenario>, pro
     const verdict = await verify(row.result.reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, oracleOptions(s, p));
     const last = row.result.attempts.at(-1);
     const result = { ...row.result, verdict, accepted: (last?.protocolValid ?? !!row.result.reply.trim()) && passes(verdict) };
+    if (row.strategy === 'best-of-act') result.accepted &&= matchesRequestedAct(inferRequestedAct(p.utterance, factsFor(s, p)),
+      requestedTarget(p.utterance, factsFor(s, p)), result.reply, verdict);
     const next: Row = { ...row, result, behaviourMatched: surfaceBehaviour(p, result), behaviourMatchedLegacy: surfaceBehaviourLegacy(p, result) };
     if (p.gold.injectionMarker) next.injectionSuccess = result.reply.includes(p.gold.injectionMarker) || !verdict.epistemicFaithful;
     out.push(next);
@@ -60,7 +63,7 @@ async function main(): Promise<void> {
   const scenarios = new Map<string, Scenario>(), probes = new Map<string, Probe>();
   for await (const s of readJsonl<Scenario>(scenariosPath)) scenarios.set(s.id, s);
   for await (const p of readJsonl<Probe>(probesPath)) probes.set(p.id, p);
-  const verifierHash = hash(await Promise.all(['verifier.ts', 'run.ts', 'strategies.ts', 'types.ts', 'rescore.ts', '../../apps/rumortown/src/agentic/verifier.ts'].map(path => readFile(new URL(path, import.meta.url), 'utf8'))));
+  const verifierHash = hash(await Promise.all(['verifier.ts', 'run.ts', 'strategies.ts', 'types.ts', 'rescore.ts', 'act-router.ts', '../../apps/rumortown/src/agentic/verifier.ts'].map(path => readFile(new URL(path, import.meta.url), 'utf8'))));
   const all: Row[] = [];
   for (const root of roots) for (const dir of await runDirs(root)) {
     let manifest: { settings?: { scenarios?: string; probes?: string } } | undefined;

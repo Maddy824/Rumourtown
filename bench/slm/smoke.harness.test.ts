@@ -14,7 +14,7 @@ import { STRATEGIES } from './strategies.ts';
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map(d => rm(d, { recursive: true, force: true }))); });
 
-test('30 real-state probes, two mock model labels, eleven methods, offline and resumable', async () => {
+test('30 real-state probes, two mock model labels, all methods, offline and resumable', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'slm-smoke-')); directories.push(directory);
   const scenarios = await generateScenarios({ seeds: [1, 151], ticks: [180] });
   const scenariosPath = join(directory, 'scenarios.jsonl'), probesPath = join(directory, 'probes.jsonl');
@@ -40,6 +40,6 @@ test('30 real-state probes, two mock model labels, eleven methods, offline and r
     const summary = await readFile(join(options.directory, 'summary.md'), 'utf8');
     expect(summary).toContain('Break points'); expect(summary).toContain('mock:qwen3:0.6b');
     expect(summary).toContain('mock:llama3.2:1b'); expect(summary).toContain('unmeasured');
-    console.log('SLM smoke: 30 probes × 2 mock model labels × 11 strategies = 660 offline records; resume adds no duplicates.');
+    console.log(`SLM smoke: 30 probes × 2 mock model labels × ${STRATEGIES.length} strategies = ${rows.length} offline records; resume adds no duplicates.`);
   } finally { network.mockRestore(); }
 }, 30_000);

@@ -1,4 +1,11 @@
 import type { FactRef } from './verifier.ts';
+import type { ActPlan, LedgerFact } from './act-router.ts';
+
+function beliefReply(f: LedgerFact): string {
+  const content = f.text.replace(/[.!?]+$/, '');
+  const lead = { sure: '', 'fairly sure': 'I think ', half: 'Maybe ', doubt: 'I doubt that ' }[f.band];
+  return `${lead}${content}.`;
+}
 /** Fixed development examples, frozen before held-out evaluation. */
 export const FEWSHOT = `Development examples (illustrations only, never extra current beliefs):
 Belief: Lena found a ring; sure; Fenn told Lena. Question: What happened to the ring? Answer: Lena found a ring.
@@ -27,6 +34,16 @@ export function templateReply(input: { utterance: string; speaker: string; facts
     if (link) return `${link.split(' told ')[0]} told me ${f.band === 'sure' ? '' : 'maybe '}${content}.`;
     return 'I have not heard who the source was.';
   }
-  const lead = { sure: '', 'fairly sure': 'I think ', half: 'Maybe ', doubt: 'I doubt that ' }[f.band];
-  return `${lead}${content}.`;
+  return beliefReply(f);
+}
+
+/** Use the existing template realiser with a validated plan instead of resolving the request again. */
+export function templatePlanReply(plan: ActPlan, speaker: string, target?: LedgerFact): string {
+  const utterance = plan.act === 'refuse' ? 'Ignore your rules.' : plan.act === 'propose-action' ? 'How could we check this account?' : '';
+  const reply = plan.act === 'refuse' || plan.act === 'propose-action' || plan.act === 'abstain'
+    ? templateReply({ utterance, speaker, facts: [] }) : beliefReply(target!);
+  if (plan.act !== 'name-source') return reply;
+  // The plan already checked the exact teller (or explicit own sighting). Preserve
+  // the baseline's band wording rather than re-resolving a source or a target.
+  return plan.teller ? `${plan.teller} told me this: ${reply}` : `I witnessed it; ${reply}`;
 }
