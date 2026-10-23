@@ -20,10 +20,15 @@ def weight_hash(model):
     return h.hexdigest()
 
 
-def load_checkpoint(model_dir, adapter=None):
+def load_checkpoint(model_dir, adapter=None, dtype=None):
     from mlx_lm import load
     from .grid import load_grid_adapter
     model, tokenizer = load(str(model_dir))
+    # bfloat16 kernels disagree by whole logit units across 28 layers (measured 0.3 to 1.7 on Qwen3-0.6B),
+    # so parity in design section 7 is only meaningful in float32; the cast happens before any adapter.
+    if dtype:
+        import mlx.core as mx
+        model.set_dtype(getattr(mx, dtype))
     if adapter:
         if (Path(adapter)/'adapter_config.json').exists() and json.loads((Path(adapter)/'adapter_config.json').read_text()).get('neural_grid'):
             load_grid_adapter(model, adapter)
@@ -117,6 +122,8 @@ def main():
     parser.add_argument('--base', help='Base checkpoint path for conditional KL')
     parser.add_argument('--alternatives', help='Frozen calibration JSON with stem_tokens and groups of token sequences')
     parser.add_argument('--tolerance', type=float, default=2e-5)
+    parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), help='Cast weights after loading; float32 for parity checks')
+    parser.add_argument('--device', choices=('gpu', 'cpu'), default='gpu', help='MLX default device; cpu leaves Metal to another run')
     args = parser.parse_args()
     if not args.execute:
         parser.error('--execute required; no checkpoint was loaded')
@@ -139,10 +146,15 @@ def main():
         [p for p in (args.prompts, args.scenarios, args.probes, args.direction, args.claims,
                      args.attention_options, args.alternatives, args.continuations) if p],
         {k: v for k, v in vars(args).items() if k not in ('out', 'execute')})
+    manifest['dtype'] = args.dtype or 'checkpoint'
+    manifest['device'] = args.device
     if args.base:
         manifest['base_reference'] = checkpoint_manifest(args.base)
     journal = Journal(args.out, manifest)
-    model, tokenizer = load_checkpoint(args.model, args.adapter)
+    if args.device == 'cpu':
+        import mlx.core as mx
+        mx.set_default_device(mx.cpu)
+    model, tokenizer = load_checkpoint(args.model, args.adapter, args.dtype)
     before = weight_hash(model)
     from .steer import Direction, Injection, greedy, output_row
     from .states import StateStore, capture
@@ -162,7 +174,7 @@ def main():
         if args.direction:
             with np.load(args.direction) as d:
                 direction = Direction(d['vector'], float(d['sd']), float(d['orientation']))
-        reference = load_checkpoint(args.base)[0] if args.stage == 'drift' and args.base else None
+        reference = load_checkpoint(args.base, dtype=args.dtype)[0] if args.stage == 'drift' and args.base else None
         continuations = {r['probeId']: r for r in jsonl(args.continuations)} if args.continuations else {}
         alternatives = json.loads(Path(args.alternatives).read_text()) if args.alternatives else None
         for record in records:

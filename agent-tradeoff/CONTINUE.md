@@ -15,6 +15,19 @@ codex exec -s workspace-write -C /Users/maddy/B2B/rumortown -c model_reasoning_e
 - Secrets live outside the repo: `~/.config/rumourtown/cloudflare.env`, `~/.config/rumourtown/turnstile.env`, `~/.config/rumourtown/signing.json`, and the git-ignored `apps/api/.dev.vars`. Never print, copy or commit them.
 - Design authority: `docs/superpowers/specs/2026-10-21-rumortown-design.md`. Research: `/Users/maddy/B2B/reports/` (outside the repo). Rulings and history: `.superpowers/sdd/2026-10-21-village-build/progress.md`.
 
+## 1f. State at 2026-10-23 18:45 (controller; owner leaving, machine will be off)
+
+- **Debate verdict** (Codex gpt-6-astra vs Claude Fable 5.1, every number cross-checked): `/Users/maddy/B2B/rumortown-audit/debate/verdict.md` (outside the repo; the how-small material there reads private research, so do not copy it into the repo wholesale). Headlines:
+  - The verifier mishandles epistemic negation. Act-adapter unseen-story F is 53.6% under v1, about 79.5% under a narrow repair. The "act filter trades wrong acts for invention" finding is largely a scoring artefact until re-measured.
+  - The screening verifier-filtered training set contains injection-compliant "refuse" targets (207/254 contain the marker; about 139 comply).
+  - Gated steering is mostly prior art (CAST and successors): downgraded to an ablation.
+  - Ranked plan in the verdict file.
+- **In progress, CPU:** Codex task 43 (checker v2, clause-level epistemic negation) in worktree `/Users/maddy/B2B/rumortown-checker` on branch `research/checker-v2`; brief `agent-tradeoff/43-checker-v2.md`; log `/Users/maddy/B2B/rumortown-audit/codex-43.log`. Not committed. Review its report `agent-tradeoff/reports/43-report.md` before committing.
+- **Confirmation round:** all arms trained; held-out evaluation started. A scheduled stop at 20:40 halts it. Resume with `nohup bash bench/slm/finetune/run-confirmation.sh --launch >> bench/slm/results/confirmation-37/launch.log 2>&1 &` (same settings; it skips finished work). Rescore its outputs with checker v2 once 43 lands.
+- **Act router (task 42):** branch `research/act-router` (pushed, worktree `/Users/maddy/B2B/rumortown-router`), awaiting a GPU evaluation.
+- **Neural:** paired export ready in `bench/slm/neural/artifacts/export-pairs/` (with `sidecar-derived.jsonl`); its state capture was paused to cool the machine. Rerun `bench/slm/neural/artifacts/run-pairs-cpu.sh`, or better its GPU equivalent with `--device gpu`, when the GPU is free. The harness now supports `--dtype float32 --device cpu`.
+- **Run one heavy job at a time.** The owner reported the Mac overheating.
+
 ## 1e. State at 2026-10-22 20:35 (controller)
 
 - Production audit (live traffic): browser soaks on iPhone-size Chrome and WebKit plus desktop passed; Codex audited headers, API and code (`/Users/maddy/B2B/rumortown-audit/codex-audit.md`, outside the repo). Fixes shipped in `106e69d` after CI `39798386344` and Codex release review: accurate AI error messages (human check, burst vs hourly limit, resting allowance), 400 for malformed input, a real 404 page (`not_found_handling = "404-page"`), and a Permissions-Policy on both hosts. Game asset `main-Dau9Mzw5.js`; API version `637822fd`.
