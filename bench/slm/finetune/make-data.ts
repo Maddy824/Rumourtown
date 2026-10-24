@@ -21,6 +21,7 @@ import { verify } from '../verifier.ts';
 import { templateReply } from '../baselines.ts';
 import { buildPairs, type MinimalPair } from '../pairs.ts';
 import { surfaceBehaviour } from '../run.ts';
+import { injectionDecision } from './injection-filter.ts';
 
 /** Training probes spread evenly over axes and templates, in a stable order. */
 export function selectProbes(probes: Probe[], scenarios: Map<string, Scenario>, count: number): Probe[] {
@@ -87,6 +88,9 @@ export function balance(rows: Example[], seed: number, size = rows.length): Exam
 export async function filter(args: string[], dataset?: { scenarios: Map<string, Scenario>; probes: Probe[] }): Promise<void> {
   const dir = arg(args, 'out') ?? join(DATA, 'finetune');
   const seed = Number(arg(args, 'seed') ?? 7);
+  const filterVersion = arg(args, 'filter-version') ?? 'v1';
+  if (!['v1', 'v2'].includes(filterVersion)) throw new Error('filter-version must be v1 or v2');
+  const verifierOptions = filterVersion === 'v2' ? { verifierVersion: 'v2' as const } : {};
   if (!Number.isSafeInteger(seed)) throw new Error('Invalid data seed');
   const { scenarios, probes } = dataset ?? await load(args);
   const byId = new Map(probes.map(p => [p.id, p]));
@@ -106,12 +110,13 @@ export async function filter(args: string[], dataset?: { scenarios: Map<string, 
     cell.prompts++;
     for (const sample of list.sort((a, b) => a.sample - b.sample)) {
       const reply = sample.text.trim();
-      const verdict = await verify(reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, oracleOptions(s, p));
+      const verdict = await verify(reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, { ...oracleOptions(s, p), ...verifierOptions });
       const accepted = !!reply && passes(verdict), onAct = accepted && surfaceBehaviour(p, { reply, verdict });
       stats.samples++; if (accepted) stats.accepted++; if (onAct) stats.onAct++;
       scored.push({ probeId, sample: sample.sample, accepted, onAct, gold: p.gold.behaviour, axis: p.axis });
       for (const name of families) {
-        const keep = name === 'unfiltered' ? !!reply && sample === list[0] : name === 'verifier' ? accepted : name === 'act' ? onAct : mixtureAccept(accepted, onAct, Number(name.slice(4)), [seed, probeId, sample.sample]);
+        const safe = filterVersion !== 'v2' || injectionDecision(reply, p).keep;
+        const keep = safe && (name === 'unfiltered' ? !!reply && (filterVersion === 'v2' || sample === list[0]) : name === 'verifier' ? accepted : name === 'act' ? onAct : mixtureAccept(accepted, onAct, Number(name.slice(4)), [seed, probeId, sample.sample]));
         if (keep && first[name] === undefined) first[name] = reply;
         if (!keep) cell.rejectedTeacherTokens[name] = (cell.rejectedTeacherTokens[name] ?? 0) + (sample.outputTokens ?? Math.ceil(sample.text.length / 4));
       }
@@ -157,8 +162,8 @@ export async function filter(args: string[], dataset?: { scenarios: Map<string, 
       const examples: Example[] = [];
       for (const p of pair.sides) {
         const s = pair.scenario, reply = templateReply({ utterance: p.utterance, speaker: s.persona.name, facts: factsFor(s, p) });
-        const verdict = await verify(reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, oracleOptions(s, p));
-        if (!passes(verdict) || !surfaceBehaviour(p, { reply, verdict })) break;
+        const verdict = await verify(reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, { ...oracleOptions(s, p), ...verifierOptions });
+        if ((filterVersion === 'v2' && !injectionDecision(reply, p).keep) || !passes(verdict) || !surfaceBehaviour(p, { reply, verdict })) break;
         examples.push({ probeId: p.id, seed: s.seed, scenarioId: s.id, act: p.gold.behaviour, boundaryPair: pair.id, messages: [...messagesFor(s, p), { role: 'assistant', content: reply }] });
       }
       if (examples.length === 2) { frozen.push(pair); for (const name of families) sets[name].train.push(...examples); }
@@ -181,8 +186,8 @@ export async function filter(args: string[], dataset?: { scenarios: Map<string, 
         facts: act === 'name-source' ? s.facts.map((fact, i) => i ? fact : { ...fact, band: 'sure', confidence: .95 }) : s.facts,
         gold: { behaviour: act, ...(act === 'name-source' ? { factId: f!.id } : {}) } };
       const reply = templateReply({ utterance: p.utterance, speaker: s.persona.name, facts: factsFor(s, p) });
-      const verdict = await verify(reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, oracleOptions(s, p));
-      if (!passes(verdict) || !surfaceBehaviour(p, { reply, verdict })) continue;
+      const verdict = await verify(reply, factsFor(s, p), s.unknownWorldFacts, s.castNames, { ...oracleOptions(s, p), ...verifierOptions });
+      if ((filterVersion === 'v2' && !injectionDecision(reply, p).keep) || !passes(verdict) || !surfaceBehaviour(p, { reply, verdict })) continue;
       const ex: Example = { probeId: p.id, seed: s.seed, scenarioId: s.id, act, messages: [...messagesFor(s, p), { role: 'assistant', content: reply }] };
       for (const name of families) sets[name].train.push(ex);
       supplied.add(s.id); if (supplied.size >= floor) break;
@@ -203,7 +208,7 @@ export async function filter(args: string[], dataset?: { scenarios: Map<string, 
     return [part, cells];
   }))]));
   const support = Object.fromEntries(families.map(name => [name, Object.fromEntries([...new Set(sets[name].train.map(r => r.act))].map(act => [act, new Set(sets[name].train.filter(r => r.act === act).map(r => r.scenarioId)).size]))]));
-  await writeFile(join(dir, 'stats.json'), JSON.stringify({ ...stats, seed, batchMultiple, balance: args.includes('--balance') ? 'seeded resampling to uniform represented acts; weight is metadata, not an mlx loss weight' : false,
+  await writeFile(join(dir, 'stats.json'), JSON.stringify({ ...stats, ...(filterVersion === 'v2' ? { filterVersion, verifierVersion: 'v2' } : {}), seed, batchMultiple, balance: args.includes('--balance') ? 'seeded resampling to uniform represented acts; weight is metadata, not an mlx loss weight' : false,
     match, boundaryPairs: frozen.length, boundaryKinds: Object.fromEntries(['knowledge', 'correction'].map(kind => [kind, frozen.filter(p => p.kind === kind).length])), support, supportBeforeResampling, supplements, survival, retainedByState,
     retained: Object.fromEntries(families.map(name => [name, Object.fromEntries(['train', 'valid'].map(part => [part, Object.fromEntries([...new Set(sets[name][part as 'train' | 'valid'].map(r => r.act))].map(act => [act, sets[name][part as 'train' | 'valid'].filter(r => r.act === act).length]))]))])), tokenAccounting: 'outputTokens when supplied; otherwise ceil(characters/4), an estimate',
     sets: Object.fromEntries(families.map(n => [n, { train: sets[n].train.length, valid: sets[n].valid.length }])) }, null, 2));
@@ -214,5 +219,5 @@ if (isMain(import.meta.url)) {
   const [mode, ...rest] = process.argv.slice(2);
   if (mode === 'export') await exportPrompts(rest);
   else if (mode === 'filter') await filter(rest);
-  else throw new Error('usage: make-data.ts export|filter [--out dir] [--input samples] [--balance] [--match set[,set]] [--boundary-quota n] [--seed n] [--scenarios path] [--probes path]');
+  else throw new Error('usage: make-data.ts export|filter [--out dir] [--input samples] [--filter-version v1|v2] [--balance] [--match set[,set]] [--boundary-quota n] [--seed n] [--scenarios path] [--probes path]');
 }
