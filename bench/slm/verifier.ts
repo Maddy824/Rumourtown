@@ -1,7 +1,7 @@
-/** Research measurements layered over the unchanged runtime oracle. */
+/** Research measurements layered over the explicitly versioned runtime oracle. */
 import { verify as runtimeVerify, type Verdict as RuntimeVerdict, type FactRef } from '../../apps/rumortown/src/agentic/verifier.ts';
 export { sentences, ollamaEmbed } from '../../apps/rumortown/src/agentic/verifier.ts';
-export type { FactRef, Label, Embed } from '../../apps/rumortown/src/agentic/verifier.ts';
+export type { FactRef, Label, Embed, VerifierVersion } from '../../apps/rumortown/src/agentic/verifier.ts';
 export interface WorldFact { id: string; text: string; trueInWorld: boolean }
 export interface Verdict extends Omit<RuntimeVerdict, 'sentences' | 'calibrated'> {
   sentences: (RuntimeVerdict['sentences'][number] & { worldTruth: 'true' | 'false' | 'unknown'; worldFactId?: string })[];
@@ -40,6 +40,8 @@ export async function verify(reply: string, facts: FactRef[], unknownWorldFacts:
       }
     }
     measured.push({ ...sentence, worldTruth, ...(worldFactId ? { worldFactId } : {}) });
+    // Naming a source inside a disclaimed proposition is not a provenance assertion.
+    if (sentence.epistemicAbstention) continue;
     for (const name of sources(sentence.text)) {
       const fact = (options.sourceRequired ? facts.find(f => f.id === options.sourceFactId) : undefined) ?? facts.find(f => f.id === sentence.factId);
       ancestry.push(!!fact?.chain.some(link => {
@@ -55,7 +57,7 @@ export async function verify(reply: string, facts: FactRef[], unknownWorldFacts:
     }
   }
   const factual = measured.some(s => ['supported', 'contradicts', 'unknown-to-speaker'].includes(s.label));
-  // Only broaden calibration wording here; runtime sentence labels stay byte-for-byte compatible.
+  // Broaden calibration wording without changing the selected runtime version.
   const calibrationReply = reply.replace(/\b(?:I am (?:only )?half sure|I (?:only )?half believe(?: it)?)\b/gi, 'Maybe');
   const calibrated = !factual ? null : (await runtimeVerify(calibrationReply, facts, unknownWorldFacts, castNames, options)).calibrated;
   const required = !!options.sourceRequired;
