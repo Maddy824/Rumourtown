@@ -7,8 +7,9 @@
 
 export interface FactRef { id: string; text: string; confidence: number; band: 'sure' | 'fairly sure' | 'half' | 'doubt'; chain: string[]; trueInWorld: boolean }
 export type Label = 'supported' | 'contradicts' | 'unknown-to-speaker' | 'chatter' | 'out-of-character';
+export type VerifierVersion = 'v1' | 'v2';
 export interface Verdict {
-  sentences: { text: string; label: Label; factId?: string; score?: number }[];
+  sentences: { text: string; label: Label; factId?: string; score?: number; epistemicAbstention?: true }[];
   epistemicFaithful: boolean;
   worldFaithful: boolean;
   calibrated: boolean;
@@ -47,6 +48,49 @@ const namesIn = (s: string, cast: readonly string[]): string[] => cast.filter(n 
 
 export function sentences(reply: string): string[] {
   return reply.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+(?=[A-Z"“'])/).map(s => s.trim()).filter(Boolean);
+}
+
+// V2 is deliberately a bounded grammar, not a sentence-wide exemption. In particular,
+// "don't know where/why/who ..." may presuppose the event and is not exempted.
+const EPISTEMIC = /\b(?:(?:I\s+)?(?:have not|haven't|I've not|had not|hadn't)\s+heard|(?:I\s+)?(?:do not|don't|would not|wouldn't)\s+know|(?:I\s+)?(?:cannot|can't)\s+(?:say|confirm|verify)|I\s+(?:do not|don't)\s+have\s+(?:(?:any|direct)\s+)?(?:knowledge|information|access)|(?:I\s+have\s+)?no\s+(?:idea|knowledge|information)|not heard anything|(?:nobody|no one)\s+(?:(?:has|'s)\s+)?told\s+me)\b/i;
+const normaliseApostrophes = (text: string) => text.replace(/[’‘]/g, "'");
+
+function epistemicAbstention(text: string): boolean {
+  const plain = normaliseApostrophes(text).replace(/^(?:(?:well|no(?!\s+(?:idea|knowledge|information))|sorry|but|and|yet|however)\b[,\s]*|whisper:\s*)+/i, '').trim();
+  const m = EPISTEMIC.exec(plain);
+  if (!m || m.index !== 0) return false; // Quoted/attributed ignorance is not the speaker's ignorance.
+  const rest = plain.slice(m[0].length).trim();
+  if (/^(?:where|when|why|who|how|what happened|the (?:reason|time|place))\b/i.test(rest)) return false;
+  // Negative raising, litotes and the denial of a denial do not disclaim the claim.
+  if (/^(?:nothing|no\b|not\b)/i.test(rest)) return false;
+  return true;
+}
+
+/** Split only sentences relevant to the repair, retaining every residual clause for checking. */
+function epistemicClauses(text: string, cast: readonly string[]): string[] {
+  if (!EPISTEMIC.test(normaliseApostrophes(text))) return [text];
+  const names = cast.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const subject = `(?:I|he|she|they|we|it|that|this|${names})(?:\\b|['’]s\\b)`;
+  const finiteSubject = `(?:(?:I|he|she|they|we|it|that|this)\\b|(?:${names})(?:\\s+(?:has|have|had|is|are|was|were|will|would|can|could|did|does|stole|took|gave|saw|met|left|lost|found|hid|sold|broke|owes|owed|\\w+ed|\\w+s)\\b|['’]s\\s+(?:been|being|not)\\b))`;
+  const boundary = new RegExp(
+    `[;()\\n]|(?<!\\d):|:(?!\\d)|[.!?](?=\\s|$)|[—–]|,?\\s+\\b(?:but|yet|however|although|though|whereas|only that)\\b\\s*|,\\s*(?:(?:because|since|so|who|which)\\s+|(?=${subject}))|\\s+(?:and|because|since|so)\\s+(?=${finiteSubject})`, 'gi');
+  // Do not break inside a quotation: an abstention may quote the proposition it disclaims.
+  // A quoted first-person disclaimer is kept intact and fails the anchored test above.
+  const quoted: [number, number][] = [];
+  const quote = /"[^"\n]*"|“[^”\n]*”|'[^'\n]+'(?=\W|$)/g;
+  for (const m of text.matchAll(quote)) {
+    if (m[0][0] === "'" && m.index! > 0 && /\w/.test(text[m.index! - 1]!)) continue;
+    quoted.push([m.index!, m.index! + m[0].length]);
+  }
+  const parts: string[] = [];
+  let start = 0;
+  for (const m of text.matchAll(boundary)) {
+    if (quoted.some(([a, b]) => m.index! >= a && m.index! < b)) continue;
+    parts.push(text.slice(start, m.index));
+    start = m.index! + m[0].length;
+  }
+  parts.push(text.slice(start));
+  return parts.map(p => p.trim()).filter(Boolean);
 }
 
 /** Ollama embeddings (all-minilm by default), cached per text. Throws on failure; verify() then falls back to word overlap. */
@@ -90,18 +134,31 @@ async function bestMatch(sentence: string, texts: string[], names: string[], cas
 }
 
 export async function verify(reply: string, facts: FactRef[], unknownWorldFacts: string[], castNames: string[],
-  options: { embed?: Embed; supportThreshold?: number } = {}): Promise<Verdict> {
+  options: { embed?: Embed; supportThreshold?: number; verifierVersion?: VerifierVersion } = {}): Promise<Verdict> {
   const threshold = options.supportThreshold ?? (options.embed ? 0.5 : 0.22);
   const out: Verdict['sentences'] = [];
   let calibrated = true, provenance: boolean | null = null;
-  for (const text of sentences(reply)) {
+  const v2 = options.verifierVersion === 'v2';
+  for (const sentence of sentences(reply)) for (const text of v2 ? epistemicClauses(sentence, castNames) : [sentence]) {
     if (META.test(text)) { out.push({ text, label: 'out-of-character' }); continue; }
+    if (v2 && epistemicAbstention(text)) {
+      out.push({ text, label: 'chatter', epistemicAbstention: true }); continue;
+    }
     // The named source ("Mira told me…") is who the speaker heard it from, not who the claim is about.
     const source = SOURCE.exec(text);
     const sourceName = source ? (source[1] ?? source[2])!.toLowerCase() : null;
     const claim = source ? text.replace(source[0], ' ') : text;
-    const names = namesIn(claim, castNames);
-    const factual = names.length > 0 && EVENT.test(text) && !(OPINION.test(text) && !EVENT.test(text.replace(OPINION, '')));
+    const explicitNames = namesIn(claim, castNames);
+    const residual = v2 && EPISTEMIC.test(normaliseApostrophes(sentence));
+    // A following pronoun does not make the assertion disappear. Resolve only to the
+    // sentence's mentioned cast for the conservative factual gate (not a new fact).
+    const names = explicitNames.length || !residual || !/\b(?:he|she|they|it|that|her|him|so)\b/i.test(text)
+      ? explicitNames : namesIn(sentence, castNames);
+    // Residual statements such as "I know Ada's been coughing" are still assertions,
+    // even though v1 only noticed the event word in the preceding disclaimer.
+    const residualAssertion = residual &&
+      /\b(?:is|are|was|were|been|has|have|had|saw|seen|know|confirm|say|says|said)\b/i.test(text);
+    const factual = names.length > 0 && (residualAssertion || EVENT.test(text)) && !(OPINION.test(text) && !EVENT.test(text.replace(OPINION, '')) && !residualAssertion);
     if (!factual) { out.push({ text, label: 'chatter' }); continue; }
     const m = await bestMatch(claim, facts.map(f => f.text), names, castNames, options.embed);
     if (m.index >= 0 && m.score >= threshold) {
@@ -136,6 +193,6 @@ export async function verify(reply: string, facts: FactRef[], unknownWorldFacts:
     worldFaithful: !bad && supportedFacts.every(f => f.trueInWorld),
     calibrated,
     provenanceCorrect: provenance,
-    abstained: ABSTAIN.test(reply) && !out.some(s => s.label === 'supported'),
+    abstained: (v2 ? out.some(s => s.epistemicAbstention) : ABSTAIN.test(reply)) && !out.some(s => s.label === 'supported'),
   };
 }
